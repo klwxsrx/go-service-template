@@ -1,0 +1,28 @@
+run:
+  timeout: 3m
+  issues-exit-code: 1
+
+linters:
+  enable:
+    - bodyclose
+    - gocognit
+    - gocritic
+    - gocyclo
+    - gofmt
+    - gosec
+    - importas
+    - misspell
+    - noctx
+    - revive
+    - unconvert
+    - unparam
+
+linters-settings:
+  importas:
+    alias:
+      - pkg: github.com/klwxsrx/go-service-template/pkg/(\w+)
+        alias: pkg$1
+      - pkg: github.com/klwxsrx/go-service-template/internal/pkg/(\w+)/(\w+)
+        alias: $1$2
+      - pkg: github.com/klwxsrx/go-service-template/internal/pkg/(\w+)/(\w+)/(\w+)
+        alias: $1$2$3
