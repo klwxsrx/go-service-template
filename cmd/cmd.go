@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"github.com/klwxsrx/go-service-template/pkg/env"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
@@ -15,23 +16,53 @@ const (
 	ServiceName = "duck-service"
 )
 
+type App interface {
+	Finish(context.Context)
+}
+
+type app struct {
+	logger log.Logger
+}
+
+func (a *app) Finish(ctx context.Context) {
+	msg := recover()
+	if msg == nil {
+		return
+	}
+
+	logger := a.logger
+	err, ok := msg.(error)
+	if ok {
+		logger = logger.WithError(err)
+	} else {
+		logger = logger.WithField("err", msg)
+	}
+	logger.Fatal(ctx, "app failed with panic")
+}
+
+func StartApp(logLevel log.Level) (App, context.Context, log.Logger) {
+	ctx := context.Background()
+	logger := log.New(logLevel)
+	return &app{logger}, ctx, logger
+}
+
 func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.ReadDirFS) sql.Connection {
 	sqlConfig := &sql.Config{
 		DSN: sql.DSN{
-			User:     env.MustParseString(ctx, "SQL_USER", logger),
-			Password: env.MustParseString(ctx, "SQL_PASSWORD", logger),
-			Address:  env.MustParseString(ctx, "SQL_ADDRESS", logger),
-			Database: env.MustParseString(ctx, "SQL_DATABASE", logger),
+			User:     env.Must(env.ParseString("SQL_USER")),
+			Password: env.Must(env.ParseString("SQL_PASSWORD")),
+			Address:  env.Must(env.ParseString("SQL_ADDRESS")),
+			Database: env.Must(env.ParseString("SQL_DATABASE")),
 		},
 	}
-	sqlConnTimeout, ok := env.ParseDuration("SQL_CONNECTION_TIMEOUT")
-	if ok {
+	sqlConnTimeout, err := env.ParseDuration("SQL_CONNECTION_TIMEOUT")
+	if err != nil {
 		sqlConfig.ConnectionTimeout = sqlConnTimeout
 	}
 
 	sqlConn, err := sql.NewConnection(sqlConfig, logger)
 	if err != nil {
-		handleInitApplicationFatal(ctx, logger, err)
+		panicInitApplication(err)
 	}
 
 	if optionalMigrations == nil {
@@ -40,7 +71,7 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 	sqlMigration := sql.NewMigration(sqlConn.Client(), optionalMigrations, logger)
 	err = sqlMigration.Execute(ctx)
 	if err != nil {
-		handleInitApplicationFatal(ctx, logger, err)
+		panicInitApplication(err)
 	}
 	return sqlConn
 }
@@ -61,7 +92,7 @@ func MustInitSQLMessageOutbox(
 	sqlClient, tx := MustInitSQLTransaction(sqlConn, func() {})
 	messageStore, err := sql.NewMessageStore(ctx, sqlClient)
 	if err != nil {
-		handleInitApplicationFatal(ctx, logger, err)
+		panicInitApplication(err)
 	}
 	return pkgmessage.NewOutbox(
 		pkgmessage.NewSender(producers),
@@ -74,37 +105,34 @@ func MustInitSQLMessageOutbox(
 func MustInitSQLMessageStore(
 	ctx context.Context,
 	sqlClient sql.Client,
-	logger log.Logger,
 ) pkgmessage.Store {
 	messageStore, err := sql.NewMessageStore(ctx, sqlClient)
 	if err != nil {
-		handleInitApplicationFatal(ctx, logger, err)
+		panicInitApplication(err)
 	}
 	return messageStore
 }
 
-func MustInitPulsar(ctx context.Context, logger log.Logger) pulsar.Connection {
+func MustInitPulsar(logger log.Logger) pulsar.Connection {
 	config := &pulsar.Config{
-		Address: env.MustParseString(ctx, "PULSAR_ADDRESS", logger),
+		Address: env.Must(env.ParseString("PULSAR_ADDRESS")),
 	}
-	connTimeout, ok := env.ParseDuration("PULSAR_CONNECTION_TIMEOUT")
-	if ok {
+	connTimeout, err := env.ParseDuration("PULSAR_CONNECTION_TIMEOUT")
+	if err != nil {
 		config.ConnectionTimeout = connTimeout
 	}
 
 	pulsarConn, err := pulsar.NewConnection(config, logger)
 	if err != nil {
-		handleInitApplicationFatal(ctx, logger, err)
+		panicInitApplication(err)
 	}
 	return pulsarConn
 }
 
 func MustInitPulsarSingleConsumer(
-	ctx context.Context,
 	pulsarConn pulsar.Connection,
 	topic string,
 	subscriptionName string,
-	logger log.Logger,
 ) pkgmessage.Consumer {
 	consumer, err := pulsarConn.Consumer(&pulsar.ConsumerOptions{
 		Topic:            topic,
@@ -112,11 +140,11 @@ func MustInitPulsarSingleConsumer(
 		ConsumptionType:  pulsar.ConsumptionTypeFailover,
 	})
 	if err != nil {
-		handleInitApplicationFatal(ctx, logger, err)
+		panicInitApplication(err)
 	}
 	return consumer
 }
 
-func handleInitApplicationFatal(ctx context.Context, logger log.Logger, err error) {
-	logger.WithError(err).Fatal(ctx, "failed to initialize app")
+func panicInitApplication(err error) {
+	panic(fmt.Errorf("failed to initialize app: %w", err))
 }

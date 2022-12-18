@@ -1,45 +1,42 @@
 package env
 
 import (
-	"context"
 	"fmt"
-	"github.com/klwxsrx/go-service-template/pkg/log"
 	"os"
 	"time"
 )
 
-func MustParseString(ctx context.Context, key string, logger log.Logger) string {
-	s, ok := ParseString(key)
-	if !ok {
-		handleLookupEnvFatal(ctx, key, "string", logger)
+func Must[T any](val T, err error) T {
+	if err != nil {
+		panic(fmt.Errorf("failed to parse environment: %w", err))
 	}
-	return s
+	return val
 }
 
-func ParseString(key string) (string, bool) {
-	return os.LookupEnv(key)
-}
-
-func MustParseDuration(ctx context.Context, key string, logger log.Logger) time.Duration {
-	d, ok := ParseDuration(key)
-	if !ok {
-		handleLookupEnvFatal(ctx, key, "duration", logger)
-	}
-	return d
-}
-
-func ParseDuration(key string) (time.Duration, bool) {
+func ParseString(key string) (string, error) {
 	str, ok := os.LookupEnv(key)
 	if !ok {
-		return 0, false
+		return "", notFoundError(key, "string")
+	}
+	return str, nil
+}
+
+func ParseDuration(key string) (time.Duration, error) {
+	str, ok := os.LookupEnv(key)
+	if !ok {
+		return 0, notFoundError(key, "duration")
 	}
 	d, err := time.ParseDuration(str)
 	if err != nil {
-		return 0, false
+		return 0, invalidValueError(key, "duration")
 	}
-	return d, true
+	return d, nil
 }
 
-func handleLookupEnvFatal(ctx context.Context, key, envType string, logger log.Logger) {
-	logger.WithField("env", key).Fatal(ctx, fmt.Sprintf("env with type \"%s\" not found or invalid", envType))
+func notFoundError(key, varType string) error {
+	return fmt.Errorf("env \"%s\" with type \"%s\" not found", key, varType)
+}
+
+func invalidValueError(key, varType string) error {
+	return fmt.Errorf("env \"%s\" with type \"%s\" has invalid value", key, varType)
 }

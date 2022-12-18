@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/klwxsrx/go-service-template/cmd"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/event"
@@ -14,14 +13,15 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-	logger := log.New(log.LevelInfo)
+	app, ctx, logger := cmd.StartApp(log.LevelInfo)
+	defer app.Finish(ctx)
+
 	logger.Info(ctx, "app is starting")
 
-	pulsarConn := cmd.MustInitPulsar(ctx, logger)
+	pulsarConn := cmd.MustInitPulsar(logger)
 	defer pulsarConn.Close()
 
-	duckTopicConsumer := cmd.MustInitPulsarSingleConsumer(ctx, pulsarConn, duckappmessage.DuckDomainEventTopicName, cmd.ServiceName, logger)
+	duckTopicConsumer := cmd.MustInitPulsarSingleConsumer(pulsarConn, duckappmessage.DuckDomainEventTopicName, cmd.ServiceName)
 	defer duckTopicConsumer.Close()
 
 	duckCreatedEventHandler := event.NewDuckCreatedHandler()
@@ -35,8 +35,5 @@ func main() {
 	})
 
 	logger.Info(ctx, "app is ready")
-	err := handlerHub.Wait(sig.TermSignals())
-	if err != nil {
-		logger.WithError(err).Fatal(ctx, "handler hub completed with error")
-	}
+	hub.Must(handlerHub.Wait(sig.TermSignals()))
 }

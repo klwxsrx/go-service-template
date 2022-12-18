@@ -1,16 +1,17 @@
 package main
 
 import (
-	"context"
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/klwxsrx/go-service-template/cmd"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/sig"
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 func main() {
-	ctx := context.Background()
-	logger := log.New(log.LevelInfo)
+	app, ctx, logger := cmd.StartApp(log.LevelInfo)
+	defer app.Finish(ctx)
+
 	logger.Info(ctx, "app is starting")
 
 	pool := worker.NewPool(worker.NumCPUWorkersCount)

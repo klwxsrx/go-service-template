@@ -8,6 +8,12 @@ import (
 
 type Process func(stopChan <-chan struct{})
 
+func Must(err error) {
+	if err != nil {
+		panic(fmt.Errorf("hub completed with error: %w", err))
+	}
+}
+
 type Hub interface {
 	Wait(termSignalsChan <-chan os.Signal) error
 }

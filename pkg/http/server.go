@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"net/http"
@@ -22,7 +23,7 @@ type Handler interface {
 }
 
 type Server interface {
-	MustListenAndServe(ctx context.Context)
+	MustListenAndServe()
 	Register(handler Handler, opts ...Option)
 	Shutdown(ctx context.Context)
 }
@@ -34,11 +35,11 @@ type server struct {
 	onceStarter *sync.Once
 }
 
-func (s *server) MustListenAndServe(ctx context.Context) {
+func (s *server) MustListenAndServe() {
 	s.onceStarter.Do(func() {
 		go func() {
 			if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				s.logger.WithError(err).Fatal(ctx, "unable to listen the server")
+				panic(fmt.Errorf("unable to listen the server: %w", err))
 			}
 		}()
 	})

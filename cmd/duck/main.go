@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/klwxsrx/go-service-template/cmd"
 	"github.com/klwxsrx/go-service-template/data/sql/duck"
@@ -16,14 +15,15 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-	logger := log.New(log.LevelInfo)
+	app, ctx, logger := cmd.StartApp(log.LevelInfo)
+	defer app.Finish(ctx)
+
 	logger.Info(ctx, "app is starting")
 
 	sqlConn := cmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
 	defer sqlConn.Close(ctx)
 
-	pulsarConn := cmd.MustInitPulsar(ctx, logger)
+	pulsarConn := cmd.MustInitPulsar(logger)
 	defer pulsarConn.Close()
 
 	messageOutbox := cmd.MustInitSQLMessageOutbox(ctx, sqlConn, pulsarConn, logger)
@@ -33,7 +33,7 @@ func main() {
 		messageOutbox.Process()
 	})
 
-	messageStore := cmd.MustInitSQLMessageStore(ctx, sqlClient, logger)
+	messageStore := cmd.MustInitSQLMessageStore(ctx, sqlClient)
 
 	duckEventDispatcher := message.NewEventDispatcher(
 		message.NewStoreSender(messageStore),
@@ -52,7 +52,7 @@ func main() {
 	defer httpServer.Shutdown(ctx)
 
 	httpServer.Register(http.NewCreateDuckHandler(duckService))
-	httpServer.MustListenAndServe(ctx)
+	httpServer.MustListenAndServe()
 
 	logger.Info(ctx, "app is ready")
 	<-sig.TermSignals()
