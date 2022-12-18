@@ -6,7 +6,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type Client interface { // TODO: add implementation which handle transactions from ctx
+type Client interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error)
 	GetContext(ctx context.Context, dest any, query string, args ...any) error

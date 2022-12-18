@@ -16,6 +16,7 @@ import (
 func main() {
 	ctx := context.Background()
 	logger := log.New(log.LevelInfo)
+	logger.Info(ctx, "app is starting")
 
 	pulsarConn := cmd.MustInitPulsar(ctx, logger)
 	defer pulsarConn.Close()
@@ -36,6 +37,6 @@ func main() {
 	logger.Info(ctx, "app is ready")
 	err := handlerHub.Wait(sig.TermSignals())
 	if err != nil {
-		logger.Fatalf(ctx, "handler hub completed with error: %w", err)
+		logger.WithError(err).Fatal(ctx, "handler hub completed with error")
 	}
 }

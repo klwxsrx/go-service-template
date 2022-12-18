@@ -22,15 +22,10 @@ type Logger interface {
 	WithField(name string, value any) Logger
 	WithError(err error) Logger
 	Debug(ctx context.Context, str string)
-	Debugf(ctx context.Context, format string, v ...any)
 	Error(ctx context.Context, str string)
-	Errorf(ctx context.Context, format string, v ...any)
 	Warn(ctx context.Context, str string)
-	Warnf(ctx context.Context, format string, v ...any)
 	Info(ctx context.Context, str string)
-	Infof(ctx context.Context, format string, v ...any)
 	Fatal(ctx context.Context, str string)
-	Fatalf(ctx context.Context, format string, v ...any)
 }
 
 type logger struct {
@@ -56,40 +51,20 @@ func (l *logger) Debug(_ context.Context, str string) {
 	l.impl.Debug().Msg(str)
 }
 
-func (l *logger) Debugf(_ context.Context, format string, v ...any) {
-	l.impl.Debug().Msgf(format, v...)
-}
-
 func (l *logger) Error(_ context.Context, str string) {
 	l.impl.Error().Msg(str)
-}
-
-func (l *logger) Errorf(_ context.Context, format string, v ...any) {
-	l.impl.Error().Msgf(format, v...)
 }
 
 func (l *logger) Warn(_ context.Context, str string) {
 	l.impl.Warn().Msg(str)
 }
 
-func (l *logger) Warnf(_ context.Context, format string, v ...any) {
-	l.impl.Warn().Msgf(format, v...)
-}
-
 func (l *logger) Info(_ context.Context, str string) {
 	l.impl.Info().Msg(str)
 }
 
-func (l *logger) Infof(_ context.Context, format string, v ...any) {
-	l.impl.Info().Msgf(format, v...)
-}
-
 func (l *logger) Fatal(_ context.Context, str string) {
 	l.impl.Fatal().Msg(str)
-}
-
-func (l *logger) Fatalf(_ context.Context, format string, v ...any) {
-	l.impl.Fatal().Msgf(format, v...)
 }
 
 func New(lvl Level) Logger {

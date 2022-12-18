@@ -5,18 +5,20 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/klwxsrx/go-service-template/cmd"
 	"github.com/klwxsrx/go-service-template/data/sql/duck"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/message"
+	duckappmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/app/message"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/http"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/persistence"
+	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/sql"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 	"github.com/klwxsrx/go-service-template/pkg/log"
+	"github.com/klwxsrx/go-service-template/pkg/message"
 	"github.com/klwxsrx/go-service-template/pkg/sig"
 )
 
 func main() {
 	ctx := context.Background()
 	logger := log.New(log.LevelInfo)
+	logger.Info(ctx, "app is starting")
 
 	sqlConn := cmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
 	defer sqlConn.Close(ctx)
@@ -24,13 +26,22 @@ func main() {
 	pulsarConn := cmd.MustInitPulsar(ctx, logger)
 	defer pulsarConn.Close()
 
-	messageOutbox := cmd.MustInitSQLMessageOutbox(sqlConn, pulsarConn, logger)
+	messageOutbox := cmd.MustInitSQLMessageOutbox(ctx, sqlConn, pulsarConn, logger)
 	defer messageOutbox.Close()
 
-	ufw := persistence.NewUnitOfWork(sqlConn.Client(), message.NewEventSerializer(), func() {
+	sqlClient, transaction := cmd.MustInitSQLTransaction(sqlConn, func() {
 		messageOutbox.Process()
 	})
-	duckService := service.NewDuckService(ufw)
+
+	messageStore := cmd.MustInitSQLMessageStore(ctx, sqlClient, logger)
+
+	duckEventDispatcher := message.NewEventDispatcher(
+		message.NewStoreSender(messageStore),
+		duckappmessage.NewEventSerializer(),
+	)
+
+	duckRepo := sql.NewDuckRepo(sqlClient, duckEventDispatcher)
+	duckService := service.NewDuckService(duckRepo, transaction)
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,

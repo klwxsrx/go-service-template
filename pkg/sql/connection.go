@@ -25,7 +25,7 @@ type DSN struct {
 }
 
 func (d *DSN) String() string {
-	return fmt.Sprintf("postgresql://%s:%s@%s/%s", d.User, d.Password, d.Address, d.Database)
+	return fmt.Sprintf("postgresql://%s:%s@%s/%s?sslmode=disable", d.User, d.Password, d.Address, d.Database)
 }
 
 type Connection interface {

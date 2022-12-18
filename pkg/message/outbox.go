@@ -1,4 +1,4 @@
-package persistence
+package message
 
 import (
 	"context"
@@ -6,43 +6,44 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/pkg/log"
-	"github.com/klwxsrx/go-service-template/pkg/message"
-	pkgsync "github.com/klwxsrx/go-service-template/pkg/sync"
+	"github.com/klwxsrx/go-service-template/pkg/persistence"
 	"sync"
 	"time"
 )
 
-type MessageOutbox interface {
+const processMessageOutboxLockName = "process_message_outbox"
+
+type Outbox interface {
 	Process()
 	Close()
 }
 
-type messageOutbox struct {
-	store      MessageStore
-	senderImpl message.Sender
-	critical   pkgsync.CriticalSection
-	retry      *backoff.ExponentialBackOff
-	logger     log.Logger
+type outbox struct {
+	store       Store
+	senderImpl  Sender
+	transaction persistence.Transaction
+	retry       *backoff.ExponentialBackOff
+	logger      log.Logger
 
 	processChan chan struct{}
 	stopChan    chan struct{}
 	onceCloser  *sync.Once
 }
 
-func (o *messageOutbox) Process() {
+func (o *outbox) Process() {
 	select {
 	case o.processChan <- struct{}{}:
 	default:
 	}
 }
 
-func (o *messageOutbox) Close() {
+func (o *outbox) Close() {
 	o.onceCloser.Do(func() {
 		o.stopChan <- struct{}{}
 	})
 }
 
-func (o *messageOutbox) run() {
+func (o *outbox) run() {
 	for {
 		select {
 		case <-o.processChan:
@@ -53,19 +54,22 @@ func (o *messageOutbox) run() {
 	}
 }
 
-func (o *messageOutbox) processSend() {
+func (o *outbox) processSend() {
 	ctx := context.Background()
 
 	process := func() error {
 		var atLeastOneProcessed bool
 		var err error
-		err = o.critical.Execute(ctx, "process_message_dispatch", func() error {
-			for atLeastOneProcessed && err == nil {
+
+		for {
+			err = o.transaction.Execute(ctx, func(ctx context.Context) error {
 				atLeastOneProcessed, err = o.processSendBatch(ctx)
+				return err
+			}, processMessageOutboxLockName)
+			if !atLeastOneProcessed || err != nil {
+				return err
 			}
-			return err
-		})
-		return err
+		}
 	}
 
 	_ = backoff.Retry(func() error {
@@ -77,7 +81,7 @@ func (o *messageOutbox) processSend() {
 	}, o.retry)
 }
 
-func (o *messageOutbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool, err error) {
+func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool, err error) {
 	msgs, err := o.store.GetBatch(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to get messages for send: %w", err)
@@ -88,6 +92,7 @@ func (o *messageOutbox) processSendBatch(ctx context.Context) (atLeastOneProcess
 
 	for _, msg := range msgs {
 		v := msg
+
 		err := o.senderImpl.Send(ctx, &v)
 		if err != nil {
 			return false, fmt.Errorf("failed to send message: %w", err)
@@ -101,12 +106,12 @@ func (o *messageOutbox) processSendBatch(ctx context.Context) (atLeastOneProcess
 	return true, nil
 }
 
-func NewMessageOutbox(
-	out message.Sender,
-	store MessageStore,
-	critical pkgsync.CriticalSection,
+func NewOutbox(
+	out Sender,
+	store Store,
+	transaction persistence.Transaction,
 	logger log.Logger,
-) MessageOutbox {
+) Outbox {
 	retry := backoff.NewExponentialBackOff()
 	retry.InitialInterval = time.Second
 	retry.RandomizationFactor = 0
@@ -114,10 +119,10 @@ func NewMessageOutbox(
 	retry.Multiplier = 2
 	retry.MaxElapsedTime = 0
 
-	mo := &messageOutbox{
+	mo := &outbox{
 		store:       store,
 		senderImpl:  out,
-		critical:    critical,
+		transaction: transaction,
 		retry:       retry,
 		logger:      logger,
 		processChan: make(chan struct{}, 1),

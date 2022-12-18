@@ -27,12 +27,9 @@ type Migration struct {
 }
 
 func (m *Migration) Execute(ctx context.Context) error {
-	lock, err := newLock(ctx, m.txClient, migrationLock)
-	if err != nil {
-		return err
-	}
+	lock := newLock(ctx, migrationLock, m.txClient)
 
-	err = lock.Get()
+	err := lock.Get()
 	if err != nil {
 		return fmt.Errorf("failed to get migration lock: %w", err)
 	}
@@ -118,7 +115,7 @@ func (m *Migration) performMigration(ctx context.Context, migrationID, migration
 		return fmt.Errorf("failed to commit tx: %w", err)
 	}
 
-	m.logger.Infof(ctx, "migration %s executed successfully", migrationID)
+	m.logger.WithField("migrationID", migrationID).Info(ctx, "migration executed successfully")
 	return nil
 }
 
@@ -161,7 +158,7 @@ func (m *Migration) getPerformedMigrationIDs(ctx context.Context) (map[string]st
 }
 
 func (m *Migration) createMigrationRecord(ctx context.Context, client Client, fileName string) error {
-	_, err := client.ExecContext(ctx, `INSERT INTO migration VALUES (?)`, fileName)
+	_, err := client.ExecContext(ctx, `INSERT INTO migration VALUES ($1)`, fileName)
 	return err
 }
 

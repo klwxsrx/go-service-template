@@ -45,19 +45,19 @@ func (l *loggerAdapter) Error(args ...any) {
 }
 
 func (l *loggerAdapter) Debugf(format string, args ...any) {
-	l.logger.Debugf(l.ctx, format, args)
+	l.logger.Debug(l.ctx, fmt.Sprintf(format, args...))
 }
 
 func (l *loggerAdapter) Infof(format string, args ...any) {
-	l.logger.Infof(l.ctx, format, args)
+	l.logger.Info(l.ctx, fmt.Sprintf(format, args...))
 }
 
 func (l *loggerAdapter) Warnf(format string, args ...any) {
-	l.logger.Warnf(l.ctx, format, args)
+	l.logger.Warn(l.ctx, fmt.Sprintf(format, args...))
 }
 
 func (l *loggerAdapter) Errorf(format string, args ...any) {
-	l.logger.Errorf(l.ctx, format, args)
+	l.logger.Error(l.ctx, fmt.Sprintf(format, args...))
 }
 
 func newLoggerAdapter(logger log.Logger) pulsarlog.Logger {

@@ -6,11 +6,19 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/pkg/message"
-	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
 
 const (
-	batchLimit = 1000
+	batchLimit = 500
+
+	messageStoreTableDDL = `
+		CREATE TABLE IF NOT EXISTS message_outbox (
+			id      uuid PRIMARY KEY,
+			topic   text,
+			key     text,
+			payload bytea
+		)
+	`
 )
 
 type messageStore struct {
@@ -80,8 +88,18 @@ func (s *messageStore) Delete(ctx context.Context, ids []uuid.UUID) error {
 	return nil
 }
 
-func NewMessageStore(db Client) persistence.MessageStore {
-	return &messageStore{db: db}
+func (s *messageStore) createMigrationTableIfNotExists(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, messageStoreTableDDL)
+	return err
+}
+
+func NewMessageStore(ctx context.Context, db Client) (message.Store, error) {
+	s := &messageStore{db: db}
+	err := s.createMigrationTableIfNotExists(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create messsageStore table: %w", err)
+	}
+	return s, nil
 }
 
 type sqlxMessage struct {

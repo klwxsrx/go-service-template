@@ -2,59 +2,44 @@ package env
 
 import (
 	"context"
+	"fmt"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"os"
-	"strconv"
+	"time"
 )
 
-func MustGetString(ctx context.Context, key string, logger log.Logger) string {
-	str, ok := LookupString(key)
+func MustParseString(ctx context.Context, key string, logger log.Logger) string {
+	s, ok := ParseString(key)
 	if !ok {
-		logger.Fatalf(ctx, "failed to lookup string env %s, not found or invalid", key)
+		handleLookupEnvFatal(ctx, key, "string", logger)
 	}
-	return str
+	return s
 }
 
-func MustGetInt(ctx context.Context, key string, logger log.Logger) int {
-	i, ok := LookupInt(key)
-	if !ok {
-		logger.Fatalf(ctx, "failed to lookup int env %s, not found or invalid", key)
-	}
-	return i
-}
-
-func MustGetBool(ctx context.Context, key string, logger log.Logger) bool {
-	b, ok := LookupBool(key)
-	if !ok {
-		logger.Fatalf(ctx, "failed to lookup bool env %s, not found or invalid", key)
-	}
-	return b
-}
-
-func LookupString(key string) (string, bool) {
+func ParseString(key string) (string, bool) {
 	return os.LookupEnv(key)
 }
 
-func LookupInt(key string) (int, bool) {
-	val, ok := os.LookupEnv(key)
+func MustParseDuration(ctx context.Context, key string, logger log.Logger) time.Duration {
+	d, ok := ParseDuration(key)
 	if !ok {
-		return 0, false
+		handleLookupEnvFatal(ctx, key, "duration", logger)
 	}
-	i, err := strconv.Atoi(val)
-	if err != nil {
-		return 0, false
-	}
-	return i, true
+	return d
 }
 
-func LookupBool(key string) (bool, bool) {
-	val, ok := os.LookupEnv(key)
+func ParseDuration(key string) (time.Duration, bool) {
+	str, ok := os.LookupEnv(key)
 	if !ok {
-		return false, false
+		return 0, false
 	}
-	b, err := strconv.ParseBool(val)
+	d, err := time.ParseDuration(str)
 	if err != nil {
-		return false, false
+		return 0, false
 	}
-	return b, true
+	return d, true
+}
+
+func handleLookupEnvFatal(ctx context.Context, key, envType string, logger log.Logger) {
+	logger.WithField("env", key).Fatal(ctx, fmt.Sprintf("env with type \"%s\" not found or invalid", envType))
 }

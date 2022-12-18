@@ -2,39 +2,47 @@ package sql
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"hash/fnv"
 )
 
 type lock struct {
-	ctx      context.Context
-	client   Client
-	nameHash uint64
+	ctx    context.Context
+	name   string
+	client Client
 }
 
 func (l *lock) Get() error {
-	var success int
-	err := l.client.GetContext(l.ctx, &success, "SELECT pg_advisory_lock(?)", l.nameHash)
-	if err != nil {
-		return fmt.Errorf("failed to get lock: %w", err)
-	}
-	if success == 0 {
-		return errors.New("failed to get lock, attempt timed out")
-	}
-	return nil
+	return lockDatabase(l.ctx, l.client, "SELECT pg_advisory_lock($1)", l.name)
 }
 
 func (l *lock) Release() {
-	_, _ = l.client.ExecContext(l.ctx, "SELECT pg_advisory_unlock(?)", l.nameHash)
+	lockID, _ := getLockIDByName(l.name)
+	_, _ = l.client.ExecContext(l.ctx, "SELECT pg_advisory_unlock($1)", lockID)
 }
 
-func newLock(ctx context.Context, client Client, name string) (*lock, error) {
+func newLock(ctx context.Context, name string, client Client) *lock {
+	return &lock{ctx, name, client}
+}
+
+func getLockIDByName(name string) (int64, error) {
 	hash := fnv.New64a()
 	_, err := hash.Write([]byte(name))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create name hash for lock: %w", err)
+		return 0, fmt.Errorf("failed to create name hash for lock: %w", err)
+	}
+	return int64(hash.Sum64()), nil
+}
+
+func lockDatabase(ctx context.Context, client Client, query, lockName string) error {
+	lockID, err := getLockIDByName(lockName)
+	if err != nil {
+		return err
 	}
 
-	return &lock{ctx, client, hash.Sum64()}, nil
+	_, err = client.ExecContext(ctx, query, lockID)
+	if err != nil {
+		return fmt.Errorf("failed to get lock \"%s\": %w", lockName, err)
+	}
+	return nil
 }

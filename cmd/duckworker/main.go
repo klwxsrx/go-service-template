@@ -11,6 +11,7 @@ import (
 func main() {
 	ctx := context.Background()
 	logger := log.New(log.LevelInfo)
+	logger.Info(ctx, "app is starting")
 
 	pool := worker.NewPool(worker.NumCPUWorkersCount)
 	defer pool.Close()

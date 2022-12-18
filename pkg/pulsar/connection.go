@@ -20,7 +20,6 @@ const (
 
 type Config struct {
 	Address           string
-	AuthToken         string
 	ConnectionTimeout time.Duration
 }
 
@@ -67,7 +66,7 @@ func (c *connection) Consumer(config *ConsumerOptions) (message.Consumer, error)
 	}
 	cons, err := c.client.Subscribe(opts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to subscribe to topic %s by %s subscriber", config.Topic, config.SubscriptionName)
 	}
 	return newMessageConsumer(cons), nil
 }
@@ -97,9 +96,8 @@ func (c *connection) testCreateProducer(connTimeout time.Duration) error {
 
 func NewConnection(config *Config, logger log.Logger) (Connection, error) {
 	c, err := pulsar.NewClient(pulsar.ClientOptions{
-		URL:            fmt.Sprintf("pulsar://%s", config.Address),
-		Authentication: pulsar.NewAuthenticationToken(config.AuthToken),
-		Logger:         newLoggerAdapter(logger),
+		URL:    fmt.Sprintf("pulsar://%s", config.Address),
+		Logger: newLoggerAdapter(logger),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
