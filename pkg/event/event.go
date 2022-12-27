@@ -14,6 +14,4 @@ type Dispatcher interface {
 	Dispatch(ctx context.Context, events []Event) error
 }
 
-type Handler interface {
-	Handle(ctx context.Context, event Event) error
-}
+type Handler[T Event] func(ctx context.Context, event T) error

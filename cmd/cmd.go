@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	ServiceName = "duck-service"
+	DuckServiceName = "duck-service"
 )
 
 type App interface {

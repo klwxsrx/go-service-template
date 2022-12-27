@@ -1,6 +1,6 @@
 .PHONY: clean lint test
 
-all: clean lint test bin/duck
+all: clean lint test bin/duck bin/duckhandler
 
 clean:
 	rm -rf bin/*

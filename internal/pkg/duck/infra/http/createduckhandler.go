@@ -7,7 +7,7 @@ import (
 )
 
 type createDuckHandler struct {
-	duckService *service.DuckService
+	duckService service.DuckService
 }
 
 func (h *createDuckHandler) Method() string {
@@ -27,6 +27,6 @@ func (h *createDuckHandler) HTTPHandler() http.HandlerFunc {
 	}
 }
 
-func NewCreateDuckHandler(duckService *service.DuckService) pkghttp.Handler {
+func NewCreateDuckHandler(duckService service.DuckService) pkghttp.Handler {
 	return &createDuckHandler{duckService: duckService}
 }

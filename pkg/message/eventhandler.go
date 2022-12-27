@@ -7,45 +7,35 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/event"
 )
 
-type EventHandler struct {
-	serializer  EventSerializer
-	subscribers map[string][]event.Handler
+type eventHandler[T event.Event] struct {
+	serializer EventSerializerTyped[T]
+	handlers   []event.Handler[T]
 }
 
-func (h *EventHandler) Handle(ctx context.Context, msg *Message) error {
+func (h *eventHandler[T]) Handle(ctx context.Context, msg *Message) error {
 	evt, err := h.serializer.Deserialize(msg)
-	if errors.Is(err, ErrEventSerializerMessageIsNotValidEvent) {
-		return nil
-	}
 	if errors.Is(err, ErrEventSerializerUnknownEventType) {
-		return fmt.Errorf("unknown event type: %w", err)
+		return ErrHandlerUnknownEvent
 	}
 	if err != nil {
-		return fmt.Errorf("failed to deserialize message to event: %w", err)
+		return fmt.Errorf("failed to deserialize message: %w", err)
 	}
 
-	handlers, ok := h.subscribers[evt.Type()]
-	if !ok {
-		return nil
-	}
-
-	for _, handler := range handlers {
-		err := handler.Handle(ctx, evt)
+	for _, handler := range h.handlers {
+		err := handler(ctx, evt)
 		if err != nil {
 			return fmt.Errorf("failed to handle event: %w", err)
 		}
 	}
-
 	return nil
 }
 
-func (h *EventHandler) Subscribe(eventType string, handler event.Handler) {
-	h.subscribers[eventType] = append(h.subscribers[eventType], handler)
-}
-
-func NewEventHandler(serializer EventSerializer) *EventHandler {
-	return &EventHandler{
-		serializer:  serializer,
-		subscribers: make(map[string][]event.Handler),
+func NewEventHandler[T event.Event](
+	serializer EventSerializerTyped[T],
+	handlers ...event.Handler[T],
+) Handler {
+	return &eventHandler[T]{
+		serializer: serializer,
+		handlers:   handlers,
 	}
 }
