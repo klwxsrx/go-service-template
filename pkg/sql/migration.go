@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	sq "github.com/Masterminds/squirrel"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"io/fs"
 	"strings"
@@ -145,8 +146,13 @@ func (m *Migration) createMigrationTableIfNotExists(ctx context.Context) error {
 }
 
 func (m *Migration) getPerformedMigrationIDs(ctx context.Context) (map[string]struct{}, error) {
+	query, _, err := sq.Select("id").From("migration").ToSql()
+	if err != nil {
+		return nil, err
+	}
+
 	var fileNames []string
-	err := m.txClient.SelectContext(ctx, &fileNames, `SELECT id FROM migration`)
+	err = m.txClient.SelectContext(ctx, &fileNames, query)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +164,12 @@ func (m *Migration) getPerformedMigrationIDs(ctx context.Context) (map[string]st
 }
 
 func (m *Migration) createMigrationRecord(ctx context.Context, client Client, fileName string) error {
-	_, err := client.ExecContext(ctx, `INSERT INTO migration VALUES ($1)`, fileName)
+	query, args, err := sq.Insert("migration").Values(fileName).ToSql()
+	if err != nil {
+		return err
+	}
+
+	_, err = client.ExecContext(ctx, query, args...)
 	return err
 }
 

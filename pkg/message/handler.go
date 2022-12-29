@@ -2,7 +2,6 @@ package message
 
 import (
 	"context"
-	"errors"
 	"github.com/klwxsrx/go-service-template/pkg/hub"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
@@ -18,10 +17,6 @@ type Consumer interface {
 	Nack(msg *ConsumerMessage)
 	Close()
 }
-
-var (
-	ErrHandlerUnknownEvent = errors.New("unknown event")
-)
 
 type Handler interface {
 	Handle(ctx context.Context, msg *Message) error

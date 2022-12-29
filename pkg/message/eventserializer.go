@@ -6,22 +6,17 @@ import (
 )
 
 var (
-	ErrEventTypeDecoderEventTypeNotFound = errors.New("event type not found")
-)
-
-type EventTypeDecoder interface {
-	EventType(msg *Message) (string, error)
-}
-
-var (
-	ErrEventSerializerUnknownEventType = errors.New("unknown event type")
+	ErrEventSerializeUnknownEventType   = errors.New("unknown event type")
+	ErrEventDeserializeUnknownEventType = errors.New("unknown event type")
+	ErrEventDeserializeNotValidEvent    = errors.New("message is not valid event")
 )
 
 type EventSerializer interface {
-	Serialize(e event.Event) (*Message, error)
+	Serialize(evt event.Event) (*Message, error)
+	EventDeserializer
 }
 
-type EventSerializerTyped[T event.Event] interface {
-	Serialize(e T) (*Message, error)
-	Deserialize(msg *Message) (T, error)
+type EventDeserializer interface {
+	ParseType(msg *Message) (string, error)
+	Deserialize(msg *Message) (event.Event, error)
 }

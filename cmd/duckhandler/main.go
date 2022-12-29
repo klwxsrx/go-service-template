@@ -9,6 +9,7 @@ import (
 	duckappmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/app/message"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
 	duckintegrationmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/integration/message"
+	"github.com/klwxsrx/go-service-template/pkg/event"
 	"github.com/klwxsrx/go-service-template/pkg/hub"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/message"
@@ -36,20 +37,12 @@ func main() {
 	gooseTopicConsumer := cmd.MustInitPulsarSingleConsumer(pulsarConn, duckintegrationmessage.GooseDomainEventTopicName, cmd.DuckServiceName)
 	defer gooseTopicConsumer.Close()
 
-	duckEventMessageHandler := message.NewEventHandlerComposite(duckappmessage.NewEventTypeDecoder())
-	duckEventMessageHandler.Subscribe(message.EventTypeHandlerMap{
-		domain.EventTypeDuckCreated: message.NewEventHandler[domain.EventDuckCreated](
-			duckappmessage.EventSerializerDuckCreated,
-			container.DuckService().HandleDuckCreated,
-		),
+	duckService := container.DuckService()
+	duckEventMessageHandler := message.NewEventHandler(duckappmessage.NewEventSerializer(), message.EventTypeHandlerMap{
+		domain.EventTypeDuckCreated: event.NewTypedHandler[domain.EventDuckCreated](duckService.HandleDuckCreated),
 	})
-
-	gooseEventMessageHandler := message.NewEventHandlerComposite(duckintegrationmessage.NewEventTypeDecoder())
-	gooseEventMessageHandler.Subscribe(message.EventTypeHandlerMap{
-		integration.EventTypeGooseQuacked: message.NewEventHandler[integration.EventGooseQuacked](
-			duckintegrationmessage.EventSerializerGooseQuacked,
-			container.DuckService().HandleGooseQuacked,
-		),
+	gooseEventMessageHandler := message.NewEventHandler(duckintegrationmessage.NewGooseEventSerializer(), message.EventTypeHandlerMap{
+		integration.EventTypeGooseQuacked: event.NewTypedHandler[integration.EventGooseQuacked](duckService.HandleGooseQuacked),
 	})
 
 	handlerHub := hub.Run([]hub.Process{

@@ -2,24 +2,23 @@ package message
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
-var EventSerializerDuckCreated = &serializerDuckCreated{}
-
-type serializerDuckCreated struct{}
-
-func (s *serializerDuckCreated) Serialize(e domain.EventDuckCreated) (*message.Message, error) {
-	payload, _ := json.Marshal(duckCreatedMessagePayload{
+func serializeDuckCreated(e domain.EventDuckCreated) (*message.Message, error) {
+	payload, err := json.Marshal(duckCreatedMessagePayload{
 		baseMessagePayload: baseMessagePayload{
 			EventID:   e.EventID,
 			EventType: e.Type(),
 		},
 		DuckID: e.DuckID,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &message.Message{
 		ID:      e.EventID,
@@ -29,21 +28,20 @@ func (s *serializerDuckCreated) Serialize(e domain.EventDuckCreated) (*message.M
 	}, nil
 }
 
-func (s *serializerDuckCreated) Deserialize(msg *message.Message) (domain.EventDuckCreated, error) {
+func deserializeDuckCreated(msg *message.Message) (domain.EventDuckCreated, error) {
 	var payload duckCreatedMessagePayload
 	err := json.Unmarshal(msg.Payload, &payload)
-	if err != nil || payload.EventID == uuid.Nil || payload.DuckID == uuid.Nil {
-		return domain.EventDuckCreated{}, s.errInvalidMessageForEvent(msg, domain.EventTypeDuckCreated)
+	if err != nil {
+		return domain.EventDuckCreated{}, err
+	}
+	if payload.EventID == uuid.Nil || payload.DuckID == uuid.Nil {
+		return domain.EventDuckCreated{}, errors.New("invalid message data")
 	}
 
 	return domain.EventDuckCreated{
 		EventID: payload.EventID,
 		DuckID:  payload.DuckID,
 	}, nil
-}
-
-func (s *serializerDuckCreated) errInvalidMessageForEvent(msg *message.Message, expectedEventType string) error {
-	return fmt.Errorf("invalid message %v type, %s expected", msg.ID, expectedEventType)
 }
 
 type duckCreatedMessagePayload struct {

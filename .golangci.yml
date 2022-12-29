@@ -26,3 +26,5 @@ linters-settings:
         alias: $1$2
       - pkg: github.com/klwxsrx/go-service-template/internal/pkg/(\w+)/(\w+)/(\w+)
         alias: $1$2$3
+      - pkg: github.com/Masterminds/squirrel
+        alias: sq
