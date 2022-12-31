@@ -28,7 +28,7 @@ func NewHandlerProcess(handler Handler, consumer Consumer, optionalLogger log.Lo
 	}
 
 	processMessage := func(msg *ConsumerMessage) {
-		optionalLogger = optionalLogger.With(log.Fields{
+		logger := optionalLogger.With(log.Fields{
 			"messageID": msg.Message.ID,
 			"topic":     msg.Message.Topic,
 		})
@@ -36,12 +36,12 @@ func NewHandlerProcess(handler Handler, consumer Consumer, optionalLogger log.Lo
 		err := handler.Handle(msg.Context, &msg.Message)
 		if err != nil {
 			consumer.Nack(msg)
-			optionalLogger.WithError(err).Error(msg.Context, "failed to handle message")
+			logger.WithError(err).Error(msg.Context, "failed to handle message")
 			return
 		}
 
 		consumer.Ack(msg)
-		optionalLogger.Info(msg.Context, "message handled")
+		logger.Info(msg.Context, "message handled")
 	}
 
 	return func(stopChan <-chan struct{}) {

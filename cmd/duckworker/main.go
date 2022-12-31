@@ -2,7 +2,7 @@ package main
 
 import (
 	_ "github.com/joho/godotenv/autoload"
-	"github.com/klwxsrx/go-service-template/cmd"
+	"github.com/klwxsrx/go-service-template/pkg/cmd"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/sig"
 	"github.com/klwxsrx/go-service-template/pkg/worker"

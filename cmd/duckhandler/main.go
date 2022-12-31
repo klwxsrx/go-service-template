@@ -2,13 +2,13 @@ package main
 
 import (
 	_ "github.com/joho/godotenv/autoload"
-	"github.com/klwxsrx/go-service-template/cmd"
 	"github.com/klwxsrx/go-service-template/data/sql/duck"
 	pkgduck "github.com/klwxsrx/go-service-template/internal/pkg/duck"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/integration"
 	duckappmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/app/message"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
 	duckintegrationmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/integration/message"
+	"github.com/klwxsrx/go-service-template/pkg/cmd"
 	"github.com/klwxsrx/go-service-template/pkg/event"
 	"github.com/klwxsrx/go-service-template/pkg/hub"
 	"github.com/klwxsrx/go-service-template/pkg/log"
@@ -25,16 +25,16 @@ func main() {
 	sqlConn := cmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
 	defer sqlConn.Close(ctx)
 
-	pulsarConn := cmd.MustInitPulsar(logger)
+	pulsarConn := cmd.MustInitPulsar(nil)
 	defer pulsarConn.Close()
 
 	container := pkgduck.NewDependencyContainer(ctx, sqlConn, pulsarConn, logger)
 	defer container.Close()
 
-	duckTopicConsumer := cmd.MustInitPulsarFailoverConsumer(pulsarConn, duckappmessage.DuckDomainEventTopicName, cmd.DuckServiceName)
+	duckTopicConsumer := cmd.MustInitPulsarFailoverConsumer(pulsarConn, duckappmessage.DuckDomainEventTopicName, pkgduck.MessageSubscriberServiceName)
 	defer duckTopicConsumer.Close()
 
-	gooseTopicConsumer := cmd.MustInitPulsarFailoverConsumer(pulsarConn, duckintegrationmessage.GooseDomainEventTopicName, cmd.DuckServiceName)
+	gooseTopicConsumer := cmd.MustInitPulsarFailoverConsumer(pulsarConn, duckintegrationmessage.GooseDomainEventTopicName, pkgduck.MessageSubscriberServiceName)
 	defer gooseTopicConsumer.Close()
 
 	duckService := container.DuckService()

@@ -12,10 +12,6 @@ import (
 	"io/fs"
 )
 
-const (
-	DuckServiceName = "duck-service"
-)
-
 type App interface {
 	Finish(context.Context)
 }
@@ -113,7 +109,7 @@ func MustInitSQLMessageStore(
 	return messageStore
 }
 
-func MustInitPulsar(logger log.Logger) pulsar.Connection {
+func MustInitPulsar(optionalLogger log.Logger) pulsar.Connection {
 	config := &pulsar.Config{
 		Address: env.Must(env.ParseString("PULSAR_ADDRESS")),
 	}
@@ -122,7 +118,11 @@ func MustInitPulsar(logger log.Logger) pulsar.Connection {
 		config.ConnectionTimeout = connTimeout
 	}
 
-	pulsarConn, err := pulsar.NewConnection(config, logger)
+	if optionalLogger == nil {
+		optionalLogger = log.NewStub()
+	}
+
+	pulsarConn, err := pulsar.NewConnection(config, optionalLogger)
 	if err != nil {
 		panicInitApplication(err)
 	}
@@ -130,6 +130,22 @@ func MustInitPulsar(logger log.Logger) pulsar.Connection {
 }
 
 func MustInitPulsarFailoverConsumer(
+	pulsarConn pulsar.Connection,
+	topic string,
+	subscriptionName string,
+) pkgmessage.Consumer {
+	consumer, err := pulsarConn.Consumer(&pulsar.ConsumerOptions{
+		Topic:            topic,
+		SubscriptionName: subscriptionName,
+		ConsumptionType:  pulsar.ConsumptionTypeFailover,
+	})
+	if err != nil {
+		panicInitApplication(err)
+	}
+	return consumer
+}
+
+func MustInitPulsarSharedConsumer(
 	pulsarConn pulsar.Connection,
 	topic string,
 	subscriptionName string,

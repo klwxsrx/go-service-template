@@ -2,14 +2,18 @@ package duck
 
 import (
 	"context"
-	"github.com/klwxsrx/go-service-template/cmd"
 	duckappmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/app/message"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
 	duckinfrasql "github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/sql"
+	"github.com/klwxsrx/go-service-template/pkg/cmd"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/message"
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
+)
+
+const (
+	MessageSubscriberServiceName = "duck-service"
 )
 
 type DependencyContainer struct {

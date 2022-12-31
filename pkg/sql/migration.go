@@ -18,7 +18,7 @@ const (
 		CREATE TABLE IF NOT EXISTS migration (
 			id text PRIMARY KEY
 		)
-	`  // TODO: use different schema for the internal tables?
+	`
 )
 
 type Migration struct {
