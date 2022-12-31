@@ -38,5 +38,5 @@ func main() {
 	httpServer.MustListenAndServe()
 
 	logger.Info(ctx, "app is ready")
-	<-sig.TermSignals()
+	sig.Wait(sig.TermSignals())
 }

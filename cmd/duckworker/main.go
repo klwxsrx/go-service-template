@@ -29,5 +29,5 @@ func main() {
 		logger.Info(ctx, "job 3 done")
 	})
 
-	<-sig.TermSignals()
+	sig.Wait(sig.TermSignals())
 }

@@ -1,17 +1,17 @@
 module github.com/klwxsrx/go-service-template
 
-go 1.18
+go 1.19
 
 require (
 	github.com/Masterminds/squirrel v1.5.3
 	github.com/apache/pulsar-client-go v0.8.1
-	github.com/cenkalti/backoff/v4 v4.1.3
+	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/google/uuid v1.3.0
-	github.com/gorilla/mux v1.7.4
+	github.com/gorilla/mux v1.8.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/joho/godotenv v1.4.0
-	github.com/lib/pq v1.2.0
-	github.com/rs/zerolog v1.27.0
+	github.com/lib/pq v1.10.7
+	github.com/rs/zerolog v1.28.0
 )
 
 require (
