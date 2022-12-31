@@ -56,7 +56,7 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 		},
 	}
 	sqlConnTimeout, err := env.ParseDuration("SQL_CONNECTION_TIMEOUT")
-	if err != nil {
+	if err == nil {
 		sqlConfig.ConnectionTimeout = sqlConnTimeout
 	}
 
@@ -118,7 +118,7 @@ func MustInitPulsar(logger log.Logger) pulsar.Connection {
 		Address: env.Must(env.ParseString("PULSAR_ADDRESS")),
 	}
 	connTimeout, err := env.ParseDuration("PULSAR_CONNECTION_TIMEOUT")
-	if err != nil {
+	if err == nil {
 		config.ConnectionTimeout = connTimeout
 	}
 
@@ -129,7 +129,7 @@ func MustInitPulsar(logger log.Logger) pulsar.Connection {
 	return pulsarConn
 }
 
-func MustInitPulsarSingleConsumer(
+func MustInitPulsarFailoverConsumer(
 	pulsarConn pulsar.Connection,
 	topic string,
 	subscriptionName string,

@@ -33,7 +33,7 @@ type logger struct {
 }
 
 func (l *logger) With(fields Fields) Logger {
-	z := l.impl.With().Fields(fields).Logger()
+	z := l.impl.With().Fields(map[string]any(fields)).Logger()
 	return &logger{&z}
 }
 

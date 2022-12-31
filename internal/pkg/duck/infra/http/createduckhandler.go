@@ -15,7 +15,7 @@ func (h *createDuckHandler) Method() string {
 }
 
 func (h *createDuckHandler) Path() string {
-	return "/duck/"
+	return "/duck"
 }
 
 func (h *createDuckHandler) HTTPHandler() http.HandlerFunc {

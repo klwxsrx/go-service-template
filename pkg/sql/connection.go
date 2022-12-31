@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	sq "github.com/Masterminds/squirrel"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/klwxsrx/go-service-template/pkg/log"
@@ -82,6 +83,8 @@ func NewConnection(config *Config, logger log.Logger) (Connection, error) {
 		return nil, err
 	}
 
+	// setup stmt builder to use ? placeholders with postgresql
+	sq.StatementBuilder = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 	return &connection{
 		db:     db,
 		logger: logger,

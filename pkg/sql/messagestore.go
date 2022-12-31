@@ -41,7 +41,7 @@ func (s *messageStore) GetBatch(ctx context.Context) ([]message.Message, error) 
 		return nil, fmt.Errorf("failed to select messages: %w", err)
 	}
 
-	result := make([]message.Message, len(sqlxResult))
+	result := make([]message.Message, 0, len(sqlxResult))
 	for _, sqlxMsg := range sqlxResult {
 		result = append(result, message.Message{
 			ID:      sqlxMsg.ID,
@@ -88,14 +88,14 @@ func (s *messageStore) Delete(ctx context.Context, ids []uuid.UUID) error {
 	return nil
 }
 
-func (s *messageStore) createMigrationTableIfNotExists(ctx context.Context) error {
+func (s *messageStore) createMessageStoreTableIfNotExists(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, messageStoreTableDDL)
 	return err
 }
 
 func NewMessageStore(ctx context.Context, db Client) (message.Store, error) {
 	s := &messageStore{db: db}
-	err := s.createMigrationTableIfNotExists(ctx)
+	err := s.createMessageStoreTableIfNotExists(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create messsageStore table: %w", err)
 	}

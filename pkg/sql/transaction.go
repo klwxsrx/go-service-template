@@ -3,13 +3,9 @@ package sql
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
-	"time"
 )
-
-const transactionTimeout = 10 * time.Second
 
 type transaction struct {
 	client   TxClient
@@ -22,15 +18,8 @@ func (t *transaction) Execute(
 	lockNames ...string,
 ) error {
 	var err error
-	parentCtx := ctx
 	tx, isParentTx := ctx.Value(databaseTransactionContextKey).(ClientTx)
 	if !isParentTx {
-		var cancelFunc func()
-		ctx, cancelFunc = context.WithCancel(ctx)
-		time.AfterFunc(transactionTimeout, func() {
-			cancelFunc()
-		})
-
 		tx, err = t.client.Begin(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to start db transaction: %w", err)
@@ -45,18 +34,15 @@ func (t *transaction) Execute(
 	}
 
 	for _, lockName := range lockNames {
-		err = lockDatabase(ctx, tx, "SELECT pg_advisory_xact_lock(?)", lockName)
+		err = lockDatabase(ctx, tx, "SELECT pg_advisory_xact_lock($1)", lockName)
 		if err != nil {
 			return err
 		}
 	}
 
 	err = fn(ctx)
-	if errors.Is(err, context.Canceled) && parentCtx.Err() == nil {
-		return fmt.Errorf("db transaction timeout exceeded")
-	}
 	if err != nil {
-		return fmt.Errorf("failed to execute in db transaction: %w", err)
+		return err
 	}
 
 	if isParentTx {

@@ -130,5 +130,6 @@ func NewOutbox(
 		onceCloser:  &sync.Once{},
 	}
 	go mo.run()
+	mo.Process()
 	return mo
 }

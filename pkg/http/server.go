@@ -46,16 +46,19 @@ func (s *server) MustListenAndServe() {
 }
 
 func (s *server) Register(handler Handler, opts ...Option) {
-	router := s.router.
+	router := s.router
+	if len(opts) > 0 {
+		router = s.router.NewRoute().Subrouter()
+		for _, opt := range opts {
+			opt(router)
+		}
+	}
+
+	router.
 		Name(getRouteName(handler.Method(), handler.Path())).
 		Methods(handler.Method()).
 		Path(handler.Path()).
-		HandlerFunc(handler.HTTPHandler()).
-		Subrouter()
-
-	for _, opt := range opts {
-		opt(router)
-	}
+		HandlerFunc(handler.HTTPHandler())
 }
 
 func (s *server) Shutdown(ctx context.Context) {

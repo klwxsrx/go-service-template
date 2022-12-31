@@ -31,17 +31,17 @@ func main() {
 	container := pkgduck.NewDependencyContainer(ctx, sqlConn, pulsarConn, logger)
 	defer container.Close()
 
-	duckTopicConsumer := cmd.MustInitPulsarSingleConsumer(pulsarConn, duckappmessage.DuckDomainEventTopicName, cmd.DuckServiceName)
+	duckTopicConsumer := cmd.MustInitPulsarFailoverConsumer(pulsarConn, duckappmessage.DuckDomainEventTopicName, cmd.DuckServiceName)
 	defer duckTopicConsumer.Close()
 
-	gooseTopicConsumer := cmd.MustInitPulsarSingleConsumer(pulsarConn, duckintegrationmessage.GooseDomainEventTopicName, cmd.DuckServiceName)
+	gooseTopicConsumer := cmd.MustInitPulsarFailoverConsumer(pulsarConn, duckintegrationmessage.GooseDomainEventTopicName, cmd.DuckServiceName)
 	defer gooseTopicConsumer.Close()
 
 	duckService := container.DuckService()
 	duckEventMessageHandler := message.NewEventHandler(duckappmessage.NewEventSerializer(), message.EventTypeHandlerMap{
 		domain.EventTypeDuckCreated: event.NewTypedHandler[domain.EventDuckCreated](duckService.HandleDuckCreated),
 	})
-	gooseEventMessageHandler := message.NewEventHandler(duckintegrationmessage.NewGooseEventSerializer(), message.EventTypeHandlerMap{
+	gooseEventMessageHandler := message.NewEventHandler(duckintegrationmessage.NewGooseEventDeserializer(), message.EventTypeHandlerMap{
 		integration.EventTypeGooseQuacked: event.NewTypedHandler[integration.EventGooseQuacked](duckService.HandleGooseQuacked),
 	})
 

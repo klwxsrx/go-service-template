@@ -28,8 +28,8 @@ func (s *eventSerializer) ParseType(msg *message.Message) (string, error) {
 
 func (s *eventSerializer) Serialize(event event.Event) (*message.Message, error) {
 	switch concreteEvent := event.(type) {
-	case domain.EventDuckCreated:
-		return serializeDuckCreated(concreteEvent)
+	case *domain.EventDuckCreated:
+		return serializeDuckCreated(*concreteEvent)
 	default:
 		return nil, fmt.Errorf("%w, %s", message.ErrEventSerializeUnknownEventType, event.Type())
 	}

@@ -12,10 +12,10 @@ import (
 
 const GooseDomainEventTopicName = "goose-domain-event"
 
-type gooseEventSerializer struct {
+type gooseEventDeserializer struct {
 }
 
-func (g *gooseEventSerializer) ParseType(msg *message.Message) (string, error) {
+func (g *gooseEventDeserializer) ParseType(msg *message.Message) (string, error) {
 	var base baseMessagePayload
 	err := json.Unmarshal(msg.Payload, &base)
 	if err != nil || base.EventType == "" {
@@ -24,7 +24,7 @@ func (g *gooseEventSerializer) ParseType(msg *message.Message) (string, error) {
 	return base.EventType, nil
 }
 
-func (g *gooseEventSerializer) Deserialize(msg *message.Message) (event.Event, error) {
+func (g *gooseEventDeserializer) Deserialize(msg *message.Message) (event.Event, error) {
 	eventType, err := g.ParseType(msg)
 	if err != nil {
 		return nil, err
@@ -38,7 +38,7 @@ func (g *gooseEventSerializer) Deserialize(msg *message.Message) (event.Event, e
 	}
 }
 
-func (g *gooseEventSerializer) deserializeGooseQuacked(msg *message.Message) (event.Event, error) {
+func (g *gooseEventDeserializer) deserializeGooseQuacked(msg *message.Message) (event.Event, error) {
 	var payload gooseQuackedMessagePayload
 	err := json.Unmarshal(msg.Payload, &payload)
 	if err != nil || payload.EventID == uuid.Nil || payload.GooseID == uuid.Nil {
@@ -51,8 +51,8 @@ func (g *gooseEventSerializer) deserializeGooseQuacked(msg *message.Message) (ev
 	}, nil
 }
 
-func NewGooseEventSerializer() message.EventDeserializer {
-	return &gooseEventSerializer{}
+func NewGooseEventDeserializer() message.EventDeserializer {
+	return &gooseEventDeserializer{}
 }
 
 type gooseQuackedMessagePayload struct {
