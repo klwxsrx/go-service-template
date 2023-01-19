@@ -38,7 +38,7 @@ func main() {
 	defer gooseTopicConsumer.Close()
 
 	duckService := container.DuckService()
-	duckEventMessageHandler := message.NewEventHandler(duckappmessage.NewEventSerializer(), message.EventTypeHandlerMap{
+	duckEventMessageHandler := message.NewEventHandler(duckappmessage.NewEventDeserializer(), message.EventTypeHandlerMap{
 		domain.EventTypeDuckCreated: event.NewTypedHandler[domain.EventDuckCreated](duckService.HandleDuckCreated),
 	})
 	gooseEventMessageHandler := message.NewEventHandler(duckintegrationmessage.NewGooseEventDeserializer(), message.EventTypeHandlerMap{

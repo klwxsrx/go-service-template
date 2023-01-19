@@ -12,8 +12,7 @@ import (
 
 const GooseDomainEventTopicName = "goose-domain-event"
 
-type gooseEventDeserializer struct {
-}
+type gooseEventDeserializer struct{}
 
 func (g *gooseEventDeserializer) ParseType(msg *message.Message) (string, error) {
 	var base baseMessagePayload
@@ -34,7 +33,7 @@ func (g *gooseEventDeserializer) Deserialize(msg *message.Message) (event.Event,
 	case integration.EventTypeGooseQuacked:
 		return g.deserializeGooseQuacked(msg)
 	default:
-		return nil, fmt.Errorf("%w, %s", message.ErrEventDeserializeUnknownEventType, eventType)
+		return nil, fmt.Errorf("unknown event type %s", eventType)
 	}
 }
 

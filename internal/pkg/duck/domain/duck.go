@@ -18,7 +18,7 @@ type DuckRepo interface {
 func NewDuck(id uuid.UUID) *Duck {
 	return &Duck{
 		ID: id,
-		Changes: []event.Event{&EventDuckCreated{
+		Changes: []event.Event{EventDuckCreated{
 			EventID: uuid.New(),
 			DuckID:  id,
 		}},

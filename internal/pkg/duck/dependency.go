@@ -37,7 +37,7 @@ func NewDependencyContainer(
 	messageStore := cmd.MustInitSQLMessageStore(ctx, sqlClient)
 	eventDispatcher := message.NewEventDispatcher(
 		message.NewStoreSender(messageStore),
-		duckappmessage.NewEventSerializer(),
+		message.NewJSONEventSerializer(duckappmessage.DuckDomainEventTopicName),
 	)
 
 	duckRepo := duckinfrasql.NewDuckRepo(sqlClient, eventDispatcher)

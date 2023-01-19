@@ -2,11 +2,11 @@ package domain
 
 import "github.com/google/uuid"
 
-const EventTypeDuckCreated = "duck.created"
+const EventTypeDuckCreated = "duck.duck.created"
 
 type EventDuckCreated struct {
-	EventID uuid.UUID
-	DuckID  uuid.UUID
+	EventID uuid.UUID `json:"event_id"`
+	DuckID  uuid.UUID `json:"duck_id"`
 }
 
 func (e EventDuckCreated) ID() uuid.UUID {

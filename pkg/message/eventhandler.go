@@ -22,6 +22,7 @@ func (h *eventHandler) Handle(ctx context.Context, msg *Message) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse event type: %w", err)
 	}
+
 	handler, ok := h.handlers[eventType]
 	if !ok {
 		return nil
