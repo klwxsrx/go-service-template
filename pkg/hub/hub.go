@@ -44,7 +44,9 @@ func (h *hub) Wait(termSignalsChan <-chan os.Signal) error {
 	return h.result
 }
 
-func Run(ps []Process) Hub {
+func Run(p Process, ps ...Process) Hub {
+	ps = append([]Process{p}, ps...)
+
 	wg := &sync.WaitGroup{}
 	stopChan := make(chan struct{}, len(ps))
 	processDoneChan := make(chan int, 1)

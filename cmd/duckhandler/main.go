@@ -45,10 +45,10 @@ func main() {
 		integration.EventTypeGooseQuacked: event.NewTypedHandler[integration.EventGooseQuacked](duckService.HandleGooseQuacked),
 	})
 
-	handlerHub := hub.Run([]hub.Process{
+	handlerHub := hub.Run(
 		message.NewHandlerProcess(duckEventMessageHandler, duckTopicConsumer, logger),
 		message.NewHandlerProcess(gooseEventMessageHandler, gooseTopicConsumer, logger),
-	})
+	)
 
 	logger.Info(ctx, "app is ready")
 	hub.Must(handlerHub.Wait(sig.TermSignals()))

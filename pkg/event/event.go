@@ -17,7 +17,11 @@ type Dispatcher interface {
 
 type Handler func(ctx context.Context, event Event) error
 
-func NewTypedHandler[T Event](handlers ...func(ctx context.Context, event T) error) Handler {
+func NewTypedHandler[T Event](
+	handler func(ctx context.Context, event T) error,
+	handlers ...func(ctx context.Context, event T) error,
+) Handler {
+	handlers = append([]func(ctx context.Context, event T) error{handler}, handlers...)
 	return func(ctx context.Context, event Event) error {
 		concreteEvent, ok := event.(T)
 		if !ok {

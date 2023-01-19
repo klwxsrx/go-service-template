@@ -49,8 +49,9 @@ func (d *jsonEventDeserializer) Deserialize(msg *Message) (event.Event, error) {
 	return deserializer(messagePayload.EventData)
 }
 
-func NewJSONEventDeserializer(jsonEvents ...RegisterJSONEventFunc) EventDeserializer {
-	d := &jsonEventDeserializer{deserializers: make(map[string]eventDataDeserializer, len(jsonEvents))}
+func NewJSONEventDeserializer(jsonEvent RegisterJSONEventFunc, jsonEvents ...RegisterJSONEventFunc) EventDeserializer {
+	d := &jsonEventDeserializer{deserializers: make(map[string]eventDataDeserializer, len(jsonEvents)+1)}
+	jsonEvent(d)
 	for _, jsonEvent := range jsonEvents {
 		jsonEvent(d)
 	}
