@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/klwxsrx/go-service-template/pkg/hub"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"net/http"
-	"sync"
+	"os"
 	"time"
 )
 
@@ -22,27 +23,34 @@ type Handler interface {
 	HTTPHandler() http.HandlerFunc
 }
 
+func Must(err error) {
+	if err != nil {
+		panic(fmt.Errorf("unable to listen the server: %w", err))
+	}
+}
+
 type Server interface {
-	MustListenAndServe()
+	ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error
+	ListenAndServeProcess(ctx context.Context, logger log.Logger) hub.Process
 	Register(handler Handler, opts ...Option)
-	Shutdown(ctx context.Context)
 }
 
 type server struct {
-	srv         *http.Server
-	router      *mux.Router
-	logger      log.Logger
-	onceStarter *sync.Once
+	srv    *http.Server
+	router *mux.Router
 }
 
-func (s *server) MustListenAndServe() {
-	s.onceStarter.Do(func() {
-		go func() {
-			if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				panic(fmt.Errorf("unable to listen the server: %w", err))
-			}
-		}()
-	})
+func (s *server) ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error {
+	return listenAndServe(ctx, s.srv, termSignalsChan)
+}
+
+func (s *server) ListenAndServeProcess(ctx context.Context, logger log.Logger) hub.Process {
+	return func(stopChan <-chan struct{}) {
+		err := listenAndServe(ctx, s.srv, stopChan)
+		if err != nil {
+			logger.WithError(err).Error(ctx, "unable to listen the server")
+		}
+	}
 }
 
 func (s *server) Register(handler Handler, opts ...Option) {
@@ -61,13 +69,37 @@ func (s *server) Register(handler Handler, opts ...Option) {
 		HandlerFunc(handler.HTTPHandler())
 }
 
-func (s *server) Shutdown(ctx context.Context) {
-	if err := s.srv.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		s.logger.WithError(err).Error(ctx, "failed to shutdown http server")
+func listenAndServe[signal any](ctx context.Context, srv *http.Server, termSignal <-chan signal) error {
+	serverDoneChan := make(chan error, 1)
+	go func() {
+		err := srv.ListenAndServe()
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		serverDoneChan <- err
+	}()
+
+	var err error
+	select {
+	case err = <-serverDoneChan:
+	case <-termSignal:
+		err = shutdown(ctx, srv)
 	}
+	return err
 }
 
-func NewServer(address string, logger log.Logger, opts ...Option) Server {
+func shutdown(ctx context.Context, srv *http.Server) error {
+	err := srv.Shutdown(ctx)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to shutdown http server: %w", err)
+	}
+	return nil
+}
+
+func NewServer(address string, opts ...Option) Server {
 	router := mux.NewRouter()
 	for _, opt := range opts {
 		opt(router)
@@ -81,9 +113,7 @@ func NewServer(address string, logger log.Logger, opts ...Option) Server {
 	}
 
 	return &server{
-		srv:         srv,
-		router:      router,
-		logger:      logger,
-		onceStarter: &sync.Once{},
+		srv:    srv,
+		router: router,
 	}
 }

@@ -28,15 +28,12 @@ func main() {
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,
-		logger,
 		pkghttp.WithHealthCheck(nil),
 		pkghttp.WithLogging(logger),
 	)
-	defer httpServer.Shutdown(ctx)
 
 	httpServer.Register(http.NewCreateDuckHandler(container.DuckService()))
-	httpServer.MustListenAndServe()
 
 	logger.Info(ctx, "app is ready")
-	sig.Wait(sig.TermSignals())
+	pkghttp.Must(httpServer.ListenAndServe(ctx, sig.TermSignals()))
 }
