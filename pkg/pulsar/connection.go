@@ -68,7 +68,7 @@ func (c *connection) Consumer(config *ConsumerOptions) (message.Consumer, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe to topic %s by %s subscriber", config.Topic, config.SubscriptionName)
 	}
-	return newMessageConsumer(cons), nil
+	return newMessageConsumer(cons, config.Topic), nil
 }
 
 func (c *connection) Close() {
@@ -100,7 +100,7 @@ func NewConnection(config *Config, logger log.Logger) (Connection, error) {
 		Logger: newLoggerAdapter(logger),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
+		return nil, fmt.Errorf("failed to create pulsar client: %w", err)
 	}
 
 	conn := &connection{client: c}

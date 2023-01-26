@@ -27,7 +27,7 @@ services:
     ports:
       - "6650:6650"
     entrypoint: [ "bin/pulsar", "standalone" ]
-    healthcheck: # TODO: fix healthcheck
+    healthcheck:
       test: /pulsar/bin/pulsar-admin brokers healthcheck
       interval: 30s
       timeout: 5s

@@ -2,6 +2,7 @@ package pulsar
 
 import (
 	"context"
+	"fmt"
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/pkg/message"
@@ -9,10 +10,15 @@ import (
 )
 
 type messageConsumer struct {
+	name   string
 	pulsar pulsar.Consumer
 
 	onceDoer *sync.Once
 	messages chan *message.ConsumerMessage
+}
+
+func (c *messageConsumer) Name() string {
+	return c.name
 }
 
 func (c *messageConsumer) Messages() <-chan *message.ConsumerMessage {
@@ -74,8 +80,9 @@ func (c *messageConsumer) Close() {
 	c.pulsar.Close()
 }
 
-func newMessageConsumer(pulsarConsumer pulsar.Consumer) message.Consumer {
+func newMessageConsumer(pulsarConsumer pulsar.Consumer, subscribedTopic string) message.Consumer {
 	return &messageConsumer{
+		name:     fmt.Sprintf("%s/%s", pulsarConsumer.Subscription(), subscribedTopic),
 		pulsar:   pulsarConsumer,
 		onceDoer: &sync.Once{},
 		messages: make(chan *message.ConsumerMessage),

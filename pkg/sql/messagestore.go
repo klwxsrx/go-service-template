@@ -97,7 +97,7 @@ func NewMessageStore(ctx context.Context, db Client) (message.Store, error) {
 	s := &messageStore{db: db}
 	err := s.createMessageStoreTableIfNotExists(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create messsageStore table: %w", err)
+		return nil, fmt.Errorf("failed to create message store table: %w", err)
 	}
 	return s, nil
 }

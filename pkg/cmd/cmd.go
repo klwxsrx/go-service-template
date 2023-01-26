@@ -58,7 +58,7 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 
 	sqlConn, err := sql.NewConnection(sqlConfig, logger)
 	if err != nil {
-		panicInitApplication(err)
+		panicInitApplication(fmt.Errorf("open sql connection: %w", err))
 	}
 
 	if optionalMigrations == nil {
@@ -67,7 +67,7 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 	sqlMigration := sql.NewMigration(sqlConn.Client(), optionalMigrations, logger)
 	err = sqlMigration.Execute(ctx)
 	if err != nil {
-		panicInitApplication(err)
+		panicInitApplication(fmt.Errorf("execute migrations: %w", err))
 	}
 	return sqlConn
 }
@@ -88,7 +88,7 @@ func MustInitSQLMessageOutbox(
 	sqlClient, tx := MustInitSQLTransaction(sqlConn, func() {})
 	messageStore, err := sql.NewMessageStore(ctx, sqlClient)
 	if err != nil {
-		panicInitApplication(err)
+		panicInitApplication(fmt.Errorf("init message outbox: %w", err))
 	}
 	return pkgmessage.NewOutbox(
 		pkgmessage.NewSender(producers),
@@ -104,7 +104,7 @@ func MustInitSQLMessageStore(
 ) pkgmessage.Store {
 	messageStore, err := sql.NewMessageStore(ctx, sqlClient)
 	if err != nil {
-		panicInitApplication(err)
+		panicInitApplication(fmt.Errorf("init message store: %w", err))
 	}
 	return messageStore
 }
@@ -124,7 +124,7 @@ func MustInitPulsar(optionalLogger log.Logger) pulsar.Connection {
 
 	pulsarConn, err := pulsar.NewConnection(config, optionalLogger)
 	if err != nil {
-		panicInitApplication(err)
+		panicInitApplication(fmt.Errorf("open pulsar connection: %w", err))
 	}
 	return pulsarConn
 }
@@ -140,7 +140,7 @@ func MustInitPulsarFailoverConsumer(
 		ConsumptionType:  pulsar.ConsumptionTypeFailover,
 	})
 	if err != nil {
-		panicInitApplication(err)
+		panicInitApplication(fmt.Errorf("init pulsar failover consumer %s/%s: %w", subscriptionName, topic, err))
 	}
 	return consumer
 }
@@ -153,10 +153,10 @@ func MustInitPulsarSharedConsumer(
 	consumer, err := pulsarConn.Consumer(&pulsar.ConsumerOptions{
 		Topic:            topic,
 		SubscriptionName: subscriptionName,
-		ConsumptionType:  pulsar.ConsumptionTypeFailover,
+		ConsumptionType:  pulsar.ConsumptionTypeShared,
 	})
 	if err != nil {
-		panicInitApplication(err)
+		panicInitApplication(fmt.Errorf("init pulsar shared consumer %s/%s: %w", subscriptionName, topic, err))
 	}
 	return consumer
 }

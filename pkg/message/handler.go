@@ -12,6 +12,7 @@ type ConsumerMessage struct {
 }
 
 type Consumer interface {
+	Name() string
 	Messages() <-chan *ConsumerMessage
 	Ack(msg *ConsumerMessage)
 	Nack(msg *ConsumerMessage)
@@ -22,13 +23,9 @@ type Handler interface {
 	Handle(ctx context.Context, msg *Message) error
 }
 
-func NewHandlerProcess(handler Handler, consumer Consumer, optionalLogger log.Logger) hub.Process {
-	if optionalLogger == nil {
-		optionalLogger = log.NewStub()
-	}
-
+func NewHandlerProcess(handler Handler, consumer Consumer, logger log.Logger, logHandledMessages bool) hub.Process {
 	processMessage := func(msg *ConsumerMessage) {
-		logger := optionalLogger.With(log.Fields{
+		loggerWithFields := logger.With(log.Fields{
 			"messageID": msg.Message.ID,
 			"topic":     msg.Message.Topic,
 		})
@@ -36,12 +33,14 @@ func NewHandlerProcess(handler Handler, consumer Consumer, optionalLogger log.Lo
 		err := handler.Handle(msg.Context, &msg.Message)
 		if err != nil {
 			consumer.Nack(msg)
-			logger.WithError(err).Error(msg.Context, "failed to handle message")
+			loggerWithFields.WithError(err).Error(msg.Context, "failed to handle message")
 			return
 		}
 
 		consumer.Ack(msg)
-		logger.Info(msg.Context, "message handled")
+		if logHandledMessages {
+			loggerWithFields.Info(msg.Context, "message handled")
+		}
 	}
 
 	return func(stopChan <-chan struct{}) {
@@ -49,10 +48,12 @@ func NewHandlerProcess(handler Handler, consumer Consumer, optionalLogger log.Lo
 			select {
 			case msg, ok := <-consumer.Messages():
 				if !ok {
+					logger.WithField("consumerName", consumer.Name()).Error(msg.Context, "consumer closed messages channel")
 					return
 				}
 				processMessage(msg)
 			case <-stopChan:
+				return
 			}
 		}
 	}

@@ -68,7 +68,7 @@ func openConnection(config *Config) (*sqlx.DB, error) {
 	}, eb)
 	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("failed to open sql connection: %w", err)
+		return nil, err
 	}
 	return db, nil
 }

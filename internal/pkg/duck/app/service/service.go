@@ -26,7 +26,7 @@ func (s *duckService) Create(ctx context.Context) error {
 
 		err := s.duckRepo.Store(ctx, duck)
 		if err != nil {
-			return fmt.Errorf("failed to create duck, repo error: %w", err)
+			return fmt.Errorf("failed to store duck, repo error: %w", err)
 		}
 
 		return nil
