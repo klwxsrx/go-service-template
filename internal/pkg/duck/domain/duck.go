@@ -6,13 +6,13 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/event"
 )
 
+type DuckRepo interface {
+	Store(ctx context.Context, duck *Duck) error
+}
+
 type Duck struct {
 	ID      uuid.UUID
 	Changes []event.Event
-}
-
-type DuckRepo interface {
-	Store(ctx context.Context, duck *Duck) error
 }
 
 func NewDuck(id uuid.UUID) *Duck {
