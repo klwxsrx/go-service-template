@@ -34,9 +34,9 @@ func ParseDuration(key string) (time.Duration, error) {
 }
 
 func notFoundError(key, varType string) error {
-	return fmt.Errorf("env \"%s\" with type \"%s\" not found", key, varType)
+	return fmt.Errorf("env %s with type %s not found", key, varType)
 }
 
 func invalidValueError(key, varType string) error {
-	return fmt.Errorf("env \"%s\" with type \"%s\" has invalid value", key, varType)
+	return fmt.Errorf("env %s with type %s has invalid value", key, varType)
 }

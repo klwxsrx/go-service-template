@@ -42,7 +42,7 @@ func lockDatabase(ctx context.Context, client Client, query, lockName string) er
 
 	_, err = client.ExecContext(ctx, query, lockID)
 	if err != nil {
-		return fmt.Errorf("failed to get lock \"%s\": %w", lockName, err)
+		return fmt.Errorf("failed to get lock %s: %w", lockName, err)
 	}
 	return nil
 }

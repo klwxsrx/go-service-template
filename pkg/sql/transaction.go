@@ -4,10 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
 
+type txData struct {
+	txID uuid.UUID
+	tx   ClientTx
+}
+
 type transaction struct {
+	uniqueID uuid.UUID
 	client   TxClient
 	onCommit func()
 }
@@ -18,8 +25,10 @@ func (t *transaction) Execute(
 	lockNames ...string,
 ) error {
 	var err error
-	tx, isParentTx := ctx.Value(databaseTransactionContextKey).(ClientTx)
+	storedTx, ok := ctx.Value(databaseTransactionContextKey).(txData)
+	isParentTx := ok && storedTx.txID == t.uniqueID
 	if !isParentTx {
+		var tx ClientTx
 		tx, err = t.client.Begin(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to start db transaction: %w", err)
@@ -30,11 +39,13 @@ func (t *transaction) Execute(
 			}
 		}()
 
-		ctx = context.WithValue(ctx, databaseTransactionContextKey, tx)
+		storedTx.txID = t.uniqueID
+		storedTx.tx = tx
+		ctx = context.WithValue(ctx, databaseTransactionContextKey, storedTx)
 	}
 
 	for _, lockName := range lockNames {
-		err = lockDatabase(ctx, tx, "SELECT pg_advisory_xact_lock($1)", lockName)
+		err = lockDatabase(ctx, storedTx.tx, "SELECT pg_advisory_xact_lock($1)", lockName)
 		if err != nil {
 			return err
 		}
@@ -49,7 +60,7 @@ func (t *transaction) Execute(
 		return nil
 	}
 
-	err = tx.Commit()
+	err = storedTx.tx.Commit()
 	if err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -58,7 +69,7 @@ func (t *transaction) Execute(
 }
 
 func NewTransaction(client TxClient, onCommit func()) (Client, persistence.Transaction) {
-	return &txUnwrapperClient{client: client}, &transaction{client: client, onCommit: onCommit}
+	return &txUnwrapperClient{client: client}, &transaction{uniqueID: uuid.New(), client: client, onCommit: onCommit}
 }
 
 type txUnwrapperClient struct {
