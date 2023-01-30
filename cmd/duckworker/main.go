@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/klwxsrx/go-service-template/pkg/cmd"
 	"github.com/klwxsrx/go-service-template/pkg/log"
@@ -9,8 +10,9 @@ import (
 )
 
 func main() {
-	app, ctx, logger := cmd.StartApp(log.LevelInfo)
-	defer app.Finish(ctx)
+	ctx := context.Background()
+	logger := log.New(log.LevelInfo)
+	defer cmd.HandleAppPanic(ctx, logger)
 
 	logger.Info(ctx, "app is starting")
 

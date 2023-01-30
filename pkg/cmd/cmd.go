@@ -12,34 +12,19 @@ import (
 	"io/fs"
 )
 
-type App interface {
-	Finish(context.Context)
-}
-
-type app struct {
-	logger log.Logger
-}
-
-func (a *app) Finish(ctx context.Context) {
+func HandleAppPanic(ctx context.Context, logger log.Logger) {
 	msg := recover()
 	if msg == nil {
 		return
 	}
 
-	logger := a.logger
 	err, ok := msg.(error)
 	if ok {
 		logger = logger.WithError(err)
 	} else {
-		logger = logger.WithField("err", msg)
+		logger = logger.WithField("error", msg)
 	}
 	logger.Fatal(ctx, "app failed with panic")
-}
-
-func StartApp(logLevel log.Level) (App, context.Context, log.Logger) {
-	ctx := context.Background()
-	logger := log.New(logLevel)
-	return &app{logger}, ctx, logger
 }
 
 func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.ReadDirFS) sql.Connection {
