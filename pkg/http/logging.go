@@ -37,14 +37,19 @@ func WithLogging(logger log.Logger, excludedPaths ...string) Option {
 			}
 
 			lrw := &loggingResponseWriter{w, http.StatusOK}
+			if reqID, ok := getIDFromRequest(r); ok {
+				r = r.WithContext(logger.WithContext(r.Context(), log.Fields{
+					"httpRequestID": reqID,
+				}))
+			}
 			handler.ServeHTTP(lrw, r)
 
 			logger.With(log.Fields{
-				"route_name":    getRouteName(r.Method, r.URL.Path),
-				"method":        r.Method,
-				"path":          r.URL.Path,
-				"uri":           r.RequestURI,
-				"response_code": lrw.code,
+				"routeName":    getRouteName(r.Method, r.URL.Path),
+				"method":       r.Method,
+				"path":         r.URL.Path,
+				"uri":          r.RequestURI,
+				"responseCode": lrw.code,
 			}).Info(r.Context(), "request handled")
 		})
 	})
