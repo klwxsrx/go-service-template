@@ -44,13 +44,18 @@ func WithLogging(logger log.Logger, excludedPaths ...string) Option {
 			}
 			handler.ServeHTTP(lrw, r)
 
-			logger.With(log.Fields{
+			loggerWithFields := logger.With(log.Fields{
 				"routeName":    getRouteName(r.Method, r.URL.Path),
 				"method":       r.Method,
 				"path":         r.URL.Path,
 				"uri":          r.RequestURI,
 				"responseCode": lrw.code,
-			}).Info(r.Context(), "request handled")
+			})
+			if lrw.code >= http.StatusInternalServerError {
+				loggerWithFields.Warn(r.Context(), "request handled with internal error")
+			} else {
+				loggerWithFields.Info(r.Context(), "request handled")
+			}
 		})
 	})
 }

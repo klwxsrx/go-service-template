@@ -1,12 +1,17 @@
 package hub
 
 import (
+	"context"
 	"fmt"
+	"github.com/klwxsrx/go-service-template/pkg/log"
 	"os"
 	"sync"
 )
 
-type Process func(stopChan <-chan struct{})
+type Process interface {
+	Name() string
+	Func() func(stopChan <-chan struct{}) error
+}
 
 func Must(err error) {
 	if err != nil {
@@ -15,28 +20,41 @@ func Must(err error) {
 }
 
 type Hub interface {
-	Wait(termSignalsChan <-chan os.Signal) error
+	Wait(ctx context.Context, termSignalsChan <-chan os.Signal, logger log.Logger) error
 }
 
 type hub struct {
-	wg              *sync.WaitGroup
-	processCount    int
-	processDoneChan chan int
-	onceDoer        *sync.Once
-	stopChan        chan struct{}
-	result          error
+	wg                *sync.WaitGroup
+	processCount      int
+	onceDoer          *sync.Once
+	stopChan          chan struct{}
+	processResultChan chan processResult
+	result            error
 }
 
-func (h *hub) Wait(termSignalsChan <-chan os.Signal) error {
+func (h *hub) Wait(ctx context.Context, termSignalsChan <-chan os.Signal, logger log.Logger) error {
 	h.onceDoer.Do(func() {
 		select {
 		case <-termSignalsChan:
-		case position := <-h.processDoneChan:
-			h.result = fmt.Errorf("process %d unexpectedly completed", position)
+		case processResult := <-h.processResultChan:
+			h.result = fmt.Errorf("process %s unexpectedly completed with error: %w", processResult.processName, processResult.err)
 		}
 
 		for i := 0; i < h.processCount; i++ {
 			h.stopChan <- struct{}{}
+		}
+
+		h.wg.Wait()
+
+		for {
+			select {
+			case processResult := <-h.processResultChan:
+				if processResult.err != nil {
+					logger.WithField("processName", processResult.processName).WithError(processResult.err).Error(ctx, "process completed after stop with error")
+				}
+			default:
+				return
+			}
 		}
 	})
 
@@ -49,25 +67,27 @@ func Run(p Process, ps ...Process) Hub {
 
 	wg := &sync.WaitGroup{}
 	stopChan := make(chan struct{}, len(ps))
-	processDoneChan := make(chan int, 1)
+	processResultChan := make(chan processResult, len(ps))
 
-	for i, p := range ps {
+	for _, p := range ps {
 		wg.Add(1)
-		go func(p Process, position int) {
-			p(stopChan)
-			select {
-			case processDoneChan <- position:
-			default:
-			}
+		go func(p Process) {
+			err := p.Func()(stopChan)
+			processResultChan <- processResult{p.Name(), err}
 			wg.Done()
-		}(p, i)
+		}(p)
 	}
 
 	return &hub{
-		wg:              wg,
-		processCount:    len(ps),
-		processDoneChan: processDoneChan,
-		onceDoer:        &sync.Once{},
-		stopChan:        stopChan,
+		wg:                wg,
+		processCount:      len(ps),
+		processResultChan: processResultChan,
+		onceDoer:          &sync.Once{},
+		stopChan:          stopChan,
 	}
+}
+
+type processResult struct {
+	processName string
+	err         error
 }

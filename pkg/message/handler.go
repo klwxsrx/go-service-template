@@ -2,6 +2,9 @@ package message
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/pkg/hub"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
@@ -23,37 +26,49 @@ type Handler interface {
 	Handle(ctx context.Context, msg *Message) error
 }
 
-func NewHandlerProcess(handler Handler, consumer Consumer, logger log.Logger, logHandledMessages bool) hub.Process {
+type handlerProcess struct { // TODO: WithLogging/WithMetrics option (do with middleware)
+	handler  Handler
+	consumer Consumer
+	logger   log.Logger
+}
+
+func NewHandlerProcess(handler Handler, consumer Consumer, logger log.Logger) hub.Process {
+	return &handlerProcess{handler, consumer, logger}
+}
+
+func (p *handlerProcess) Name() string {
+	return fmt.Sprintf("message handler %s", p.consumer.Name())
+}
+
+func (p *handlerProcess) Func() func(stopChan <-chan struct{}) error {
 	processMessage := func(msg *ConsumerMessage) {
-		loggerWithFields := logger.With(log.Fields{
-			"messageID": msg.Message.ID,
-			"topic":     msg.Message.Topic,
+		ctx := p.logger.WithContext(msg.Context, log.Fields{
+			"consumerCorrelationID": uuid.New(),
+			"consumerMessageID":     msg.Message.ID,
+			"consumerTopic":         msg.Message.Topic,
 		})
 
-		err := handler.Handle(msg.Context, &msg.Message)
+		err := p.handler.Handle(ctx, &msg.Message)
 		if err != nil {
-			consumer.Nack(msg)
-			loggerWithFields.WithError(err).Error(msg.Context, "failed to handle message")
+			p.consumer.Nack(msg)
+			p.logger.WithError(err).Warn(ctx, "failed to handle message")
 			return
 		}
 
-		consumer.Ack(msg)
-		if logHandledMessages {
-			loggerWithFields.Info(msg.Context, "message handled")
-		}
+		p.consumer.Ack(msg)
+		p.logger.Info(ctx, "message handled")
 	}
 
-	return func(stopChan <-chan struct{}) {
+	return func(stopChan <-chan struct{}) error {
 		for {
 			select {
-			case msg, ok := <-consumer.Messages():
+			case msg, ok := <-p.consumer.Messages():
 				if !ok {
-					logger.WithField("consumerName", consumer.Name()).Error(msg.Context, "consumer closed messages channel")
-					return
+					return errors.New("consumer closed messages channel")
 				}
 				processMessage(msg)
 			case <-stopChan:
-				return
+				return nil
 			}
 		}
 	}

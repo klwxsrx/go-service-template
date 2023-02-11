@@ -48,10 +48,10 @@ func main() {
 	})
 
 	handlerHub := hub.Run(
-		message.NewHandlerProcess(duckEventMessageHandler, duckTopicConsumer, logger, true),
-		message.NewHandlerProcess(gooseEventMessageHandler, gooseTopicConsumer, logger, true),
+		message.NewHandlerProcess(duckEventMessageHandler, duckTopicConsumer, logger),
+		message.NewHandlerProcess(gooseEventMessageHandler, gooseTopicConsumer, logger),
 	)
 
 	logger.Info(ctx, "app is ready")
-	hub.Must(handlerHub.Wait(sig.TermSignals()))
+	hub.Must(handlerHub.Wait(ctx, sig.TermSignals(), logger))
 }

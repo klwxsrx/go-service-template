@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/klwxsrx/go-service-template/pkg/hub"
-	"github.com/klwxsrx/go-service-template/pkg/log"
 	"net/http"
 	"os"
 	"time"
@@ -31,7 +30,7 @@ func Must(err error) {
 
 type Server interface {
 	ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error
-	ListenAndServeProcess(ctx context.Context, logger log.Logger) hub.Process
+	ListenAndServeProcess(ctx context.Context) hub.Process
 	Register(handler Handler, opts ...Option)
 }
 
@@ -40,17 +39,27 @@ type server struct {
 	router *mux.Router
 }
 
-func (s *server) ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error {
-	return listenAndServe(ctx, s.srv, termSignalsChan)
+type serverProcess struct {
+	ctx context.Context
+	srv *http.Server
 }
 
-func (s *server) ListenAndServeProcess(ctx context.Context, logger log.Logger) hub.Process {
-	return func(stopChan <-chan struct{}) {
-		err := listenAndServe(ctx, s.srv, stopChan)
-		if err != nil {
-			logger.WithError(err).Error(ctx, "unable to listen the server")
-		}
+func (p *serverProcess) Name() string {
+	return fmt.Sprintf("http server %s", p.srv.Addr)
+}
+
+func (p *serverProcess) Func() func(stopChan <-chan struct{}) error {
+	return func(stopChan <-chan struct{}) error {
+		return listenAndServe(p.ctx, p.srv, stopChan)
 	}
+}
+
+func (s *server) ListenAndServeProcess(ctx context.Context) hub.Process {
+	return &serverProcess{ctx, s.srv}
+}
+
+func (s *server) ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error {
+	return listenAndServe(ctx, s.srv, termSignalsChan)
 }
 
 func (s *server) Register(handler Handler, opts ...Option) {
