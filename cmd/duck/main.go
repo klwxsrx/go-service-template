@@ -31,6 +31,10 @@ func main() {
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,
 		pkghttp.WithHealthCheck(nil),
+		pkghttp.WithRequestID(
+			pkghttp.NewHTTPHeaderRequestIDExtractor(pkghttp.DefaultRequestIDHeader),
+			pkghttp.NewRandomUUIDRequestIDExtractor(),
+		),
 		pkghttp.WithLogging(logger),
 	)
 
