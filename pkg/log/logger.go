@@ -26,8 +26,8 @@ type Fields map[string]any
 type Logger interface {
 	With(fields Fields) Logger
 	WithField(name string, value any) Logger
-	WithContext(ctx context.Context, fields Fields) context.Context
 	WithError(err error) Logger
+	WithContext(ctx context.Context, fields Fields) context.Context
 	Debug(ctx context.Context, str string)
 	Error(ctx context.Context, str string)
 	Warn(ctx context.Context, str string)
@@ -49,6 +49,11 @@ func (l logger) WithField(name string, v any) Logger {
 	return logger{z}
 }
 
+func (l logger) WithError(err error) Logger {
+	z := l.impl.With().Stack().Err(err).Logger()
+	return logger{z}
+}
+
 func (l logger) WithContext(ctx context.Context, fields Fields) context.Context {
 	if len(fields) == 0 {
 		return ctx
@@ -58,11 +63,6 @@ func (l logger) WithContext(ctx context.Context, fields Fields) context.Context 
 		ctxFields[key] = value
 	}
 	return context.WithValue(ctx, fieldsContextKey, ctxFields)
-}
-
-func (l logger) WithError(err error) Logger {
-	z := l.impl.With().Stack().Err(err).Logger()
-	return logger{z}
 }
 
 func (l logger) Debug(ctx context.Context, str string) {

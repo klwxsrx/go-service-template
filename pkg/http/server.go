@@ -11,7 +11,12 @@ import (
 	"time"
 )
 
-const DefaultServerAddress = ":8080"
+const (
+	DefaultServerAddress = ":8080"
+
+	defaultReadTimeout       = 10 * time.Second
+	defaultReadHeaderTimeout = 5 * time.Second
+)
 
 type Option func(router *mux.Router)
 type Middleware func(http.Handler) http.Handler
@@ -117,8 +122,8 @@ func NewServer(address string, opts ...Option) Server {
 	srv := &http.Server{
 		Addr:              address,
 		Handler:           router,
-		ReadTimeout:       10 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       defaultReadTimeout,
+		ReadHeaderTimeout: defaultReadHeaderTimeout,
 	}
 
 	return &server{

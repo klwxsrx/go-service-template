@@ -74,7 +74,7 @@ func openConnection(config *Config) (*sqlx.DB, error) {
 }
 
 func NewConnection(config *Config, logger log.Logger) (Connection, error) {
-	if config.ConnectionTimeout == 0 {
+	if config.ConnectionTimeout <= 0 {
 		config.ConnectionTimeout = defaultConnectionTimeout
 	}
 

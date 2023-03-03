@@ -17,7 +17,7 @@ func (w *loggingResponseWriter) WriteHeader(code int) {
 
 func WithLogging(logger log.Logger, excludedPaths ...string) Option {
 	excludedPaths = append(excludedPaths,
-		HealthPath,
+		healthPath,
 	)
 
 	isExcluded := func(path string) bool {

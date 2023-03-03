@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	HealthPath = "/healthz"
+	healthPath = "/healthz"
 )
 
 func WithHealthCheck(customHandlerFunc http.HandlerFunc) Option {
@@ -28,9 +28,9 @@ func WithHealthCheck(customHandlerFunc http.HandlerFunc) Option {
 		}
 
 		router.
-			Name(getRouteName(http.MethodGet, HealthPath)).
+			Name(getRouteName(http.MethodGet, healthPath)).
 			Methods(http.MethodGet).
-			Path(HealthPath).
+			Path(healthPath).
 			HandlerFunc(handler)
 	}
 }
