@@ -4,35 +4,60 @@ on:
     branches: [ master ]
 
 jobs:
+  go-prepare-env:
+    name: Prepare Go environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Prepare Go environment
+        uses: ./.github/actions/prepare-go-env
+
   go-lint:
     name: Lint Go code
+    needs: go-prepare-env
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Setup Go
-        uses: actions/setup-go@v3
-        with:
-          go-version-file: 'go.mod'
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
+      - name: Prepare Go environment
+        uses: ./.github/actions/prepare-go-env
+      - name: Code generation
+        run: make codegen
+      - name: Run golangci-lint # TODO: golangci-lint cache before
+        run: make lint
 
   go-test:
-    name: Run Go unit tests
+    name: Run Go tests
+    needs: go-prepare-env
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Setup Go
-        uses: actions/setup-go@v3
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - name: Prepare Go environment
+        uses: ./.github/actions/prepare-go-env
+      - name: Code generation
+        run: make codegen
       - name: Run tests
-        run: make test
+        run: make test # TODO: ways to increase speed
+
+  go-arch:
+    name: Validate Clean Architecture rules
+    needs: go-prepare-env
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Prepare Go environment
+        uses: ./.github/actions/prepare-go-env
+      - name: Code generation
+        run: make codegen
+      - name: Run go-cleanarch
+        run: make arch
 
   go-build:
     name: Build Go images
+    needs: go-prepare-env
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -44,11 +69,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Setup Go
-        uses: actions/setup-go@v3
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - name: Prepare Go environment
+        uses: ./.github/actions/prepare-go-env
       - name: Build application
         run: make bin/${{ matrix.application }}
       - name: Setup Docker
@@ -68,6 +90,7 @@ jobs:
   docker-push:
     name: Push Docker images
     needs:
+      - go-arch
       - go-lint
       - go-test
       - go-build
