@@ -5,7 +5,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/klwxsrx/go-service-template/data/sql/duck"
 	pkgduck "github.com/klwxsrx/go-service-template/internal/pkg/duck"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/integration"
+	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
 	duckappmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/app/message"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
 	duckintegrationmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/integration/message"
@@ -44,7 +44,7 @@ func main() {
 		domain.EventTypeDuckCreated: event.NewTypedHandler[domain.EventDuckCreated](duckService.HandleDuckCreated),
 	})
 	gooseEventMessageHandler := message.NewEventHandler(duckintegrationmessage.NewGooseEventDeserializer(), message.EventTypeHandlerMap{
-		integration.EventTypeGooseQuacked: event.NewTypedHandler[integration.EventGooseQuacked](duckService.HandleGooseQuacked),
+		external.EventTypeGooseQuacked: event.NewTypedHandler[external.EventGooseQuacked](duckService.HandleGooseQuacked),
 	})
 
 	handlerHub := hub.Run(

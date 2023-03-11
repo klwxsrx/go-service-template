@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/klwxsrx/go-service-template/pkg/env"
 	"github.com/klwxsrx/go-service-template/pkg/log"
+	pkglogstub "github.com/klwxsrx/go-service-template/pkg/log/stub"
 	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
@@ -59,9 +60,10 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 
 func MustInitSQLTransaction(
 	sqlConn sql.Connection,
+	instanceName string,
 	onCommit func(),
 ) (sql.Client, persistence.Transaction) {
-	return sql.NewTransaction(sqlConn.Client(), onCommit)
+	return sql.NewTransaction(sqlConn.Client(), instanceName, onCommit)
 }
 
 func MustInitSQLMessageOutbox(
@@ -70,7 +72,7 @@ func MustInitSQLMessageOutbox(
 	producers pkgmessage.ProducerProvider,
 	logger log.Logger,
 ) pkgmessage.Outbox {
-	sqlClient, tx := MustInitSQLTransaction(sqlConn, func() {})
+	sqlClient, tx := MustInitSQLTransaction(sqlConn, "messageOutbox", func() {})
 	messageStore, err := sql.NewMessageStore(ctx, sqlClient)
 	if err != nil {
 		panicInitApplication(fmt.Errorf("init message outbox: %w", err))
@@ -104,7 +106,7 @@ func MustInitPulsar(optionalLogger log.Logger) pulsar.Connection {
 	}
 
 	if optionalLogger == nil {
-		optionalLogger = log.NewStub()
+		optionalLogger = pkglogstub.NewLogger()
 	}
 
 	pulsarConn, err := pulsar.NewConnection(config, optionalLogger)

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/integration"
+	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
 	"github.com/klwxsrx/go-service-template/pkg/event"
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
@@ -30,7 +30,7 @@ func (g *gooseEventDeserializer) Deserialize(msg *message.Message) (event.Event,
 	}
 
 	switch eventType {
-	case integration.EventTypeGooseQuacked:
+	case external.EventTypeGooseQuacked:
 		return g.deserializeGooseQuacked(msg)
 	default:
 		return nil, fmt.Errorf("unknown event type %s", eventType)
@@ -41,10 +41,10 @@ func (g *gooseEventDeserializer) deserializeGooseQuacked(msg *message.Message) (
 	var payload gooseQuackedMessagePayload
 	err := json.Unmarshal(msg.Payload, &payload)
 	if err != nil || payload.EventID == uuid.Nil || payload.GooseID == uuid.Nil {
-		return integration.EventGooseQuacked{}, errors.New("invalid message data")
+		return external.EventGooseQuacked{}, errors.New("invalid message data")
 	}
 
-	return integration.EventGooseQuacked{
+	return external.EventGooseQuacked{
 		EventID: payload.EventID,
 		GooseID: payload.GooseID,
 	}, nil

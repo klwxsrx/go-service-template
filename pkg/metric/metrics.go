@@ -1,3 +1,4 @@
+//go:generate mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Metrics=Metrics"
 package metric
 
 import "time"

@@ -4,17 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
 
+type instanceID string
+
 type txData struct {
-	txID uuid.UUID
-	tx   ClientTx
+	tx        ClientTx
+	createdBy instanceID
 }
 
 type transaction struct {
-	uniqueID uuid.UUID
+	id       instanceID
 	client   TxClient
 	onCommit func()
 }
@@ -26,8 +27,8 @@ func (t *transaction) Execute(
 ) error {
 	var err error
 	storedTx, ok := ctx.Value(databaseTransactionContextKey).(txData)
-	isParentTx := ok && storedTx.txID == t.uniqueID
-	if !isParentTx {
+	hasParentTx := ok && storedTx.createdBy == t.id
+	if !hasParentTx {
 		var tx ClientTx
 		tx, err = t.client.Begin(ctx)
 		if err != nil {
@@ -39,7 +40,7 @@ func (t *transaction) Execute(
 			}
 		}()
 
-		storedTx.txID = t.uniqueID
+		storedTx.createdBy = t.id
 		storedTx.tx = tx
 		ctx = context.WithValue(ctx, databaseTransactionContextKey, storedTx)
 	}
@@ -56,7 +57,7 @@ func (t *transaction) Execute(
 		return err
 	}
 
-	if isParentTx {
+	if hasParentTx {
 		return nil
 	}
 
@@ -68,8 +69,8 @@ func (t *transaction) Execute(
 	return nil
 }
 
-func NewTransaction(client TxClient, onCommit func()) (Client, persistence.Transaction) {
-	return &txUnwrapperClient{client: client}, &transaction{uniqueID: uuid.New(), client: client, onCommit: onCommit}
+func NewTransaction(client TxClient, instanceName string, onCommit func()) (Client, persistence.Transaction) {
+	return &txUnwrapperClient{client: client}, &transaction{id: instanceID(instanceName), client: client, onCommit: onCommit}
 }
 
 type txUnwrapperClient struct {

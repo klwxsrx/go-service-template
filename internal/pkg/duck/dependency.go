@@ -14,6 +14,8 @@ import (
 
 const (
 	MessageSubscriberServiceName = "duck-service"
+
+	moduleName = "duck"
 )
 
 type DependencyContainer struct {
@@ -30,9 +32,12 @@ func NewDependencyContainer(
 	d := &DependencyContainer{}
 	d.sqlMessageOutbox = cmd.MustInitSQLMessageOutbox(ctx, sqlConn, pulsarConn, logger)
 
-	sqlClient, transaction := cmd.MustInitSQLTransaction(sqlConn, func() {
-		d.sqlMessageOutbox.Process()
-	})
+	sqlClient, transaction := cmd.MustInitSQLTransaction(
+		sqlConn,
+		moduleName,
+		func() {
+			d.sqlMessageOutbox.Process()
+		})
 
 	messageStore := cmd.MustInitSQLMessageStore(ctx, sqlClient)
 	eventDispatcher := message.NewEventDispatcher(

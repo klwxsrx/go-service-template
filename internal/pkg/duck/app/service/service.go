@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/integration"
+	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
@@ -12,7 +12,7 @@ import (
 type DuckService interface {
 	Create(ctx context.Context) error
 	HandleDuckCreated(ctx context.Context, event domain.EventDuckCreated) error
-	HandleGooseQuacked(ctx context.Context, event integration.EventGooseQuacked) error
+	HandleGooseQuacked(ctx context.Context, event external.EventGooseQuacked) error
 }
 
 type duckService struct {
@@ -37,7 +37,7 @@ func (s *duckService) HandleDuckCreated(_ context.Context, _ domain.EventDuckCre
 	return nil
 }
 
-func (s *duckService) HandleGooseQuacked(_ context.Context, _ integration.EventGooseQuacked) error {
+func (s *duckService) HandleGooseQuacked(_ context.Context, _ external.EventGooseQuacked) error {
 	return nil
 }
 
