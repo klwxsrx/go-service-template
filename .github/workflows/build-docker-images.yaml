@@ -24,7 +24,7 @@ jobs:
         uses: ./.github/actions/prepare-go-env
       - name: Code generation
         run: make codegen
-      - name: Run golangci-lint # TODO: golangci-lint cache before
+      - name: Run golangci-lint
         run: make lint
 
   go-test:
@@ -39,10 +39,10 @@ jobs:
       - name: Code generation
         run: make codegen
       - name: Run tests
-        run: make test # TODO: ways to increase speed
+        run: make test
 
   go-arch:
-    name: Validate Clean Architecture rules
+    name: Validate architecture rules
     needs: go-prepare-env
     runs-on: ubuntu-latest
     steps:

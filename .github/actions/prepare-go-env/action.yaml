@@ -19,7 +19,7 @@ runs:
       uses: actions/cache@v3
       with:
         path: ${{ steps.find-gopath.outputs.result }}
-        key: go-mod-${{ hashFiles('**/go.mod', '**/go.sum') }}-makefile-${{ hashFiles('**/Makefile') }}
+        key: go-environment.go-mod-${{ hashFiles('**/go.mod', '**/go.sum') }}-makefile-${{ hashFiles('**/Makefile') }}
     - name: Download Go modules
       if: steps.cache-gopath.outputs.cache-hit != 'true'
       run: go mod download
