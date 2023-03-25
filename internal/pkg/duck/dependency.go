@@ -6,6 +6,7 @@ import (
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
 	duckinfrasql "github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/sql"
 	"github.com/klwxsrx/go-service-template/pkg/cmd"
+	"github.com/klwxsrx/go-service-template/pkg/http"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/message"
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
@@ -27,6 +28,7 @@ func NewDependencyContainer(
 	ctx context.Context,
 	sqlConn sql.Connection,
 	pulsarConn pulsar.Connection,
+	_ http.Client,
 	logger log.Logger,
 ) *DependencyContainer {
 	d := &DependencyContainer{}

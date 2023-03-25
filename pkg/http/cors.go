@@ -4,8 +4,8 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func WithCORSHandler() Option {
-	return func(router *mux.Router) {
-		router.Use(mux.CORSMethodMiddleware(router))
+func WithCORSHandler() ServerOption {
+	return func(srv *server) {
+		srv.router.Use(mux.CORSMethodMiddleware(srv.router))
 	}
 }

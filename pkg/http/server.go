@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/klwxsrx/go-service-template/pkg/hub"
+	"github.com/klwxsrx/go-service-template/pkg/observability"
 	"net/http"
 	"os"
 	"time"
@@ -18,8 +19,10 @@ const (
 	defaultReadHeaderTimeout = 5 * time.Second
 )
 
-type Option func(router *mux.Router)
-type Middleware func(http.Handler) http.Handler
+type (
+	ServerOption     func(srv *server)
+	ServerMiddleware func(http.Handler) http.Handler
+)
 
 type Handler interface {
 	Method() string
@@ -36,12 +39,13 @@ func Must(err error) {
 type Server interface {
 	ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error
 	ListenAndServeProcess(ctx context.Context) hub.Process
-	Register(handler Handler, opts ...Option)
+	Register(handler Handler, opts ...ServerOption)
 }
 
 type server struct {
-	srv    *http.Server
-	router *mux.Router
+	srv      *http.Server
+	router   *mux.Router
+	observer observability.Observer
 }
 
 type serverProcess struct {
@@ -49,30 +53,32 @@ type serverProcess struct {
 	srv *http.Server
 }
 
-func (p *serverProcess) Name() string {
+func (p serverProcess) Name() string {
 	return fmt.Sprintf("http server %s", p.srv.Addr)
 }
 
-func (p *serverProcess) Func() func(stopChan <-chan struct{}) error {
+func (p serverProcess) Func() func(stopChan <-chan struct{}) error {
 	return func(stopChan <-chan struct{}) error {
 		return listenAndServe(p.ctx, p.srv, stopChan)
 	}
 }
 
-func (s *server) ListenAndServeProcess(ctx context.Context) hub.Process {
+func (s server) ListenAndServeProcess(ctx context.Context) hub.Process {
 	return &serverProcess{ctx, s.srv}
 }
 
-func (s *server) ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error {
+func (s server) ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error {
 	return listenAndServe(ctx, s.srv, termSignalsChan)
 }
 
-func (s *server) Register(handler Handler, opts ...Option) {
+func (s server) Register(handler Handler, opts ...ServerOption) {
 	router := s.router
 	if len(opts) > 0 {
 		router = s.router.NewRoute().Subrouter()
 		for _, opt := range opts {
-			opt(router)
+			serverWithSubrouter := s
+			serverWithSubrouter.router = router
+			opt(&serverWithSubrouter)
 		}
 	}
 
@@ -113,21 +119,22 @@ func shutdown(ctx context.Context, srv *http.Server) error {
 	return nil
 }
 
-func NewServer(address string, opts ...Option) Server {
+func NewServer(address string, opts ...ServerOption) Server {
 	router := mux.NewRouter()
-	for _, opt := range opts {
-		opt(router)
-	}
-
-	srv := &http.Server{
+	httpServer := &http.Server{
 		Addr:              address,
 		Handler:           router,
 		ReadTimeout:       defaultReadTimeout,
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
 	}
 
-	return &server{
-		srv:    srv,
-		router: router,
+	srv := server{
+		srv:      httpServer,
+		router:   router,
+		observer: nil,
 	}
+	for _, opt := range opts {
+		opt(&srv)
+	}
+	return srv
 }

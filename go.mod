@@ -6,6 +6,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.3
 	github.com/apache/pulsar-client-go v0.8.1
 	github.com/cenkalti/backoff/v4 v4.2.0
+	github.com/go-resty/resty/v2 v2.7.0
 	github.com/golang/mock v1.5.0
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
@@ -55,7 +56,7 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9 // indirect
-	golang.org/x/net v0.0.0-20210726213435-c6fcb2dbf985 // indirect
+	golang.org/x/net v0.0.0-20211029224645-99673261e6eb // indirect
 	golang.org/x/oauth2 v0.0.0-20210402161424-2e8d93401602 // indirect
 	golang.org/x/sys v0.0.0-20220614162138-6c1b26c55098 // indirect
 	google.golang.org/appengine v1.6.7 // indirect

@@ -33,6 +33,8 @@ func (l logger) Info(_ context.Context, _ string) {}
 
 func (l logger) Fatal(_ context.Context, _ string) {}
 
+func (l logger) Log(_ context.Context, _ log.Level, _ string) {}
+
 func NewLogger() log.Logger {
 	return &logger{}
 }

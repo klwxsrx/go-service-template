@@ -1,8 +1,8 @@
 package http
 
 import (
-	"context"
 	"github.com/google/uuid"
+	"github.com/klwxsrx/go-service-template/pkg/observability"
 	"net/http"
 )
 
@@ -12,7 +12,7 @@ const (
 
 type RequestIDExtractor func(r *http.Request) (string, bool)
 
-func WithRequestID(extractor RequestIDExtractor, fallbacks ...RequestIDExtractor) Option {
+func WithObservability(observer observability.Observer, extractor RequestIDExtractor, fallbacks ...RequestIDExtractor) ServerOption {
 	extractors := append([]RequestIDExtractor{extractor}, fallbacks...)
 	findRequestID := func(r *http.Request) (string, bool) {
 		for _, ext := range extractors {
@@ -24,18 +24,21 @@ func WithRequestID(extractor RequestIDExtractor, fallbacks ...RequestIDExtractor
 		return "", false
 	}
 
-	return WithMW(func(handler http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			requestID, ok := findRequestID(r)
-			if !ok {
-				handler.ServeHTTP(w, r)
-				return
-			}
+	return func(srv *server) {
+		srv.observer = observer
+		srv.router.Use(func(handler http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestID, ok := findRequestID(r)
+				if !ok {
+					handler.ServeHTTP(w, r)
+					return
+				}
 
-			r = r.WithContext(context.WithValue(r.Context(), requestIDContextKey, requestID))
-			handler.ServeHTTP(w, r)
+				r = r.WithContext(observer.WithRequestID(r.Context(), requestID))
+				handler.ServeHTTP(w, r)
+			})
 		})
-	})
+	}
 }
 
 func NewHTTPHeaderRequestIDExtractor(header string) RequestIDExtractor {
@@ -52,12 +55,4 @@ func NewRandomUUIDRequestIDExtractor() RequestIDExtractor {
 	return func(_ *http.Request) (string, bool) {
 		return uuid.New().String(), true
 	}
-}
-
-func getIDFromRequest(r *http.Request) (string, bool) {
-	requestID, ok := r.Context().Value(requestIDContextKey).(string)
-	if !ok || len(requestID) == 0 {
-		return "", false
-	}
-	return requestID, true
 }

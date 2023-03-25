@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func WithMetrics(metrics metric.Metrics) Option {
+func WithMetrics(metrics metric.Metrics) ServerOption {
 	return WithMW(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			lrw := &loggingResponseWriter{w, http.StatusOK}

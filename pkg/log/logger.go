@@ -16,11 +16,18 @@ const (
 type Level int
 
 const (
-	LevelDebug = iota
+	LevelDebug Level = iota
 	LevelInfo
 	LevelWarn
 	LevelError
 )
+
+var zerologLevelMap = map[Level]zerolog.Level{
+	LevelDebug: zerolog.DebugLevel,
+	LevelInfo:  zerolog.InfoLevel,
+	LevelWarn:  zerolog.WarnLevel,
+	LevelError: zerolog.ErrorLevel,
+}
 
 type Fields map[string]any
 
@@ -34,6 +41,7 @@ type Logger interface {
 	Warn(ctx context.Context, str string)
 	Info(ctx context.Context, str string)
 	Fatal(ctx context.Context, str string)
+	Log(ctx context.Context, level Level, str string)
 }
 
 type logger struct {
@@ -86,6 +94,10 @@ func (l logger) Fatal(ctx context.Context, str string) {
 	l.loggerWithContextFields(ctx).Fatal().Msg(str)
 }
 
+func (l logger) Log(ctx context.Context, level Level, str string) {
+	l.loggerWithContextFields(ctx).WithLevel(zerologLevelMap[level]).Msg(str)
+}
+
 func (l logger) loggerWithContextFields(ctx context.Context) *zerolog.Logger {
 	z := l.impl.With().Fields(map[string]any(l.getFieldsFromContext(ctx))).Logger()
 	return &z
@@ -100,18 +112,6 @@ func (l logger) getFieldsFromContext(ctx context.Context) Fields {
 }
 
 func New(lvl Level) Logger {
-	var zl zerolog.Level
-	switch lvl {
-	case LevelDebug:
-		zl = zerolog.DebugLevel
-	case LevelInfo:
-		zl = zerolog.InfoLevel
-	case LevelWarn:
-		zl = zerolog.WarnLevel
-	case LevelError:
-		zl = zerolog.ErrorLevel
-	}
-
-	z := zerolog.New(os.Stdout).Level(zl).With().Timestamp().Logger()
+	z := zerolog.New(os.Stdout).Level(zerologLevelMap[lvl]).With().Timestamp().Logger()
 	return logger{impl: z}
 }

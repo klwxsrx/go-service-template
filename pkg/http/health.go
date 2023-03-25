@@ -2,7 +2,6 @@ package http
 
 import (
 	"encoding/json"
-	"github.com/gorilla/mux"
 	"net/http"
 )
 
@@ -10,7 +9,7 @@ const (
 	healthPath = "/healthz"
 )
 
-func WithHealthCheck(customHandlerFunc http.HandlerFunc) Option {
+func WithHealthCheck(customHandlerFunc http.HandlerFunc) ServerOption {
 	defaultHandler := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("ContentType", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -21,13 +20,13 @@ func WithHealthCheck(customHandlerFunc http.HandlerFunc) Option {
 		})
 	}
 
-	return func(router *mux.Router) {
+	return func(srv *server) {
 		handler := defaultHandler
 		if customHandlerFunc != nil {
 			handler = customHandlerFunc
 		}
 
-		router.
+		srv.router.
 			Name(getRouteName(http.MethodGet, healthPath)).
 			Methods(http.MethodGet).
 			Path(healthPath).

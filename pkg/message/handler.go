@@ -80,22 +80,24 @@ func (p *handlerProcess) Func() func(stopChan <-chan struct{}) error {
 	}
 }
 
-func WithLogging(logger log.Logger) Middleware {
+func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) Middleware {
 	return func(handler Handler) Handler {
 		return HandlerFunc(func(ctx context.Context, msg *Message) error {
 			ctx = logger.WithContext(ctx, log.Fields{
-				"consumerCorrelationID": uuid.New(),
-				"consumerMessageID":     msg.ID,
-				"consumerTopic":         msg.Topic,
+				"consumerMessage": log.Fields{
+					"correlationID": uuid.New(),
+					"messageID":     msg.ID,
+					"topic":         msg.Topic,
+				},
 			})
 
 			err := handler.Handle(ctx, msg)
 			if err != nil {
-				logger.WithError(err).Warn(ctx, "failed to handle message")
+				logger.WithError(err).Log(ctx, errorLevel, "failed to handle message")
 				return err
 			}
 
-			logger.Info(ctx, "message handled")
+			logger.Log(ctx, infoLevel, "message handled")
 			return nil
 		})
 	}
@@ -107,21 +109,24 @@ func WithMetrics(metrics metric.Metrics) Middleware {
 			started := time.Now()
 			err := handler.Handle(ctx, msg)
 			if err != nil {
-				metrics.Duration(getMetricKey("async.msg.%s.failed", msg.Topic), time.Since(started))
+				metrics.Duration(getMetricKey("messaging.handle.%s.failed", msg.Topic), time.Since(started))
 				return err
 			}
 
-			metrics.Duration(getMetricKey("async.msg.%s.success", msg.Topic), time.Since(started))
+			metrics.Duration(getMetricKey("messaging.handle.%s.success", msg.Topic), time.Since(started))
 			return nil
 		})
 	}
 }
 
 func getMetricKey(keyPattern, msgTopic string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.Is(unicode.Latin, r) || unicode.IsDigit(r) {
-			return r
-		}
-		return '_'
-	}, strings.ToLower(fmt.Sprintf(keyPattern, msgTopic)))
+	return fmt.Sprintf(
+		keyPattern,
+		strings.Map(func(r rune) rune {
+			if unicode.Is(unicode.Latin, r) || unicode.IsDigit(r) {
+				return r
+			}
+			return '_'
+		}, strings.ToLower(msgTopic)),
+	)
 }
