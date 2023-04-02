@@ -52,5 +52,5 @@ func main() {
 	httpServer.Register(http.NewCreateDuckHandler(container.DuckService()))
 
 	logger.Info(ctx, "app is ready")
-	pkghttp.Must(httpServer.ListenAndServe(ctx, sig.TermSignals()))
+	pkghttp.Must(httpServer.Listen(ctx, sig.TermSignals()))
 }

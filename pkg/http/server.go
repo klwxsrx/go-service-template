@@ -36,8 +36,8 @@ func Must(err error) {
 }
 
 type Server interface {
-	ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error
-	ListenAndServeProcess(ctx context.Context) hub.Process
+	Listen(ctx context.Context, termSignalsChan <-chan os.Signal) error
+	NewListener(ctx context.Context) hub.Process
 	Register(handler Handler, opts ...ServerOption)
 }
 
@@ -61,11 +61,11 @@ func (p serverProcess) Func() func(stopChan <-chan struct{}) error {
 	}
 }
 
-func (s server) ListenAndServeProcess(ctx context.Context) hub.Process {
+func (s server) NewListener(ctx context.Context) hub.Process {
 	return &serverProcess{ctx, s.srv}
 }
 
-func (s server) ListenAndServe(ctx context.Context, termSignalsChan <-chan os.Signal) error {
+func (s server) Listen(ctx context.Context, termSignalsChan <-chan os.Signal) error {
 	return listenAndServe(ctx, s.srv, termSignalsChan)
 }
 

@@ -55,12 +55,12 @@ func main() {
 	})
 
 	handlerHub := hub.Run(
-		message.NewHandlerProcess(
+		message.NewListener(
 			duckEventMessageHandler, duckTopicConsumer,
 			message.WithMetrics(metrics),
 			message.WithLogging(logger, log.LevelInfo, log.LevelWarn),
 		),
-		message.NewHandlerProcess(
+		message.NewListener(
 			gooseEventMessageHandler, gooseTopicConsumer,
 			message.WithMetrics(metrics),
 			message.WithLogging(logger, log.LevelInfo, log.LevelWarn),

@@ -38,24 +38,24 @@ func (f HandlerFunc) Handle(ctx context.Context, msg *Message) error {
 
 type Middleware func(Handler) Handler
 
-type handlerProcess struct {
+type listener struct {
 	handler  Handler
 	consumer Consumer
 }
 
-func NewHandlerProcess(handler Handler, consumer Consumer, mws ...Middleware) hub.Process {
-	hp := &handlerProcess{handler, consumer}
+func NewListener(handler Handler, consumer Consumer, mws ...Middleware) hub.Process {
+	hp := &listener{handler, consumer}
 	for i := len(mws) - 1; i >= 0; i-- {
 		hp.handler = mws[i](hp.handler)
 	}
 	return hp
 }
 
-func (p *handlerProcess) Name() string {
-	return fmt.Sprintf("message handler %s", p.consumer.Name())
+func (p *listener) Name() string {
+	return fmt.Sprintf("message listener %s", p.consumer.Name())
 }
 
-func (p *handlerProcess) Func() func(stopChan <-chan struct{}) error {
+func (p *listener) Func() func(stopChan <-chan struct{}) error {
 	processMessage := func(msg *ConsumerMessage) {
 		err := p.handler.Handle(msg.Context, &msg.Message)
 		if err != nil {
