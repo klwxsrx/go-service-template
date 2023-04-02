@@ -67,11 +67,15 @@ func (l logger) WithContext(ctx context.Context, fields Fields) context.Context 
 	if len(fields) == 0 {
 		return ctx
 	}
-	ctxFields := l.getFieldsFromContext(ctx)
+	ctxFields, ok := l.getFieldsFromContext(ctx)
+	if !ok {
+		ctxFields = make(Fields, len(fields))
+		ctx = context.WithValue(ctx, fieldsContextKey, ctxFields)
+	}
 	for key, value := range fields {
 		ctxFields[key] = value
 	}
-	return context.WithValue(ctx, fieldsContextKey, ctxFields)
+	return ctx
 }
 
 func (l logger) Debug(ctx context.Context, str string) {
@@ -99,16 +103,21 @@ func (l logger) Log(ctx context.Context, level Level, str string) {
 }
 
 func (l logger) loggerWithContextFields(ctx context.Context) *zerolog.Logger {
-	z := l.impl.With().Fields(map[string]any(l.getFieldsFromContext(ctx))).Logger()
+	z := l.impl.With().Fields(map[string]any(l.getFieldsFromContextOrNil(ctx))).Logger()
 	return &z
 }
 
-func (l logger) getFieldsFromContext(ctx context.Context) Fields {
-	fields, ok := ctx.Value(fieldsContextKey).(Fields)
+func (l logger) getFieldsFromContextOrNil(ctx context.Context) Fields {
+	fields, ok := l.getFieldsFromContext(ctx)
 	if !ok {
-		return make(Fields)
+		return nil
 	}
 	return fields
+}
+
+func (l logger) getFieldsFromContext(ctx context.Context) (Fields, bool) {
+	fields, ok := ctx.Value(fieldsContextKey).(Fields)
+	return fields, ok
 }
 
 func New(lvl Level) Logger {
