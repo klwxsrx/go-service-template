@@ -41,6 +41,7 @@ func main() {
 		pkghttp.WithCORSHandler(),
 		pkghttp.WithObservability(
 			observability,
+			logger,
 			pkghttp.NewHTTPHeaderRequestIDExtractor(pkghttp.DefaultRequestIDHeader),
 			pkghttp.NewRandomUUIDRequestIDExtractor(),
 		),

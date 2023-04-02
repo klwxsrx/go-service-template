@@ -5,7 +5,7 @@ import (
 )
 
 func WithMW(mw ServerMiddleware) ServerOption {
-	return func(srv *server) {
-		srv.router.Use(mux.MiddlewareFunc(mw))
+	return func(router *mux.Router) {
+		router.Use(mux.MiddlewareFunc(mw))
 	}
 }

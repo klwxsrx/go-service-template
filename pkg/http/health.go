@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"github.com/gorilla/mux"
 	"net/http"
 )
 
@@ -20,13 +21,13 @@ func WithHealthCheck(customHandlerFunc http.HandlerFunc) ServerOption {
 		})
 	}
 
-	return func(srv *server) {
+	return func(router *mux.Router) {
 		handler := defaultHandler
 		if customHandlerFunc != nil {
 			handler = customHandlerFunc
 		}
 
-		srv.router.
+		router.
 			Name(getRouteName(http.MethodGet, healthPath)).
 			Methods(http.MethodGet).
 			Path(healthPath).

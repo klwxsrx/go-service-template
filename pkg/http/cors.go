@@ -5,7 +5,7 @@ import (
 )
 
 func WithCORSHandler() ServerOption {
-	return func(srv *server) {
-		srv.router.Use(mux.CORSMethodMiddleware(srv.router))
+	return func(router *mux.Router) {
+		router.Use(mux.CORSMethodMiddleware(router))
 	}
 }

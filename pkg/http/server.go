@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/klwxsrx/go-service-template/pkg/hub"
-	"github.com/klwxsrx/go-service-template/pkg/observability"
 	"net/http"
 	"os"
 	"time"
@@ -20,7 +19,7 @@ const (
 )
 
 type (
-	ServerOption     func(srv *server)
+	ServerOption     func(*mux.Router)
 	ServerMiddleware func(http.Handler) http.Handler
 )
 
@@ -43,9 +42,8 @@ type Server interface {
 }
 
 type server struct {
-	srv      *http.Server
-	router   *mux.Router
-	observer observability.Observer
+	srv    *http.Server
+	router *mux.Router
 }
 
 type serverProcess struct {
@@ -76,9 +74,7 @@ func (s server) Register(handler Handler, opts ...ServerOption) {
 	if len(opts) > 0 {
 		router = s.router.NewRoute().Subrouter()
 		for _, opt := range opts {
-			serverWithSubrouter := s
-			serverWithSubrouter.router = router
-			opt(&serverWithSubrouter)
+			opt(router)
 		}
 	}
 
@@ -121,20 +117,19 @@ func shutdown(ctx context.Context, srv *http.Server) error {
 
 func NewServer(address string, opts ...ServerOption) Server {
 	router := mux.NewRouter()
-	httpServer := &http.Server{
+	for _, opt := range opts {
+		opt(router)
+	}
+
+	srv := &http.Server{
 		Addr:              address,
 		Handler:           router,
 		ReadTimeout:       defaultReadTimeout,
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
 	}
 
-	srv := server{
-		srv:      httpServer,
-		router:   router,
-		observer: nil,
+	return &server{
+		srv:    srv,
+		router: router,
 	}
-	for _, opt := range opts {
-		opt(&srv)
-	}
-	return srv
 }
