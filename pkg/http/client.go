@@ -42,7 +42,7 @@ func WithBaseURL(url string) ClientOption {
 	}
 }
 
-func WithRequestIDHeader(observer observability.Observer, headerName string) ClientOption {
+func WithRequestIDHeader(observer observability.Observer, headerName string) ClientOption { // TODO: WithRequestObservability
 	return func(r *resty.Client) {
 		r.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
 			id, ok := observer.RequestID(req.Context())
@@ -59,7 +59,7 @@ func WithRequestLogging(destinationName string, logger log.Logger, infoLevel, er
 	return func(r *resty.Client) {
 		logger = logger.WithField("destinationName", destinationName)
 		r.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
-			loggerWithFields := getRequestResponseLogFields(resp.Request.RawRequest, resp.StatusCode(), logger)
+			loggerWithFields := getRequestResponseFieldsLogger(resp.Request.RawRequest, resp.StatusCode(), logger)
 
 			if resp.StatusCode() >= http.StatusInternalServerError {
 				loggerWithFields.Log(resp.Request.Context(), errorLevel, "http call completed with internal error")
@@ -70,7 +70,7 @@ func WithRequestLogging(destinationName string, logger log.Logger, infoLevel, er
 		})
 		r.OnError(func(req *resty.Request, err error) {
 			if req.RawRequest != nil {
-				logger = getRequestLogFields(req.RawRequest, logger)
+				logger = getRequestFieldsLogger(req.RawRequest, logger)
 			}
 			logger.
 				WithError(err).

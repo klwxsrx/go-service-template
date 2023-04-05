@@ -39,7 +39,7 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 			lrw := &loggingResponseWriter{w, http.StatusOK}
 			handler.ServeHTTP(lrw, r)
 
-			loggerWithFields := getRequestResponseLogFields(r, lrw.code, logger)
+			loggerWithFields := getRequestResponseFieldsLogger(r, lrw.code, logger)
 			if lrw.code >= http.StatusInternalServerError {
 				loggerWithFields.Log(r.Context(), errorLevel, "request handled with internal error")
 			} else {
@@ -49,7 +49,7 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 	})
 }
 
-func getRequestLogFields(r *http.Request, logger log.Logger) log.Logger {
+func getRequestFieldsLogger(r *http.Request, logger log.Logger) log.Logger {
 	return logger.With(log.Fields{
 		"routeName": getRouteName(r.Method, r.URL.Path),
 		"method":    r.Method,
@@ -60,6 +60,6 @@ func getRequestLogFields(r *http.Request, logger log.Logger) log.Logger {
 	})
 }
 
-func getRequestResponseLogFields(r *http.Request, responseCode int, logger log.Logger) log.Logger {
-	return getRequestLogFields(r, logger).WithField("responseCode", responseCode)
+func getRequestResponseFieldsLogger(r *http.Request, responseCode int, logger log.Logger) log.Logger {
+	return getRequestFieldsLogger(r, logger).WithField("responseCode", responseCode)
 }

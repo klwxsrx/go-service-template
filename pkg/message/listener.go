@@ -13,6 +13,8 @@ import (
 	"unicode"
 )
 
+// TODO: add mock/stub
+
 type ConsumerMessage struct {
 	Context context.Context
 	Message Message
@@ -38,7 +40,7 @@ func (f HandlerFunc) Handle(ctx context.Context, msg *Message) error {
 
 type Middleware func(Handler) Handler
 
-type listener struct {
+type listener struct { // TODO: add panic handler
 	handler  Handler
 	consumer Consumer
 }

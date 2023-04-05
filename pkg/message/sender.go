@@ -1,5 +1,7 @@
 package message
 
+// TODO: add mock/stub
+
 import (
 	"context"
 	"fmt"

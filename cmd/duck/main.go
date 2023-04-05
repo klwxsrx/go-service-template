@@ -37,6 +37,7 @@ func main() {
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,
+		pkghttp.NewLoggingPanicHandler(logger),
 		pkghttp.WithHealthCheck(nil),
 		pkghttp.WithCORSHandler(),
 		pkghttp.WithObservability(
@@ -45,7 +46,7 @@ func main() {
 			pkghttp.NewHTTPHeaderRequestIDExtractor(pkghttp.DefaultRequestIDHeader),
 			pkghttp.NewRandomUUIDRequestIDExtractor(),
 		),
-		pkghttp.WithMetrics(metrics),
+		pkghttp.WithMetrics(metrics), // TODO: add prom metrics
 		pkghttp.WithLogging(logger, log.LevelInfo, log.LevelWarn),
 	)
 

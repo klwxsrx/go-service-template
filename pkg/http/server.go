@@ -21,6 +21,7 @@ const (
 type (
 	ServerOption     func(*mux.Router)
 	ServerMiddleware func(http.Handler) http.Handler
+	PanicHandler     func(w http.ResponseWriter, r *http.Request, msg any)
 )
 
 type Handler interface {
@@ -41,9 +42,10 @@ type Server interface {
 	Register(handler Handler, opts ...ServerOption)
 }
 
-type server struct {
-	srv    *http.Server
-	router *mux.Router
+type server struct { // TODO: add context.Cancelled handler
+	srv          *http.Server
+	router       *mux.Router
+	panicHandler PanicHandler
 }
 
 type serverProcess struct {
@@ -78,11 +80,12 @@ func (s server) Register(handler Handler, opts ...ServerOption) {
 		}
 	}
 
+	handlerWithPanicWrapper := panicHandlerWrapper(handler.HTTPHandler(), s.panicHandler)
 	router.
 		Name(getRouteName(handler.Method(), handler.Path())).
 		Methods(handler.Method()).
 		Path(handler.Path()).
-		HandlerFunc(handler.HTTPHandler())
+		Handler(handlerWithPanicWrapper)
 }
 
 func listenAndServe[signal any](ctx context.Context, srv *http.Server, termSignal <-chan signal) error {
@@ -115,7 +118,11 @@ func shutdown(ctx context.Context, srv *http.Server) error {
 	return nil
 }
 
-func NewServer(address string, opts ...ServerOption) Server {
+func NewServer(
+	address string,
+	panicHandler PanicHandler,
+	opts ...ServerOption,
+) Server {
 	router := mux.NewRouter()
 	for _, opt := range opts {
 		opt(router)
@@ -128,8 +135,9 @@ func NewServer(address string, opts ...ServerOption) Server {
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
 	}
 
-	return &server{
-		srv:    srv,
-		router: router,
+	return server{
+		srv:          srv,
+		router:       router,
+		panicHandler: panicHandler,
 	}
 }
