@@ -27,12 +27,12 @@ func main() {
 	sqlConn := pkgcmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
 	defer sqlConn.Close(ctx)
 
-	pulsarConn := pkgcmd.MustInitPulsar(nil) // TODO: ProducerProvider() method
+	pulsarConn := pkgcmd.MustInitPulsar(nil)
 	defer pulsarConn.Close()
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
 
-	container := pkgduck.NewDependencyContainer(ctx, sqlConn, pulsarConn, gooseClient, logger)
+	container := pkgduck.NewDependencyContainer(ctx, sqlConn.Client(), pulsarConn.Producer(), gooseClient, logger)
 	defer container.Close()
 
 	httpServer := pkghttp.NewServer(

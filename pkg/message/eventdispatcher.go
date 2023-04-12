@@ -7,7 +7,7 @@ import (
 )
 
 type eventDispatcher struct {
-	sender     Sender
+	producer   Producer
 	serializer EventSerializer
 }
 
@@ -24,7 +24,7 @@ func (d *eventDispatcher) Dispatch(ctx context.Context, events []event.Event) er
 
 	for _, msg := range msgs {
 		v := msg
-		err := d.sender.Send(ctx, &v)
+		err := d.producer.Send(ctx, &v)
 		if err != nil {
 			return fmt.Errorf("failed to send event message: %w", err)
 		}
@@ -34,11 +34,11 @@ func (d *eventDispatcher) Dispatch(ctx context.Context, events []event.Event) er
 }
 
 func NewEventDispatcher(
-	sender Sender,
+	producer Producer,
 	serializer EventSerializer,
 ) event.Dispatcher {
 	return &eventDispatcher{
-		sender:     sender,
+		producer:   producer,
 		serializer: serializer,
 	}
 }

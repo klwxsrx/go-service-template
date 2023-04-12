@@ -13,19 +13,6 @@ import (
 	"unicode"
 )
 
-type ConsumerMessage struct {
-	Context context.Context
-	Message Message
-}
-
-type Consumer interface {
-	Name() string
-	Messages() <-chan *ConsumerMessage
-	Ack(msg *ConsumerMessage)
-	Nack(msg *ConsumerMessage)
-	Close()
-}
-
 type Handler interface {
 	Handle(ctx context.Context, msg *Message) error
 }

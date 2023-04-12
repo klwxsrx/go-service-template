@@ -11,16 +11,16 @@ type Store interface {
 	Delete(ctx context.Context, ids []uuid.UUID) error
 }
 
-type storeSender struct {
+type storeProducer struct {
 	store Store
 }
 
-func (s *storeSender) Send(ctx context.Context, msg *Message) error {
+func (s *storeProducer) Send(ctx context.Context, msg *Message) error {
 	return s.store.Store(ctx, []Message{*msg})
 }
 
-func NewStoreSender(store Store) Sender {
-	return &storeSender{
+func NewStoreProducer(store Store) Producer {
+	return &storeProducer{
 		store: store,
 	}
 }

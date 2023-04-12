@@ -37,7 +37,7 @@ func main() {
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
 
-	container := pkgduck.NewDependencyContainer(ctx, sqlConn, pulsarConn, gooseClient, logger)
+	container := pkgduck.NewDependencyContainer(ctx, sqlConn.Client(), pulsarConn.Producer(), gooseClient, logger)
 	defer container.Close()
 
 	duckTopicConsumer := pkgcmd.MustInitPulsarFailoverConsumer(pulsarConn, duckappmessage.DuckDomainEventTopicName, pkgduck.MessageSubscriberServiceName)

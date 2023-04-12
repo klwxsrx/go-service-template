@@ -59,26 +59,26 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 }
 
 func MustInitSQLTransaction(
-	sqlConn sql.Connection,
+	sqlClient sql.TxClient,
 	instanceName string,
 	onCommit func(),
 ) (sql.Client, persistence.Transaction) {
-	return sql.NewTransaction(sqlConn.Client(), instanceName, onCommit)
+	return sql.NewTransaction(sqlClient, instanceName, onCommit)
 }
 
 func MustInitSQLMessageOutbox(
 	ctx context.Context,
-	sqlConn sql.Connection,
-	producers pkgmessage.ProducerProvider,
+	sqlClient sql.TxClient,
+	msgProducer pkgmessage.Producer,
 	logger log.Logger,
 ) pkgmessage.Outbox {
-	sqlClient, tx := MustInitSQLTransaction(sqlConn, "messageOutbox", func() {})
-	messageStore, err := sql.NewMessageStore(ctx, sqlClient)
+	wrappedSQLClient, tx := MustInitSQLTransaction(sqlClient, "messageOutbox", func() {})
+	messageStore, err := sql.NewMessageStore(ctx, wrappedSQLClient)
 	if err != nil {
 		panic(fmt.Errorf("init message outbox: %w", err))
 	}
 	return pkgmessage.NewOutbox(
-		pkgmessage.NewSender(producers),
+		msgProducer,
 		messageStore,
 		tx,
 		logger,

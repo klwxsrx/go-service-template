@@ -25,28 +25,28 @@ type DependencyContainer struct {
 
 func NewDependencyContainer(
 	ctx context.Context,
-	sqlConn sql.Connection,
-	msgProducerProvider message.ProducerProvider,
+	sqlClient sql.TxClient,
+	msgProducer message.Producer,
 	_ http.Client,
 	logger log.Logger,
 ) *DependencyContainer {
 	d := &DependencyContainer{}
-	d.sqlMessageOutbox = cmd.MustInitSQLMessageOutbox(ctx, sqlConn, msgProducerProvider, logger)
+	d.sqlMessageOutbox = cmd.MustInitSQLMessageOutbox(ctx, sqlClient, msgProducer, logger)
 
-	sqlClient, transaction := cmd.MustInitSQLTransaction(
-		sqlConn,
+	wrappedSQLClient, transaction := cmd.MustInitSQLTransaction(
+		sqlClient,
 		moduleName,
 		func() {
 			d.sqlMessageOutbox.Process()
 		})
 
-	messageStore := cmd.MustInitSQLMessageStore(ctx, sqlClient)
+	messageStore := cmd.MustInitSQLMessageStore(ctx, wrappedSQLClient)
 	eventDispatcher := message.NewEventDispatcher(
-		message.NewStoreSender(messageStore),
+		message.NewStoreProducer(messageStore),
 		message.NewJSONEventSerializer(duckappmessage.DuckDomainEventTopicName),
 	)
 
-	duckRepo := duckinfrasql.NewDuckRepo(sqlClient, eventDispatcher)
+	duckRepo := duckinfrasql.NewDuckRepo(wrappedSQLClient, eventDispatcher)
 	d.duckService = service.NewDuckService(duckRepo, transaction)
 
 	return d

@@ -30,23 +30,18 @@ type ConsumerOptions struct {
 }
 
 type Connection interface {
-	Producer(topic string) (message.Producer, error)
+	Producer() message.Producer
 	Consumer(config *ConsumerOptions) (message.Consumer, error)
 	Close()
 }
 
 type connection struct {
-	client pulsar.Client
+	client    pulsar.Client
+	producers map[string]pulsar.Producer
 }
 
-func (c *connection) Producer(topic string) (message.Producer, error) {
-	p, err := c.client.CreateProducer(pulsar.ProducerOptions{
-		Topic: topic,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return newMessageProducer(p), nil
+func (c *connection) Producer() message.Producer {
+	return c
 }
 
 func (c *connection) Consumer(config *ConsumerOptions) (message.Consumer, error) {
@@ -72,6 +67,9 @@ func (c *connection) Consumer(config *ConsumerOptions) (message.Consumer, error)
 }
 
 func (c *connection) Close() {
+	for _, producer := range c.producers {
+		producer.Close()
+	}
 	c.client.Close()
 }
 
@@ -103,12 +101,15 @@ func NewConnection(config *Config, logger log.Logger) (Connection, error) {
 		return nil, fmt.Errorf("failed to create pulsar client: %w", err)
 	}
 
-	conn := &connection{client: c}
+	conn := &connection{
+		client:    c,
+		producers: make(map[string]pulsar.Producer),
+	}
+
 	connTimeout := defaultConnectionTimeout
 	if config.ConnectionTimeout > 0 {
 		connTimeout = config.ConnectionTimeout
 	}
-
 	err = conn.testCreateProducer(connTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to broker: %w", err)

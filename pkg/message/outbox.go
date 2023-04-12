@@ -20,7 +20,7 @@ type Outbox interface {
 
 type outbox struct {
 	store       Store
-	senderImpl  Sender
+	out         Producer
 	transaction persistence.Transaction
 	retry       *backoff.ExponentialBackOff
 	logger      log.Logger
@@ -93,7 +93,7 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 	for _, msg := range msgs {
 		v := msg
 
-		err := o.senderImpl.Send(ctx, &v)
+		err := o.out.Send(ctx, &v)
 		if err != nil {
 			return false, fmt.Errorf("failed to send message: %w", err)
 		}
@@ -107,7 +107,7 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 }
 
 func NewOutbox(
-	out Sender,
+	out Producer,
 	store Store,
 	transaction persistence.Transaction,
 	logger log.Logger,
@@ -121,7 +121,7 @@ func NewOutbox(
 
 	mo := &outbox{
 		store:       store,
-		senderImpl:  out,
+		out:         out,
 		transaction: transaction,
 		retry:       retry,
 		logger:      logger,
