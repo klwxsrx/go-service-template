@@ -6,6 +6,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/message"
+	"sync"
 	"time"
 )
 
@@ -36,8 +37,10 @@ type Connection interface {
 }
 
 type connection struct {
-	client    pulsar.Client
-	producers map[string]pulsar.Producer
+	client pulsar.Client
+
+	producerMutexes *sync.Map
+	producers       map[string]pulsar.Producer
 }
 
 func (c *connection) Producer() message.Producer {
@@ -102,8 +105,9 @@ func NewConnection(config *Config, logger log.Logger) (Connection, error) {
 	}
 
 	conn := &connection{
-		client:    c,
-		producers: make(map[string]pulsar.Producer),
+		client:          c,
+		producerMutexes: &sync.Map{},
+		producers:       make(map[string]pulsar.Producer),
 	}
 
 	connTimeout := defaultConnectionTimeout

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/message"
+	"sync"
 )
 
 func (c *connection) Send(ctx context.Context, msg *message.Message) error {
@@ -23,7 +24,11 @@ func (c *connection) Send(ctx context.Context, msg *message.Message) error {
 }
 
 func (c *connection) getOrCreateProducer(topic string) (pulsar.Producer, error) {
-	producer, ok := c.producers[topic] // TODO: exclusive access
+	topicMutex, _ := c.producerMutexes.LoadOrStore(topic, &sync.Mutex{})
+	topicMutex.(*sync.Mutex).Lock()
+	defer topicMutex.(*sync.Mutex).Unlock()
+
+	producer, ok := c.producers[topic]
 	if ok {
 		return producer, nil
 	}
