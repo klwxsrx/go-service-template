@@ -30,7 +30,7 @@ func getHTTPClient(
 ) http.Client {
 	return http.NewClient(
 		http.WithBaseURL(baseURL),
-		http.WithRequestIDHeader(observer, http.DefaultRequestIDHeader),
+		http.WithRequestObservability(observer, http.DefaultRequestIDHeader),
 		http.WithRequestLogging(destinationName, logger, log.LevelInfo, log.LevelWarn),
 		http.WithRequestMetrics(destinationName, metrics),
 	)

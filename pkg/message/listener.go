@@ -13,8 +13,6 @@ import (
 	"unicode"
 )
 
-// TODO: add mock/stub
-
 type ConsumerMessage struct {
 	Context context.Context
 	Message Message

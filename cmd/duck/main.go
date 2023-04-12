@@ -27,7 +27,7 @@ func main() {
 	sqlConn := pkgcmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
 	defer sqlConn.Close(ctx)
 
-	pulsarConn := pkgcmd.MustInitPulsar(nil)
+	pulsarConn := pkgcmd.MustInitPulsar(nil) // TODO: ProducerProvider() method
 	defer pulsarConn.Close()
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
@@ -37,7 +37,10 @@ func main() {
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,
-		pkghttp.NewLoggingPanicHandler(logger),
+		pkghttp.NewDefaultPanicHandler(
+			pkghttp.WithPanicLogging(logger),
+			pkghttp.WithPanicMetrics(metrics),
+		),
 		pkghttp.WithHealthCheck(nil),
 		pkghttp.WithCORSHandler(),
 		pkghttp.WithObservability(

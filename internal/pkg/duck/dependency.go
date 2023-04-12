@@ -9,7 +9,6 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/http"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/message"
-	"github.com/klwxsrx/go-service-template/pkg/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
 )
 
@@ -27,12 +26,12 @@ type DependencyContainer struct {
 func NewDependencyContainer(
 	ctx context.Context,
 	sqlConn sql.Connection,
-	pulsarConn pulsar.Connection,
+	msgProducerProvider message.ProducerProvider,
 	_ http.Client,
 	logger log.Logger,
 ) *DependencyContainer {
 	d := &DependencyContainer{}
-	d.sqlMessageOutbox = cmd.MustInitSQLMessageOutbox(ctx, sqlConn, pulsarConn, logger)
+	d.sqlMessageOutbox = cmd.MustInitSQLMessageOutbox(ctx, sqlConn, msgProducerProvider, logger)
 
 	sqlClient, transaction := cmd.MustInitSQLTransaction(
 		sqlConn,

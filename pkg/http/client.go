@@ -42,14 +42,14 @@ func WithBaseURL(url string) ClientOption {
 	}
 }
 
-func WithRequestIDHeader(observer observability.Observer, headerName string) ClientOption { // TODO: WithRequestObservability
+func WithRequestObservability(observer observability.Observer, requestIDHeaderName string) ClientOption {
 	return func(r *resty.Client) {
 		r.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
 			id, ok := observer.RequestID(req.Context())
 			if !ok {
 				return nil
 			}
-			req.SetHeader(headerName, id)
+			req.SetHeader(requestIDHeaderName, id)
 			return nil
 		})
 	}

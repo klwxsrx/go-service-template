@@ -1,7 +1,5 @@
 package message
 
-// TODO: add mock/stub
-
 import (
 	"context"
 	"fmt"
@@ -16,7 +14,7 @@ type ProducerMessage struct {
 
 type Producer interface {
 	Send(ctx context.Context, msg *ProducerMessage) error
-	Close()
+	Close() // TODO: close producers with pulsar conn
 }
 
 type ProducerProvider interface {
