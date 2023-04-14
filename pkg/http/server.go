@@ -21,7 +21,6 @@ const (
 type (
 	ServerOption     func(*mux.Router)
 	ServerMiddleware func(http.Handler) http.Handler
-	PanicHandler     func(w http.ResponseWriter, r *http.Request, msg any)
 )
 
 type Handler interface {
