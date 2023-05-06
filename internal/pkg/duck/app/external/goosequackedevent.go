@@ -1,12 +1,17 @@
 package external
 
-import "github.com/google/uuid"
+import (
+	"fmt"
+	"github.com/google/uuid"
+)
 
-const EventTypeGooseQuacked = "goose.quacked"
+const (
+	aggregateNameGoose = "goose"
+)
 
 type EventGooseQuacked struct {
-	EventID uuid.UUID
-	GooseID uuid.UUID
+	EventID uuid.UUID `json:"event_id"`
+	GooseID uuid.UUID `json:"goose_id"`
 }
 
 func (e EventGooseQuacked) ID() uuid.UUID {
@@ -14,5 +19,13 @@ func (e EventGooseQuacked) ID() uuid.UUID {
 }
 
 func (e EventGooseQuacked) Type() string {
-	return EventTypeGooseQuacked
+	return fmt.Sprintf("%s.quacked", aggregateNameGoose)
+}
+
+func (e EventGooseQuacked) AggregateID() uuid.UUID {
+	return e.GooseID
+}
+
+func (e EventGooseQuacked) AggregateName() string {
+	return aggregateNameGoose
 }

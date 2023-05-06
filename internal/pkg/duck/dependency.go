@@ -2,60 +2,63 @@ package duck
 
 import (
 	"context"
-	duckappmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/app/message"
+	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
-	duckinfrasql "github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/sql"
-	"github.com/klwxsrx/go-service-template/pkg/cmd"
-	"github.com/klwxsrx/go-service-template/pkg/http"
-	"github.com/klwxsrx/go-service-template/pkg/log"
-	"github.com/klwxsrx/go-service-template/pkg/message"
-	"github.com/klwxsrx/go-service-template/pkg/sql"
+	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
+	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/http"
+	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/sql"
+	"github.com/klwxsrx/go-service-template/internal/pkg/duck/integration"
+	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
+	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
+	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
+	pkgsql "github.com/klwxsrx/go-service-template/pkg/sql"
 )
 
 const (
-	MessageSubscriberServiceName = "duck-service"
-
-	moduleName = "duck"
+	domainName = "duck"
 )
 
 type DependencyContainer struct {
-	sqlMessageOutbox message.Outbox
-	duckService      service.DuckService
+	duckService service.DuckService
 }
 
 func NewDependencyContainer(
 	ctx context.Context,
-	sqlClient sql.TxClient,
-	msgProducer message.Producer,
-	_ http.Client,
-	logger log.Logger,
+	sqlClient pkgsql.TxClient,
+	msgOutbox pkgmessage.Outbox,
+	_ pkghttp.Client,
 ) *DependencyContainer {
 	d := &DependencyContainer{}
-	d.sqlMessageOutbox = cmd.MustInitSQLMessageOutbox(ctx, sqlClient, msgProducer, logger)
 
-	wrappedSQLClient, transaction := cmd.MustInitSQLTransaction(
+	wrappedSQLClient, transaction := pkgcmd.MustInitSQLTransaction(
 		sqlClient,
-		moduleName,
-		func() {
-			d.sqlMessageOutbox.Process()
-		})
-
-	messageStore := cmd.MustInitSQLMessageStore(ctx, wrappedSQLClient)
-	eventDispatcher := message.NewEventDispatcher(
-		message.NewStoreProducer(messageStore),
-		message.NewJSONEventSerializer(duckappmessage.DuckDomainEventTopicName),
+		domainName,
+		msgOutbox.Process,
 	)
 
-	duckRepo := duckinfrasql.NewDuckRepo(wrappedSQLClient, eventDispatcher)
+	messageStore := pkgcmd.MustInitSQLMessageStore(ctx, wrappedSQLClient)
+	eventDispatcher := pkgmessage.NewEventDispatcher(
+		domainName,
+		pkgmessage.NewStoreDispatcher(messageStore),
+	)
+
+	duckRepo := sql.NewDuckRepo(wrappedSQLClient, eventDispatcher)
 	d.duckService = service.NewDuckService(duckRepo, transaction)
 
 	return d
 }
 
-func (d *DependencyContainer) DuckService() service.DuckService {
-	return d.duckService
+func (d *DependencyContainer) RegisterHTTPHandlers(registry pkghttp.HandlerRegistry) {
+	registry.Register(http.NewCreateDuckHandler(d.duckService))
 }
 
-func (d *DependencyContainer) Close() {
-	d.sqlMessageOutbox.Close()
+func (d *DependencyContainer) RegisterMessageHandlers(registry pkgmessage.HandlerRegistry) {
+	registry.Register(
+		domainName, domainName,
+		pkgmessage.RegisterEventHandler[domain.EventDuckCreated](d.duckService.HandleDuckCreated),
+	)
+	registry.Register(
+		domainName, integration.DomainNameGoose,
+		pkgmessage.RegisterEventHandler[external.EventGooseQuacked](d.duckService.HandleGooseQuacked),
+	)
 }

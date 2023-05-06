@@ -9,6 +9,29 @@ import (
 	"sync"
 )
 
+func (b *MessageBroker) ProvideConsumer(topic, subscriberName string, consumptionType message.ConsumptionType) (message.Consumer, error) {
+	var typeOption pulsar.SubscriptionType
+	switch consumptionType {
+	case message.ConsumptionTypeShared:
+		typeOption = pulsar.Shared
+	case message.ConsumptionTypeSingle:
+		typeOption = pulsar.Failover
+	default:
+		typeOption = pulsar.Failover
+	}
+
+	opts := pulsar.ConsumerOptions{
+		Topic:            topic,
+		SubscriptionName: subscriberName,
+		Type:             typeOption,
+	}
+	cons, err := b.client.Subscribe(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to subscribe to topic %s by %s subscriber", topic, subscriberName)
+	}
+	return newMessageConsumer(cons, topic), nil
+}
+
 type messageConsumer struct {
 	name   string
 	pulsar pulsar.Consumer

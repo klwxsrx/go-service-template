@@ -8,8 +8,8 @@ import (
 	"sync"
 )
 
-func (c *connection) Send(ctx context.Context, msg *message.Message) error {
-	producer, err := c.getOrCreateProducer(msg.Topic)
+func (b *MessageBroker) Dispatch(ctx context.Context, msg *message.Message) error {
+	producer, err := b.getOrCreateProducer(msg.Topic)
 	if err != nil {
 		return err
 	}
@@ -23,23 +23,23 @@ func (c *connection) Send(ctx context.Context, msg *message.Message) error {
 	return err
 }
 
-func (c *connection) getOrCreateProducer(topic string) (pulsar.Producer, error) {
-	topicMutex, _ := c.producerMutexes.LoadOrStore(topic, &sync.Mutex{})
+func (b *MessageBroker) getOrCreateProducer(topic string) (pulsar.Producer, error) {
+	topicMutex, _ := b.producerMutexes.LoadOrStore(topic, &sync.Mutex{})
 	topicMutex.(*sync.Mutex).Lock()
 	defer topicMutex.(*sync.Mutex).Unlock()
 
-	producer, ok := c.producers[topic]
+	producer, ok := b.producers[topic]
 	if ok {
 		return producer, nil
 	}
 
-	producer, err := c.client.CreateProducer(pulsar.ProducerOptions{
+	producer, err := b.client.CreateProducer(pulsar.ProducerOptions{
 		Topic: topic,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create producer for topic %s: %w", topic, err)
 	}
 
-	c.producers[topic] = producer
+	b.producers[topic] = producer
 	return producer, nil
 }

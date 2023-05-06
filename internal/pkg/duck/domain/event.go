@@ -1,8 +1,13 @@
 package domain
 
-import "github.com/google/uuid"
+import (
+	"fmt"
+	"github.com/google/uuid"
+)
 
-const EventTypeDuckCreated = "duck.duck.created"
+const (
+	aggregateNameDuck = "duck"
+)
 
 type EventDuckCreated struct {
 	EventID uuid.UUID `json:"event_id"`
@@ -14,5 +19,13 @@ func (e EventDuckCreated) ID() uuid.UUID {
 }
 
 func (e EventDuckCreated) Type() string {
-	return EventTypeDuckCreated
+	return fmt.Sprintf("%s.created", aggregateNameDuck)
+}
+
+func (e EventDuckCreated) AggregateID() uuid.UUID {
+	return e.DuckID
+}
+
+func (e EventDuckCreated) AggregateName() string {
+	return aggregateNameDuck
 }

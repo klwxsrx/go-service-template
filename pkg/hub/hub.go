@@ -62,9 +62,7 @@ func (h *hub) Wait(ctx context.Context, termSignalsChan <-chan os.Signal, logger
 	return h.result
 }
 
-func Run(p Process, ps ...Process) Hub {
-	ps = append([]Process{p}, ps...)
-
+func Run(ps ...Process) Hub {
 	wg := &sync.WaitGroup{}
 	stopChan := make(chan struct{}, len(ps))
 	processResultChan := make(chan processResult, len(ps))

@@ -13,24 +13,14 @@ import (
 	"unicode"
 )
 
-type Handler interface {
-	Handle(ctx context.Context, msg *Message) error
-}
-
-type HandlerFunc func(context.Context, *Message) error
-
-func (f HandlerFunc) Handle(ctx context.Context, msg *Message) error {
-	return f(ctx, msg)
-}
-
-type Middleware func(Handler) Handler
+type HandlerMiddleware func(Handler) Handler
 
 type listener struct { // TODO: add panic handler
 	handler  Handler
 	consumer Consumer
 }
 
-func NewListener(handler Handler, consumer Consumer, mws ...Middleware) hub.Process {
+func NewListener(handler Handler, consumer Consumer, mws ...HandlerMiddleware) hub.Process {
 	hp := &listener{handler, consumer}
 	for i := len(mws) - 1; i >= 0; i-- {
 		hp.handler = mws[i](hp.handler)
@@ -44,7 +34,7 @@ func (p *listener) Name() string {
 
 func (p *listener) Func() func(stopChan <-chan struct{}) error {
 	processMessage := func(msg *ConsumerMessage) {
-		err := p.handler.Handle(msg.Context, &msg.Message)
+		err := p.handler(msg.Context, &msg.Message)
 		if err != nil {
 			p.consumer.Nack(msg)
 			return
@@ -61,15 +51,16 @@ func (p *listener) Func() func(stopChan <-chan struct{}) error {
 				}
 				processMessage(msg)
 			case <-stopChan:
+				p.consumer.Close()
 				return nil
 			}
 		}
 	}
 }
 
-func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) Middleware {
+func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) HandlerMiddleware {
 	return func(handler Handler) Handler {
-		return HandlerFunc(func(ctx context.Context, msg *Message) error {
+		return func(ctx context.Context, msg *Message) error {
 			ctx = logger.WithContext(ctx, log.Fields{
 				"consumerMessage": log.Fields{
 					"correlationID": uuid.New(),
@@ -78,7 +69,7 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) Middleware 
 				},
 			})
 
-			err := handler.Handle(ctx, msg)
+			err := handler(ctx, msg)
 			if err != nil {
 				logger.WithError(err).Log(ctx, errorLevel, "failed to handle message")
 				return err
@@ -86,15 +77,15 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) Middleware 
 
 			logger.Log(ctx, infoLevel, "message handled")
 			return nil
-		})
+		}
 	}
 }
 
-func WithMetrics(metrics metric.Metrics) Middleware {
+func WithMetrics(metrics metric.Metrics) HandlerMiddleware {
 	return func(handler Handler) Handler {
-		return HandlerFunc(func(ctx context.Context, msg *Message) error {
+		return func(ctx context.Context, msg *Message) error {
 			started := time.Now()
-			err := handler.Handle(ctx, msg)
+			err := handler(ctx, msg)
 			if err != nil {
 				metrics.Duration(getMetricKey("messaging.handle.%s.failed", msg.Topic), time.Since(started))
 				return err
@@ -102,7 +93,7 @@ func WithMetrics(metrics metric.Metrics) Middleware {
 
 			metrics.Duration(getMetricKey("messaging.handle.%s.success", msg.Topic), time.Since(started))
 			return nil
-		})
+		}
 	}
 }
 

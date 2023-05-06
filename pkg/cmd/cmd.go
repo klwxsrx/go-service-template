@@ -28,7 +28,7 @@ func HandleAppPanic(ctx context.Context, logger log.Logger) {
 	logger.Fatal(ctx, "app failed with panic")
 }
 
-func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.ReadDirFS) sql.Connection {
+func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.ReadDirFS) sql.Database {
 	sqlConfig := &sql.Config{
 		DSN: sql.DSN{
 			User:     env.Must(env.ParseString("SQL_USER")),
@@ -42,20 +42,20 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 		sqlConfig.ConnectionTimeout = sqlConnTimeout
 	}
 
-	sqlConn, err := sql.NewConnection(sqlConfig, logger)
+	db, err := sql.NewDatabase(sqlConfig, logger)
 	if err != nil {
 		panic(fmt.Errorf("open sql connection: %w", err))
 	}
 
 	if optionalMigrations == nil {
-		return sqlConn
+		return db
 	}
-	sqlMigration := sql.NewMigration(sqlConn.Client(), optionalMigrations, logger)
+	sqlMigration := sql.NewMigration(db, optionalMigrations, logger)
 	err = sqlMigration.Execute(ctx)
 	if err != nil {
 		panic(fmt.Errorf("execute migrations: %w", err))
 	}
-	return sqlConn
+	return db
 }
 
 func MustInitSQLTransaction(
@@ -69,7 +69,7 @@ func MustInitSQLTransaction(
 func MustInitSQLMessageOutbox(
 	ctx context.Context,
 	sqlClient sql.TxClient,
-	msgProducer pkgmessage.Producer,
+	messageDispatcher pkgmessage.Dispatcher,
 	logger log.Logger,
 ) pkgmessage.Outbox {
 	wrappedSQLClient, tx := MustInitSQLTransaction(sqlClient, "messageOutbox", func() {})
@@ -78,7 +78,7 @@ func MustInitSQLMessageOutbox(
 		panic(fmt.Errorf("init message outbox: %w", err))
 	}
 	return pkgmessage.NewOutbox(
-		msgProducer,
+		messageDispatcher,
 		messageStore,
 		tx,
 		logger,
@@ -96,7 +96,7 @@ func MustInitSQLMessageStore(
 	return messageStore
 }
 
-func MustInitPulsar(optionalLogger log.Logger) pulsar.Connection {
+func MustInitPulsarMessageBroker(optionalLogger log.Logger) *pulsar.MessageBroker {
 	config := &pulsar.Config{
 		Address: env.Must(env.ParseString("PULSAR_ADDRESS")),
 	}
@@ -109,41 +109,9 @@ func MustInitPulsar(optionalLogger log.Logger) pulsar.Connection {
 		optionalLogger = pkglogstub.NewLogger()
 	}
 
-	pulsarConn, err := pulsar.NewConnection(config, optionalLogger)
+	messageBroker, err := pulsar.NewMessageBroker(config, optionalLogger)
 	if err != nil {
 		panic(fmt.Errorf("open pulsar connection: %w", err))
 	}
-	return pulsarConn
-}
-
-func MustInitPulsarFailoverConsumer(
-	pulsarConn pulsar.Connection,
-	topic string,
-	subscriptionName string,
-) pkgmessage.Consumer {
-	consumer, err := pulsarConn.Consumer(&pulsar.ConsumerOptions{
-		Topic:            topic,
-		SubscriptionName: subscriptionName,
-		ConsumptionType:  pulsar.ConsumptionTypeFailover,
-	})
-	if err != nil {
-		panic(fmt.Errorf("init pulsar failover consumer %s/%s: %w", subscriptionName, topic, err))
-	}
-	return consumer
-}
-
-func MustInitPulsarSharedConsumer(
-	pulsarConn pulsar.Connection,
-	topic string,
-	subscriptionName string,
-) pkgmessage.Consumer {
-	consumer, err := pulsarConn.Consumer(&pulsar.ConsumerOptions{
-		Topic:            topic,
-		SubscriptionName: subscriptionName,
-		ConsumptionType:  pulsar.ConsumptionTypeShared,
-	})
-	if err != nil {
-		panic(fmt.Errorf("init pulsar shared consumer %s/%s: %w", subscriptionName, topic, err))
-	}
-	return consumer
+	return messageBroker
 }

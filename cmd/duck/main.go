@@ -6,7 +6,6 @@ import (
 	"github.com/klwxsrx/go-service-template/cmd"
 	"github.com/klwxsrx/go-service-template/data/sql/duck"
 	pkgduck "github.com/klwxsrx/go-service-template/internal/pkg/duck"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/http"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 	"github.com/klwxsrx/go-service-template/pkg/log"
@@ -24,16 +23,18 @@ func main() {
 
 	logger.Info(ctx, "app is starting")
 
-	sqlConn := pkgcmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
-	defer sqlConn.Close(ctx)
+	sqlDB := pkgcmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
+	defer sqlDB.Close(ctx)
 
-	pulsarConn := pkgcmd.MustInitPulsar(nil)
-	defer pulsarConn.Close()
+	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
+	defer msgBroker.Close()
+
+	sqlMessageOutbox := pkgcmd.MustInitSQLMessageOutbox(ctx, sqlDB, msgBroker, logger)
+	defer sqlMessageOutbox.Close()
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
 
-	container := pkgduck.NewDependencyContainer(ctx, sqlConn.Client(), pulsarConn.Producer(), gooseClient, logger)
-	defer container.Close()
+	container := pkgduck.NewDependencyContainer(ctx, sqlDB, sqlMessageOutbox, gooseClient)
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,
@@ -49,11 +50,10 @@ func main() {
 			pkghttp.NewHTTPHeaderRequestIDExtractor(pkghttp.DefaultRequestIDHeader),
 			pkghttp.NewRandomUUIDRequestIDExtractor(),
 		),
-		pkghttp.WithMetrics(metrics), // TODO: add prom metrics
+		pkghttp.WithMetrics(metrics),
 		pkghttp.WithLogging(logger, log.LevelInfo, log.LevelWarn),
 	)
-
-	httpServer.Register(http.NewCreateDuckHandler(container.DuckService()))
+	container.RegisterHTTPHandlers(httpServer)
 
 	logger.Info(ctx, "app is ready")
 	pkghttp.Must(httpServer.Listen(ctx, sig.TermSignals()))

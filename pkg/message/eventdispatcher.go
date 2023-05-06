@@ -7,8 +7,8 @@ import (
 )
 
 type eventDispatcher struct {
-	producer   Producer
-	serializer EventSerializer
+	dispatcher Dispatcher
+	serializer *jsonEventSerializer
 }
 
 func (d *eventDispatcher) Dispatch(ctx context.Context, events []event.Event) error {
@@ -24,7 +24,7 @@ func (d *eventDispatcher) Dispatch(ctx context.Context, events []event.Event) er
 
 	for _, msg := range msgs {
 		v := msg
-		err := d.producer.Send(ctx, &v)
+		err := d.dispatcher.Dispatch(ctx, &v)
 		if err != nil {
 			return fmt.Errorf("failed to send event message: %w", err)
 		}
@@ -34,11 +34,11 @@ func (d *eventDispatcher) Dispatch(ctx context.Context, events []event.Event) er
 }
 
 func NewEventDispatcher(
-	producer Producer,
-	serializer EventSerializer,
+	domainName string,
+	dispatcher Dispatcher,
 ) event.Dispatcher {
 	return &eventDispatcher{
-		producer:   producer,
-		serializer: serializer,
+		dispatcher: dispatcher,
+		serializer: newJSONEventSerializer(domainName),
 	}
 }

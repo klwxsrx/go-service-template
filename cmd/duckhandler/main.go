@@ -6,12 +6,7 @@ import (
 	"github.com/klwxsrx/go-service-template/cmd"
 	"github.com/klwxsrx/go-service-template/data/sql/duck"
 	pkgduck "github.com/klwxsrx/go-service-template/internal/pkg/duck"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
-	duckappmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/app/message"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
-	duckintegrationmessage "github.com/klwxsrx/go-service-template/internal/pkg/duck/integration/message"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
-	"github.com/klwxsrx/go-service-template/pkg/event"
 	"github.com/klwxsrx/go-service-template/pkg/hub"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/message"
@@ -29,44 +24,28 @@ func main() {
 
 	logger.Info(ctx, "app is starting")
 
-	sqlConn := pkgcmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
-	defer sqlConn.Close(ctx)
+	sqlDB := pkgcmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
+	defer sqlDB.Close(ctx)
 
-	pulsarConn := pkgcmd.MustInitPulsar(nil)
-	defer pulsarConn.Close()
+	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
+	defer msgBroker.Close()
+
+	sqlMessageOutbox := pkgcmd.MustInitSQLMessageOutbox(ctx, sqlDB, msgBroker, logger)
+	defer sqlMessageOutbox.Close()
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
 
-	container := pkgduck.NewDependencyContainer(ctx, sqlConn.Client(), pulsarConn.Producer(), gooseClient, logger)
-	defer container.Close()
+	container := pkgduck.NewDependencyContainer(ctx, sqlDB, sqlMessageOutbox, gooseClient)
 
-	duckTopicConsumer := pkgcmd.MustInitPulsarFailoverConsumer(pulsarConn, duckappmessage.DuckDomainEventTopicName, pkgduck.MessageSubscriberServiceName)
-	defer duckTopicConsumer.Close()
-
-	gooseTopicConsumer := pkgcmd.MustInitPulsarFailoverConsumer(pulsarConn, duckintegrationmessage.GooseDomainEventTopicName, pkgduck.MessageSubscriberServiceName)
-	defer gooseTopicConsumer.Close()
-
-	duckService := container.DuckService()
-	duckEventMessageHandler := message.NewEventHandler(duckappmessage.NewEventDeserializer(), message.EventTypeHandlerMap{
-		domain.EventTypeDuckCreated: event.NewTypedHandler[domain.EventDuckCreated](duckService.HandleDuckCreated),
-	})
-	gooseEventMessageHandler := message.NewEventHandler(duckintegrationmessage.NewGooseEventDeserializer(), message.EventTypeHandlerMap{
-		external.EventTypeGooseQuacked: event.NewTypedHandler[external.EventGooseQuacked](duckService.HandleGooseQuacked),
-	})
-
-	handlerHub := hub.Run(
-		message.NewListener(
-			duckEventMessageHandler, duckTopicConsumer,
-			message.WithMetrics(metrics),
-			message.WithLogging(logger, log.LevelInfo, log.LevelWarn),
-		),
-		message.NewListener(
-			gooseEventMessageHandler, gooseTopicConsumer,
-			message.WithMetrics(metrics),
-			message.WithLogging(logger, log.LevelInfo, log.LevelWarn),
-		),
+	messageListenerManager := message.NewListenerManager(
+		msgBroker,
+		message.WithMetrics(metrics),
+		message.WithLogging(logger, log.LevelInfo, log.LevelWarn),
 	)
+	container.RegisterMessageHandlers(messageListenerManager)
+
+	listenerHub := hub.Run(message.Must(messageListenerManager.Listeners())...)
 
 	logger.Info(ctx, "app is ready")
-	hub.Must(handlerHub.Wait(ctx, sig.TermSignals(), logger))
+	hub.Must(listenerHub.Wait(ctx, sig.TermSignals(), logger))
 }

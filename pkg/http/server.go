@@ -26,7 +26,7 @@ type (
 type Handler interface {
 	Method() string
 	Path() string
-	HTTPHandler() http.HandlerFunc
+	HTTPHandler() http.HandlerFunc // TODO: add typed handlers
 }
 
 func Must(err error) {
@@ -35,10 +35,14 @@ func Must(err error) {
 	}
 }
 
+type HandlerRegistry interface {
+	Register(handler Handler, opts ...ServerOption)
+}
+
 type Server interface {
 	Listen(ctx context.Context, termSignalsChan <-chan os.Signal) error
 	NewListener(ctx context.Context) hub.Process
-	Register(handler Handler, opts ...ServerOption)
+	HandlerRegistry
 }
 
 type server struct { // TODO: add context.Cancelled handler

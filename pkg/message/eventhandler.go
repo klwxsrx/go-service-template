@@ -7,42 +7,32 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/event"
 )
 
-type EventTypeHandlerMap map[string]event.Handler
-
-type eventHandler struct {
-	deserializer EventDeserializer
-	handlers     EventTypeHandlerMap
+func NewEventHandler[T event.Event](domainName string, handler event.TypedHandler[T]) (Handler, error) {
+	deserializer := newJSONEventDeserializer()
+	err := deserializer.RegisterJSONEvent(domainName, registerDeserializerTyped[T]())
+	if err != nil {
+		return nil, fmt.Errorf("failed to register event deserializer: %w", err)
+	}
+	return eventHandlerImpl[T](domainName, handler, deserializer), nil
 }
 
-func (h *eventHandler) Handle(ctx context.Context, msg *Message) error {
-	eventType, err := h.deserializer.ParseType(msg)
-	if errors.Is(err, ErrEventDeserializeNotValidEvent) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to parse event type: %w", err)
-	}
-
-	handler, ok := h.handlers[eventType]
-	if !ok {
-		return nil
-	}
-
-	evt, err := h.deserializer.Deserialize(msg)
-	if err != nil {
-		return fmt.Errorf("failed to deserialize event: %w", err)
-	}
-
-	err = handler(ctx, evt)
-	if err != nil {
-		return fmt.Errorf("failed to handle event: %w", err)
-	}
-	return nil
-}
-
-func NewEventHandler(deserializer EventDeserializer, handlers EventTypeHandlerMap) Handler {
-	return &eventHandler{
-		deserializer: deserializer,
-		handlers:     handlers,
+func eventHandlerImpl[T event.Event](
+	domainName string,
+	handler event.TypedHandler[T],
+	deserializer *jsonEventDeserializer,
+) Handler {
+	return func(ctx context.Context, msg *Message) error {
+		evt, err := deserializer.Deserialize(domainName, msg)
+		if errors.Is(err, errEventDeserializeNotValidEvent) || errors.Is(err, errEventDeserializeUnknownEvent) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("failed to deserialize message %v: %w", msg.ID, err)
+		}
+		concreteEvent, ok := evt.(T)
+		if !ok {
+			return fmt.Errorf("invalid event struct type %T for messageID %v, expected %T", evt, msg.ID, concreteEvent)
+		}
+		return handler(ctx, concreteEvent)
 	}
 }

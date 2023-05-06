@@ -6,12 +6,8 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/event"
 )
 
-type EventSerializer interface {
-	Serialize(evt event.Event) (*Message, error)
-}
-
 type jsonEventSerializer struct {
-	topicName string
+	domainName string
 }
 
 func (s *jsonEventSerializer) Serialize(evt event.Event) (*Message, error) {
@@ -30,14 +26,14 @@ func (s *jsonEventSerializer) Serialize(evt event.Event) (*Message, error) {
 
 	return &Message{
 		ID:      evt.ID(),
-		Topic:   s.topicName,
-		Key:     "",
+		Topic:   getEventTopic(s.domainName, evt.AggregateName()),
+		Key:     evt.AggregateID().String(),
 		Payload: messagePayload,
 	}, nil
 }
 
-func NewJSONEventSerializer(topicName string) EventSerializer {
-	return &jsonEventSerializer{topicName: topicName}
+func newJSONEventSerializer(domainName string) *jsonEventSerializer {
+	return &jsonEventSerializer{domainName: domainName}
 }
 
 type eventMessagePayload struct {

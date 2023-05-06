@@ -8,59 +8,58 @@ import (
 )
 
 var (
-	ErrEventDeserializeNotValidEvent = errors.New("message is not valid event")
+	errEventDeserializeUnknownEvent  = errors.New("unknown event type")
+	errEventDeserializeNotValidEvent = errors.New("message is not valid event")
 )
 
-type EventDeserializer interface {
-	ParseType(msg *Message) (string, error)
-	Deserialize(msg *Message) (event.Event, error)
-}
-
 type (
-	RegisterJSONEventFunc func(*jsonEventDeserializer)
+	registerTypedEventFunc func(domainName string, deserializer *jsonEventDeserializer) error
+
 	eventDataDeserializer func(string) (event.Event, error)
 )
 
 type jsonEventDeserializer struct {
-	deserializers map[string]eventDataDeserializer
+	deserializers map[eventDomainData]eventDataDeserializer
 }
 
-func (d *jsonEventDeserializer) ParseType(msg *Message) (string, error) {
+func (d *jsonEventDeserializer) Deserialize(domainName string, msg *Message) (event.Event, error) {
 	var messagePayload eventMessagePayload
 	err := json.Unmarshal(msg.Payload, &messagePayload)
 	if err != nil {
-		return "", ErrEventDeserializeNotValidEvent
-	}
-	return messagePayload.EventType, nil
-}
-
-func (d *jsonEventDeserializer) Deserialize(msg *Message) (event.Event, error) {
-	var messagePayload eventMessagePayload
-	err := json.Unmarshal(msg.Payload, &messagePayload)
-	if err != nil {
-		return nil, ErrEventDeserializeNotValidEvent
+		return nil, errEventDeserializeNotValidEvent
 	}
 
-	deserializer, ok := d.deserializers[messagePayload.EventType]
+	deserializer, ok := d.deserializers[eventDomainData{
+		DomainName: domainName,
+		EventType:  messagePayload.EventType,
+	}]
 	if !ok {
-		return nil, fmt.Errorf("unknown event type %s", messagePayload.EventType)
+		return nil, fmt.Errorf("%w %s for domain %s", errEventDeserializeUnknownEvent, messagePayload.EventType, domainName)
 	}
 
 	return deserializer(messagePayload.EventData)
 }
 
-func NewJSONEventDeserializer(jsonEvent RegisterJSONEventFunc, jsonEvents ...RegisterJSONEventFunc) EventDeserializer {
-	d := &jsonEventDeserializer{deserializers: make(map[string]eventDataDeserializer, len(jsonEvents)+1)}
-	jsonEvent(d)
-	for _, jsonEvent := range jsonEvents {
-		jsonEvent(d)
-	}
-	return d
+func (d *jsonEventDeserializer) RegisterJSONEvent(domainName string, fn registerTypedEventFunc) error {
+	return fn(domainName, d)
 }
 
-func RegisterJSONEvent[T event.Event](eventType string) RegisterJSONEventFunc {
-	return func(d *jsonEventDeserializer) {
-		d.deserializers[eventType] = func(data string) (event.Event, error) {
+func newJSONEventDeserializer() *jsonEventDeserializer {
+	return &jsonEventDeserializer{deserializers: make(map[eventDomainData]eventDataDeserializer, 0)}
+}
+
+func registerDeserializerTyped[T event.Event]() registerTypedEventFunc {
+	return func(domainName string, d *jsonEventDeserializer) error {
+		var blankEvent T
+		eventType := blankEvent.Type()
+		if eventType == "" {
+			return fmt.Errorf("failed to get event type for %T: blank event must return const value", blankEvent)
+		}
+
+		d.deserializers[eventDomainData{
+			DomainName: domainName,
+			EventType:  eventType,
+		}] = func(data string) (event.Event, error) {
 			var result T
 			err := json.Unmarshal([]byte(data), &result)
 			if err != nil {
@@ -68,5 +67,11 @@ func RegisterJSONEvent[T event.Event](eventType string) RegisterJSONEventFunc {
 			}
 			return result, nil
 		}
+		return nil
 	}
+}
+
+type eventDomainData struct {
+	DomainName string
+	EventType  string
 }
