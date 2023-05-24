@@ -87,7 +87,8 @@ func (c *messageConsumer) Ack(msg *message.ConsumerMessage) {
 		return
 	}
 
-	c.pulsar.AckID(messageID)
+	// single topic pulsar consumer doesn't return any errors
+	_ = c.pulsar.AckID(messageID)
 }
 
 func (c *messageConsumer) Nack(msg *message.ConsumerMessage) {
