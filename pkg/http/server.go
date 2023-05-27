@@ -26,7 +26,7 @@ type (
 type Handler interface {
 	Method() string
 	Path() string
-	HTTPHandler() http.HandlerFunc // TODO: add typed handlers
+	HTTPHandler() http.HandlerFunc
 }
 
 func Must(err error) {
@@ -45,7 +45,7 @@ type Server interface {
 	HandlerRegistry
 }
 
-type server struct { // TODO: add context.Cancelled handler
+type server struct {
 	srv          *http.Server
 	router       *mux.Router
 	panicHandler PanicHandler

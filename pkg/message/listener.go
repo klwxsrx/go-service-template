@@ -15,17 +15,23 @@ import (
 
 type HandlerMiddleware func(Handler) Handler
 
-type listener struct { // TODO: add panic handler
+type listener struct {
 	handler  Handler
 	consumer Consumer
 }
 
-func NewListener(handler Handler, consumer Consumer, mws ...HandlerMiddleware) hub.Process {
-	hp := &listener{handler, consumer}
+func NewListener(
+	handler Handler,
+	consumer Consumer,
+	panicHandler PanicHandler,
+	mws ...HandlerMiddleware,
+) hub.Process {
+	l := &listener{handler, consumer}
+	l.handler = panicHandlerWrapper(l.handler, panicHandler)
 	for i := len(mws) - 1; i >= 0; i-- {
-		hp.handler = mws[i](hp.handler)
+		l.handler = mws[i](l.handler)
 	}
-	return hp
+	return l
 }
 
 func (p *listener) Name() string {

@@ -60,12 +60,13 @@ type ListenerManager interface {
 }
 
 type listenerManager struct {
+	panicHandler     PanicHandler
 	middlewares      []HandlerMiddleware
 	consumerProvider ConsumerProvider
 	handlerRegisters map[handlerDomainData][]RegisterHandlerFunc
 }
 
-func (m listenerManager) Register(domainName, publisherDomainName string, handlerFunc RegisterHandlerFunc, handlerFuncs ...RegisterHandlerFunc) {
+func (m *listenerManager) Register(domainName, publisherDomainName string, handlerFunc RegisterHandlerFunc, handlerFuncs ...RegisterHandlerFunc) {
 	handlerFuncs = append([]RegisterHandlerFunc{handlerFunc}, handlerFuncs...)
 	domainData := handlerDomainData{
 		DomainName:          domainName,
@@ -74,7 +75,7 @@ func (m listenerManager) Register(domainName, publisherDomainName string, handle
 	m.handlerRegisters[domainData] = append(m.handlerRegisters[domainData], handlerFuncs...)
 }
 
-func (m listenerManager) Listeners() ([]hub.Process, error) {
+func (m *listenerManager) Listeners() ([]hub.Process, error) {
 	eventDeserializer := newJSONEventDeserializer()
 	consumers := make(map[string]consumerData)
 	for domainData, registerFuncs := range m.handlerRegisters {
@@ -99,6 +100,7 @@ func (m listenerManager) Listeners() ([]hub.Process, error) {
 			NewListener(
 				NewCompositeHandler(nil, data.MessageHandlers),
 				data.Consumer,
+				m.panicHandler,
 				m.middlewares...,
 			),
 		)
@@ -107,7 +109,7 @@ func (m listenerManager) Listeners() ([]hub.Process, error) {
 	return listeners, nil
 }
 
-func (m listenerManager) registerHandlerFuncImpl(
+func (m *listenerManager) registerHandlerFuncImpl(
 	domainName string,
 	publisherDomainName string,
 	handlerFunc RegisterHandlerFunc,
@@ -148,16 +150,18 @@ func (m listenerManager) registerHandlerFuncImpl(
 	return consumers, nil
 }
 
-func (m listenerManager) getConsumerSubscriptionName(domainName string) string {
+func (m *listenerManager) getConsumerSubscriptionName(domainName string) string {
 	domainName = prepareNameToKebabCase(domainName)
 	return fmt.Sprintf("%s-domain", domainName)
 }
 
 func NewListenerManager(
 	consumerProvider ConsumerProvider,
+	panicHandler PanicHandler,
 	handlerMiddlewares ...HandlerMiddleware,
 ) ListenerManager {
-	return listenerManager{
+	return &listenerManager{
+		panicHandler:     panicHandler,
 		middlewares:      handlerMiddlewares,
 		consumerProvider: consumerProvider,
 		handlerRegisters: make(map[handlerDomainData][]RegisterHandlerFunc),

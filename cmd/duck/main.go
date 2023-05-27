@@ -4,7 +4,7 @@ import (
 	"context"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/klwxsrx/go-service-template/cmd"
-	"github.com/klwxsrx/go-service-template/data/sql/duck"
+	sqlduck "github.com/klwxsrx/go-service-template/data/sql/duck"
 	pkgduck "github.com/klwxsrx/go-service-template/internal/pkg/duck"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
@@ -23,7 +23,7 @@ func main() {
 
 	logger.Info(ctx, "app is starting")
 
-	sqlDB := pkgcmd.MustInitSQL(ctx, logger, duck.SQLMigrations)
+	sqlDB := pkgcmd.MustInitSQL(ctx, logger, sqlduck.Migrations)
 	defer sqlDB.Close(ctx)
 
 	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
@@ -39,8 +39,8 @@ func main() {
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,
 		pkghttp.NewDefaultPanicHandler(
-			pkghttp.WithPanicLogging(logger),
 			pkghttp.WithPanicMetrics(metrics),
+			pkghttp.WithPanicLogging(logger),
 		),
 		pkghttp.WithHealthCheck(nil),
 		pkghttp.WithCORSHandler(),
