@@ -31,7 +31,7 @@ func NewDefaultPanicHandler(options ...PanicHandlerOption) PanicHandler {
 func WithPanicLogging(logger log.Logger) PanicHandlerOption {
 	return func(r *http.Request, p Panic) {
 		getRequestFieldsLogger(r, logger).
-			WithField("panic", map[string]any{
+			WithField("panic", log.Fields{
 				"message": p.Message,
 				"stack":   string(p.Stacktrace),
 			}).

@@ -50,7 +50,9 @@ func (h *hub) Wait(ctx context.Context, termSignalsChan <-chan os.Signal, logger
 			select {
 			case processResult := <-h.processResultChan:
 				if processResult.err != nil {
-					logger.WithField("processName", processResult.processName).WithError(processResult.err).Error(ctx, "process completed after stop with error")
+					logger.WithField("processName", processResult.processName).
+						WithError(processResult.err).
+						Error(ctx, "process completed after stop with error")
 				}
 			default:
 				return

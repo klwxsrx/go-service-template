@@ -39,9 +39,11 @@ func WithObservability(
 
 			r = r.WithContext(observer.WithRequestID(r.Context(), requestID))
 			if optionalLogger != nil {
-				r = r.WithContext(optionalLogger.WithContext(r.Context(), log.Fields{
-					"requestID": requestID,
-				}))
+				r = r.WithContext(optionalLogger.WithContext(r.Context(), wrapFieldsWithRequestLogEntry(
+					log.Fields{
+						"requestID": requestID,
+					},
+				)))
 			}
 
 			handler.ServeHTTP(w, r)

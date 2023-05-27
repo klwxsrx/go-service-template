@@ -50,16 +50,28 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 }
 
 func getRequestFieldsLogger(r *http.Request, logger log.Logger) log.Logger {
-	return logger.With(log.Fields{
-		"routeName": getRouteName(r.Method, r.URL.Path),
-		"method":    r.Method,
-		"scheme":    r.URL.Scheme,
-		"host":      r.URL.Host,
-		"path":      r.URL.Path,
-		"rawQuery":  r.URL.RawQuery,
-	})
+	return logger.With(wrapFieldsWithRequestLogEntry(
+		log.Fields{
+			"routeName": getRouteName(r.Method, r.URL.Path),
+			"method":    r.Method,
+			"scheme":    r.URL.Scheme,
+			"host":      r.URL.Host,
+			"path":      r.URL.Path,
+			"rawQuery":  r.URL.RawQuery,
+		},
+	))
 }
 
 func getRequestResponseFieldsLogger(r *http.Request, responseCode int, logger log.Logger) log.Logger {
-	return getRequestFieldsLogger(r, logger).WithField("responseCode", responseCode)
+	return getRequestFieldsLogger(r, logger).With(wrapFieldsWithRequestLogEntry(
+		log.Fields{
+			"responseCode": responseCode,
+		},
+	))
+}
+
+func wrapFieldsWithRequestLogEntry(fields log.Fields) log.Fields {
+	return log.Fields{
+		"httpRequest": fields,
+	}
 }

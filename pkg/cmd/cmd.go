@@ -11,6 +11,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
 	"io/fs"
+	"runtime/debug"
 )
 
 func HandleAppPanic(ctx context.Context, logger log.Logger) {
@@ -21,11 +22,13 @@ func HandleAppPanic(ctx context.Context, logger log.Logger) {
 
 	err, ok := msg.(error)
 	if ok {
-		logger = logger.WithError(err)
-	} else {
-		logger = logger.WithField("error", msg)
+		msg = err.Error()
 	}
-	logger.Fatal(ctx, "app failed with panic")
+
+	logger.WithField("panic", log.Fields{
+		"message": msg,
+		"stack":   string(debug.Stack()),
+	}).Fatal(ctx, "app failed with panic")
 }
 
 func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.ReadDirFS) sql.Database {
