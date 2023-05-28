@@ -1,3 +1,4 @@
-CREATE TABLE IF NOT EXISTS duck (
-    id uuid PRIMARY KEY
+CREATE TABLE IF NOT EXISTS duck(
+    id   uuid PRIMARY KEY,
+    name TEXT
 )

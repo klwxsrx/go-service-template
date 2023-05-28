@@ -106,7 +106,8 @@ func TestDuckService_Create_Returns(t *testing.T) {
 				tc.transaction(ctrl),
 			)
 
-			err := srv.Create(context.Background())
+			duckName := "SomeDuckName"
+			err := srv.Create(context.Background(), duckName)
 			tc.expect(t, err)
 		})
 	}

@@ -23,12 +23,6 @@ type (
 	ServerMiddleware func(http.Handler) http.Handler
 )
 
-type Handler interface {
-	Method() string
-	Path() string
-	HTTPHandler() http.HandlerFunc
-}
-
 func Must(err error) {
 	if err != nil {
 		panic(fmt.Errorf("unable to listen the server: %w", err))

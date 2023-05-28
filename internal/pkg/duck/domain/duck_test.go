@@ -9,7 +9,9 @@ import (
 
 func TestNewDuck_Created_Success(t *testing.T) {
 	duckID := uuid.New()
-	duck := domain.NewDuck(duckID)
+	name := "SomeDuckName"
+
+	duck := domain.NewDuck(duckID, name)
 
 	assert.Equal(t, duckID, duck.ID)
 	assert.Len(t, duck.Changes, 1)

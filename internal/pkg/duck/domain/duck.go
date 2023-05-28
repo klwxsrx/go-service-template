@@ -13,12 +13,17 @@ type DuckRepo interface {
 
 type Duck struct {
 	ID      uuid.UUID
+	Name    string
 	Changes []event.Event
 }
 
-func NewDuck(id uuid.UUID) *Duck {
+func NewDuck(
+	id uuid.UUID,
+	name string,
+) *Duck {
 	return &Duck{
-		ID: id,
+		ID:   id,
+		Name: name,
 		Changes: []event.Event{EventDuckCreated{
 			EventID: uuid.New(),
 			DuckID:  id,

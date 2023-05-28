@@ -22,8 +22,8 @@ func (r *duckRepo) Store(ctx context.Context, duck *domain.Duck) error {
 
 	query, args, err := sq.
 		Insert("duck").
-		Columns("id").
-		Values(duck.ID).
+		Columns("id", "name").
+		Values(duck.ID, duck.Name).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("failed to build sql: %w", err)
