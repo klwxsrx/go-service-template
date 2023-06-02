@@ -18,7 +18,7 @@ type Message struct {
 
 type Handler func(ctx context.Context, msg *Message) error
 
-func NewCompositeHandler(optionalWorkerPool worker.Pool, handlers []Handler) Handler {
+func NewCompositeHandler(optionalWorkerPool worker.Pool, handlers []Handler) Handler { // TODO: replace by failsafe in listener
 	if len(handlers) == 0 {
 		return func(ctx context.Context, msg *Message) error {
 			return nil

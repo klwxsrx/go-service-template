@@ -7,39 +7,46 @@ import (
 	"sync"
 )
 
-const NumCPUWorkersCount = 0
+const WorkersCountNumCPU = 0
 
 var ErrPoolClosed = errors.New("pool is already closed")
 
 type Job func()
 
 type Pool interface {
-	Do(j Job) error
+	Do(Job) error
+	Wait()
 	Close()
 }
 
 type pool struct {
-	jobChan  chan Job
-	wg       *sync.WaitGroup
-	mutex    *sync.Mutex
-	isClosed bool
+	wg      *sync.WaitGroup
+	jobChan chan Job
+
+	closeMutex *sync.RWMutex
+	isClosed   bool
 }
 
-func (p *pool) Do(j Job) (result error) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+func (p *pool) Do(j Job) error {
+	p.closeMutex.RLock()
+	defer p.closeMutex.RUnlock()
 
 	if p.isClosed {
 		return ErrPoolClosed
 	}
 
+	p.wg.Add(1)
 	p.jobChan <- j
-	return
+	return nil
+}
+
+func (p *pool) Wait() {
+	p.wg.Wait()
 }
 
 func (p *pool) Close() {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	p.closeMutex.Lock()
+	defer p.closeMutex.Unlock()
 
 	if p.isClosed {
 		return
@@ -47,37 +54,38 @@ func (p *pool) Close() {
 
 	p.isClosed = true
 	close(p.jobChan)
-	p.wg.Wait()
+	p.Wait()
 }
 
-func runWorker(jobChan <-chan Job, wg *sync.WaitGroup) {
-	wg.Add(1)
+func runWorker(jobChan <-chan Job, jobDone func()) {
 	go func() {
 		for {
 			job, ok := <-jobChan
 			if !ok {
 				break
 			}
+
 			job()
+			jobDone()
 		}
-		wg.Done()
 	}()
 }
 
 func NewPool(workersCount int) Pool {
-	jobChan := make(chan Job)
-	wg := &sync.WaitGroup{}
-	if workersCount <= NumCPUWorkersCount {
+	if workersCount <= WorkersCountNumCPU {
 		workersCount = runtime.NumCPU()
 	}
 
+	jobChan := make(chan Job)
+	wg := &sync.WaitGroup{}
 	for i := 0; i < workersCount; i++ {
-		runWorker(jobChan, wg)
+		runWorker(jobChan, wg.Done)
 	}
 
 	return &pool{
-		jobChan: jobChan,
-		wg:      wg,
-		mutex:   &sync.Mutex{},
+		wg:         wg,
+		jobChan:    jobChan,
+		closeMutex: &sync.RWMutex{},
+		isClosed:   false,
 	}
 }
