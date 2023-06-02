@@ -9,6 +9,8 @@ func (p pool) Do(j worker.Job) error {
 	return nil
 }
 
+func (p pool) Wait() {}
+
 func (p pool) Close() {}
 
 func NewPool() worker.Pool {

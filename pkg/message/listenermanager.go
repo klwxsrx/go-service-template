@@ -98,7 +98,7 @@ func (m *listenerManager) Listeners() ([]hub.Process, error) {
 	for _, data := range consumers {
 		listeners = append(listeners,
 			NewListener(
-				NewCompositeHandler(nil, data.MessageHandlers),
+				NewCompositeHandler(data.MessageHandlers, nil),
 				data.Consumer,
 				m.panicHandler,
 				m.middlewares...,

@@ -19,7 +19,7 @@ func Must(err error) {
 	}
 }
 
-type Hub interface { // TODO: use worker.Group?
+type Hub interface {
 	Wait(ctx context.Context, termSignalsChan <-chan os.Signal, logger log.Logger) error
 }
 

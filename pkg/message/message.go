@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/pkg/worker"
-	"sync"
 )
 
 type Message struct {
@@ -18,7 +17,7 @@ type Message struct {
 
 type Handler func(ctx context.Context, msg *Message) error
 
-func NewCompositeHandler(optionalWorkerPool worker.Pool, handlers []Handler) Handler { // TODO: replace by failsafe in listener
+func NewCompositeHandler(handlers []Handler, optionalWP worker.Pool) Handler {
 	if len(handlers) == 0 {
 		return func(ctx context.Context, msg *Message) error {
 			return nil
@@ -32,7 +31,7 @@ func NewCompositeHandler(optionalWorkerPool worker.Pool, handlers []Handler) Han
 		}
 	}
 
-	if optionalWorkerPool == nil {
+	if optionalWP == nil {
 		return func(ctx context.Context, msg *Message) error {
 			for _, handler := range handlers {
 				err := handler(ctx, msg)
@@ -44,34 +43,18 @@ func NewCompositeHandler(optionalWorkerPool worker.Pool, handlers []Handler) Han
 		}
 	}
 
-	wg := &sync.WaitGroup{}
 	return func(ctx context.Context, msg *Message) error {
-		errChan := make(chan error, 1)
-
+		group := worker.WithFailSafeContext(ctx, optionalWP)
 		for _, handler := range handlers {
-			wg.Add(1)
-			handlerImpl := handler
-			err := optionalWorkerPool.Do(func() {
-				err := handlerImpl(ctx, msg)
-				if err != nil {
-					select {
-					case errChan <- err:
-					default:
-					}
-				}
-				wg.Done()
+			group.Do(func(ctx context.Context) error {
+				return handler(ctx, msg)
 			})
-			if err != nil {
-				wg.Done()
-				return fmt.Errorf("failed to handle message with worker pool: %w", err)
-			}
 		}
 
-		var err error
-		select {
-		case err = <-errChan:
-		default:
+		err := group.Wait()
+		if err != nil {
+			return fmt.Errorf("failed to handle message with worker pool: %w", err)
 		}
-		return err
+		return nil
 	}
 }
