@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	_ "github.com/joho/godotenv/autoload"
 	"github.com/klwxsrx/go-service-template/cmd"
 	sqlduck "github.com/klwxsrx/go-service-template/data/sql/duck"
 	pkgduck "github.com/klwxsrx/go-service-template/internal/pkg/duck"

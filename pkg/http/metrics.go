@@ -15,8 +15,11 @@ func WithMetrics(metrics metric.Metrics) ServerOption {
 			started := time.Now()
 			handler.ServeHTTP(lrw, r)
 
-			key := fmt.Sprintf("api.http.%s.%d", getRouteName(r.Method, r.URL.Path), lrw.code)
-			metrics.Duration(key, time.Since(started))
+			metrics.With(metric.Labels{
+				"method": r.Method,
+				"path":   r.URL.Path,
+				"code":   fmt.Sprintf("%d", lrw.code),
+			}).Duration("http_api_request_duration_seconds", time.Since(started))
 		})
 	})
 }

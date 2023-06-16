@@ -9,8 +9,6 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
 	"net/http"
-	"strings"
-	"unicode"
 )
 
 type (
@@ -86,23 +84,13 @@ func WithRequestLogging(destinationName string, logger log.Logger, infoLevel, er
 func WithRequestMetrics(destinationName string, metrics metric.Metrics) ClientOption {
 	return func(r *resty.Client) {
 		r.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
-			key := fmt.Sprintf(
-				"client.http.%s.%s.%d",
-				prepareDestinationNameForMetrics(destinationName),
-				getRouteName(resp.Request.Method, resp.Request.RawRequest.URL.Path),
-				resp.StatusCode(),
-			)
-			metrics.Duration(key, resp.Time())
+			metrics.With(metric.Labels{
+				"destination": destinationName,
+				"method":      resp.Request.Method,
+				"path":        resp.Request.RawRequest.URL.Path,
+				"code":        fmt.Sprintf("%d", resp.StatusCode()),
+			}).Duration("http_client_request_duration_seconds", resp.Time())
 			return nil
 		})
 	}
-}
-
-func prepareDestinationNameForMetrics(destinationName string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.Is(unicode.Latin, r) || unicode.IsDigit(r) {
-			return r
-		}
-		return '_'
-	}, strings.ToLower(destinationName))
 }

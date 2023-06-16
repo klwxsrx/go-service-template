@@ -8,9 +8,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/hub"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
-	"strings"
 	"time"
-	"unicode"
 )
 
 type HandlerMiddleware func(Handler) Handler
@@ -92,25 +90,11 @@ func WithMetrics(metrics metric.Metrics) HandlerMiddleware {
 		return func(ctx context.Context, msg *Message) error {
 			started := time.Now()
 			err := handler(ctx, msg)
-			if err != nil {
-				metrics.Duration(getMetricKey("messaging.handle.%s.failed", msg.Topic), time.Since(started))
-				return err
-			}
-
-			metrics.Duration(getMetricKey("messaging.handle.%s.success", msg.Topic), time.Since(started))
-			return nil
+			metrics.With(metric.Labels{
+				"topic":   msg.Topic,
+				"success": err == nil,
+			}).Duration("msg_handle_duration_seconds", time.Since(started))
+			return err
 		}
 	}
-}
-
-func getMetricKey(keyPattern, msgTopic string) string {
-	return fmt.Sprintf(
-		keyPattern,
-		strings.Map(func(r rune) rune {
-			if unicode.Is(unicode.Latin, r) || unicode.IsDigit(r) {
-				return r
-			}
-			return '_'
-		}, strings.ToLower(msgTopic)),
-	)
 }

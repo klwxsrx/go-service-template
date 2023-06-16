@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-const WorkersCountNumCPU = 0
+const WorkersCountNumCPU = 0 // TODO: unlimited workers count, optimal version for large workers count
 
 var ErrPoolClosed = errors.New("pool is already closed")
 

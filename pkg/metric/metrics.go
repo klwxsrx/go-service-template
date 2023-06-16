@@ -3,7 +3,13 @@ package metric
 
 import "time"
 
+type Labels map[string]any
+
 type Metrics interface {
-	Increment(key string, keyValueTags ...string)
-	Duration(key string, duration time.Duration, keyValueTags ...string)
+	With(labels Labels) Metrics
+	WithLabel(name string, value any) Metrics
+	Increment(metric string)
+	Count(metric string, increase int)
+	Gauge(metric string, current int)
+	Duration(metric string, duration time.Duration)
 }

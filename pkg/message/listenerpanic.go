@@ -38,7 +38,7 @@ func WithPanicLogging(logger log.Logger) PanicHandlerOption {
 
 func WithPanicMetrics(metrics metric.Metrics) PanicHandlerOption {
 	return func(ctx context.Context, message *Message, p Panic) {
-		metrics.Increment(getMetricKey("app.panic.messaging.handle.%s", message.Topic))
+		metrics.WithLabel("topic", message.Topic).Increment("msg_handle_panics_total")
 	}
 }
 

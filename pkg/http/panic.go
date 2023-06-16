@@ -1,7 +1,6 @@
 package http
 
 import (
-	"fmt"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"net/http"
@@ -41,7 +40,10 @@ func WithPanicLogging(logger log.Logger) PanicHandlerOption {
 
 func WithPanicMetrics(metrics metric.Metrics) PanicHandlerOption {
 	return func(r *http.Request, _ Panic) {
-		metrics.Increment(fmt.Sprintf("app.panic.api.http.%s", getRouteName(r.Method, r.URL.Path)))
+		metrics.With(metric.Labels{
+			"method": r.Method,
+			"path":   r.URL.Path,
+		}).Increment("http_api_request_panics_total")
 	}
 }
 
