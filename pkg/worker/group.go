@@ -1,30 +1,32 @@
+//go:generate mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Group=Group"
 package worker
 
 import (
 	"context"
-	"errors"
+	"sync"
 )
 
-type GroupJob func(context.Context) error
+type Job func(context.Context) error
 
-type FailSafeGroupContext interface {
-	Do(GroupJob)
-	Wait() error
-}
-
-type FailFastGroupContext interface {
-	Do(GroupJob)
+type Group interface {
+	Do(Job)
 	Close() error
 }
 
 type group struct {
-	ctx       context.Context
-	ctxCancel context.CancelFunc
+	ctx                 context.Context
+	ctxCancel           context.CancelFunc
+	cancelCtxAfterError bool
+
 	errChan   chan error
+	errResult error
 	pool      Pool
+
+	closerMutex *sync.Mutex
+	onceCloser  *sync.Once
 }
 
-func (g group) Do(job GroupJob) {
+func (g *group) Do(job Job) {
 	handleErr := func(err error) {
 		if err == nil {
 			return
@@ -32,53 +34,75 @@ func (g group) Do(job GroupJob) {
 
 		select {
 		case g.errChan <- err:
-			if g.ctxCancel != nil {
+			if g.cancelCtxAfterError {
 				g.ctxCancel()
 			}
 		default:
 		}
 	}
 
-	if g.ctx.Err() != nil {
-		handleErr(errors.New("group context is already closed"))
-	}
-	err := g.pool.Do(func() {
+	g.pool.Do(func() {
 		handleErr(job(g.ctx))
 	})
-	handleErr(err)
 }
 
-func (g group) Wait() error {
+func (g *group) Close() error {
 	g.pool.Wait()
 
-	select {
-	case err := <-g.errChan:
-		return err
-	default:
-		return nil
-	}
+	g.closerMutex.Lock()
+	g.onceCloser.Do(func() {
+		g.ctxCancel()
+
+		select {
+		case g.errResult = <-g.errChan:
+		default:
+		}
+	})
+	g.closerMutex.Unlock()
+
+	return g.errResult
 }
 
-func (g group) Close() error {
-	return g.Wait()
-}
-
-func WithFailFastContext(ctx context.Context, pool Pool) FailFastGroupContext {
+func WithinFailFastGroup(ctx context.Context, pool Pool) Group {
 	var ctxCancel context.CancelFunc
 	ctx, ctxCancel = context.WithCancel(ctx)
-	return group{
-		ctx:       ctx,
-		ctxCancel: ctxCancel,
-		errChan:   make(chan error, 1),
-		pool:      pool,
+	return &group{
+		ctx:                 ctx,
+		ctxCancel:           ctxCancel,
+		cancelCtxAfterError: true,
+		errChan:             make(chan error, 1),
+		errResult:           nil,
+		pool:                pool,
+		closerMutex:         &sync.Mutex{},
+		onceCloser:          &sync.Once{},
 	}
 }
 
-func WithFailSafeContext(ctx context.Context, pool Pool) FailSafeGroupContext {
-	return group{
-		ctx:       ctx,
-		ctxCancel: nil,
-		errChan:   make(chan error, 1),
-		pool:      pool,
+func WithinFailSafeGroup(ctx context.Context, pool Pool) Group {
+	var ctxCancel context.CancelFunc
+	ctx, ctxCancel = context.WithCancel(ctx)
+	return &group{
+		ctx:                 ctx,
+		ctxCancel:           ctxCancel,
+		cancelCtxAfterError: false,
+		errChan:             make(chan error, 1),
+		errResult:           nil,
+		pool:                pool,
+		closerMutex:         &sync.Mutex{},
+		onceCloser:          &sync.Once{},
 	}
+}
+
+func NewFailFastGroup(ctx context.Context) Group {
+	return WithinFailFastGroup(
+		ctx,
+		NewPool(MaxWorkersCountUnlimited),
+	)
+}
+
+func NewFailSafeGroup(ctx context.Context) Group {
+	return WithinFailSafeGroup(
+		ctx,
+		NewPool(MaxWorkersCountUnlimited),
+	)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-resty/resty/v2"
-	"github.com/iancoleman/strcase"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
@@ -56,17 +55,16 @@ func WithRequestObservability(observer observability.Observer, requestIDHeaderNa
 
 func WithRequestLogging(destinationName string, logger log.Logger, infoLevel, errorLevel log.Level) ClientOption {
 	logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
-		"destinationName": strcase.ToLowerCamel(destinationName),
+		"destinationName": destinationName,
 	}))
 
 	return func(r *resty.Client) {
 		r.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
-			loggerWithFields := getRequestResponseFieldsLogger(resp.Request.RawRequest, resp.StatusCode(), logger)
-
+			logger = getRequestResponseFieldsLogger(resp.Request.RawRequest, resp.StatusCode(), logger)
 			if resp.StatusCode() >= http.StatusInternalServerError {
-				loggerWithFields.Log(resp.Request.Context(), errorLevel, "http call completed with internal error")
+				logger.Log(resp.Request.Context(), errorLevel, "http call completed with internal error")
 			} else {
-				loggerWithFields.Log(resp.Request.Context(), infoLevel, "http call completed")
+				logger.Log(resp.Request.Context(), infoLevel, "http call completed")
 			}
 			return nil
 		})

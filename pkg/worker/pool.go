@@ -2,90 +2,66 @@
 package worker
 
 import (
-	"errors"
 	"runtime"
 	"sync"
 )
 
-const WorkersCountNumCPU = 0 // TODO: unlimited workers count, optimal version for large workers count
+const (
+	MaxWorkersCountNumCPU    = -1
+	MaxWorkersCountUnlimited = 0
+)
 
-var ErrPoolClosed = errors.New("pool is already closed")
-
-type Job func()
+type SimpleJob func()
 
 type Pool interface {
-	Do(Job) error
+	Do(SimpleJob)
 	Wait()
-	Close()
 }
 
 type pool struct {
-	wg      *sync.WaitGroup
-	jobChan chan Job
-
-	closeMutex *sync.RWMutex
-	isClosed   bool
+	jobCompleted    *sync.WaitGroup
+	workerAvailable *sync.Cond
+	currentWorkers  int
+	maxWorkers      int
 }
 
-func (p *pool) Do(j Job) error {
-	p.closeMutex.RLock()
-	defer p.closeMutex.RUnlock()
+func (p *pool) Do(job SimpleJob) {
+	p.jobCompleted.Add(1)
 
-	if p.isClosed {
-		return ErrPoolClosed
+	if p.maxWorkers > 0 {
+		p.workerAvailable.L.Lock()
+		for p.currentWorkers >= p.maxWorkers {
+			p.workerAvailable.Wait()
+		}
+		p.currentWorkers++
+		p.workerAvailable.L.Unlock()
 	}
 
-	p.wg.Add(1)
-	p.jobChan <- j
-	return nil
-}
-
-func (p *pool) Wait() {
-	p.wg.Wait()
-}
-
-func (p *pool) Close() {
-	p.closeMutex.Lock()
-	defer p.closeMutex.Unlock()
-
-	if p.isClosed {
-		return
-	}
-
-	p.isClosed = true
-	close(p.jobChan)
-	p.Wait()
-}
-
-func runWorker(jobChan <-chan Job, jobDone func()) {
 	go func() {
-		for {
-			job, ok := <-jobChan
-			if !ok {
-				break
-			}
+		job()
+		p.jobCompleted.Done()
 
-			job()
-			jobDone()
+		if p.maxWorkers > 0 {
+			p.workerAvailable.L.Lock()
+			p.currentWorkers--
+			p.workerAvailable.L.Unlock()
+			p.workerAvailable.Signal()
 		}
 	}()
 }
 
-func NewPool(workersCount int) Pool {
-	if workersCount <= WorkersCountNumCPU {
-		workersCount = runtime.NumCPU()
-	}
+func (p *pool) Wait() {
+	p.jobCompleted.Wait()
+}
 
-	jobChan := make(chan Job)
-	wg := &sync.WaitGroup{}
-	for i := 0; i < workersCount; i++ {
-		runWorker(jobChan, wg.Done)
+func NewPool(maxWorkers int) Pool {
+	if maxWorkers <= MaxWorkersCountNumCPU {
+		maxWorkers = runtime.NumCPU()
 	}
-
 	return &pool{
-		wg:         wg,
-		jobChan:    jobChan,
-		closeMutex: &sync.RWMutex{},
-		isClosed:   false,
+		jobCompleted:    &sync.WaitGroup{},
+		workerAvailable: sync.NewCond(&sync.Mutex{}),
+		currentWorkers:  0,
+		maxWorkers:      maxWorkers,
 	}
 }

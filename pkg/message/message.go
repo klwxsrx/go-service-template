@@ -2,7 +2,6 @@ package message
 
 import (
 	"context"
-	"fmt"
 	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
@@ -44,16 +43,17 @@ func NewCompositeHandler(handlers []Handler, optionalWP worker.Pool) Handler {
 	}
 
 	return func(ctx context.Context, msg *Message) error {
-		group := worker.WithFailSafeContext(ctx, optionalWP)
+		group := worker.WithinFailSafeGroup(ctx, optionalWP)
 		for _, handler := range handlers {
+			handlerImpl := handler
 			group.Do(func(ctx context.Context) error {
-				return handler(ctx, msg)
+				return handlerImpl(ctx, msg)
 			})
 		}
 
-		err := group.Wait()
+		err := group.Close()
 		if err != nil {
-			return fmt.Errorf("failed to handle message with worker pool: %w", err)
+			return err
 		}
 		return nil
 	}

@@ -5,8 +5,6 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/klwxsrx/go-service-template/pkg/event"
 	"github.com/klwxsrx/go-service-template/pkg/hub"
-	"strings"
-	"unicode"
 )
 
 type (
@@ -132,7 +130,7 @@ func (m *listenerManager) registerHandlerFuncImpl(
 		)
 	}
 	if !ok {
-		consumer, err := m.consumerProvider.ProvideConsumer(consumerTopic, m.getConsumerSubscriptionName(domainName), consumptionType)
+		consumer, err := m.consumerProvider.ProvideConsumer(consumerTopic, getConsumerSubscriptionName(domainName), consumptionType)
 		if err != nil {
 			return nil, fmt.Errorf("failed to register consumer for topic %s and consumptionType %s: %w", consumerTopic, consumptionType, err)
 		}
@@ -150,11 +148,6 @@ func (m *listenerManager) registerHandlerFuncImpl(
 	return consumers, nil
 }
 
-func (m *listenerManager) getConsumerSubscriptionName(domainName string) string {
-	domainName = prepareNameToKebabCase(domainName)
-	return fmt.Sprintf("%s-domain", domainName)
-}
-
 func NewListenerManager(
 	consumerProvider ConsumerProvider,
 	panicHandler PanicHandler,
@@ -168,21 +161,15 @@ func NewListenerManager(
 	}
 }
 
-func getEventTopic(domainName, eventAggregateName string) string {
-	domainName = prepareNameToKebabCase(domainName)
-	aggregateName := prepareNameToKebabCase(eventAggregateName)
+func getEventTopic(domainName, aggregateName string) string {
+	domainName = strcase.ToKebab(domainName)
+	aggregateName = strcase.ToKebab(aggregateName)
 	return fmt.Sprintf("event.%s-domain.%s-aggregate", domainName, aggregateName)
 }
 
-func prepareNameToKebabCase(name string) string {
-	return strcase.ToKebab(
-		strings.Map(func(r rune) rune {
-			if unicode.Is(unicode.Latin, r) || unicode.IsDigit(r) || r == '_' || r == '-' {
-				return r
-			}
-			return -1
-		}, name),
-	)
+func getConsumerSubscriptionName(domainName string) string {
+	domainName = strcase.ToKebab(domainName)
+	return fmt.Sprintf("%s-domain", domainName)
 }
 
 type handlerDomainData struct {
