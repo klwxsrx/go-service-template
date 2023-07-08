@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/klwxsrx/go-service-template/pkg/hub"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
+	"github.com/klwxsrx/go-service-template/pkg/worker"
 	"time"
 )
 
@@ -23,7 +23,7 @@ func NewListener(
 	consumer Consumer,
 	panicHandler PanicHandler,
 	mws ...HandlerMiddleware,
-) hub.Process {
+) worker.NamedProcess {
 	l := &listener{handler, consumer}
 	l.handler = panicHandlerWrapper(l.handler, panicHandler)
 	for i := len(mws) - 1; i >= 0; i-- {
@@ -32,30 +32,30 @@ func NewListener(
 	return l
 }
 
-func (p *listener) Name() string {
-	return fmt.Sprintf("message listener %s", p.consumer.Name())
+func (l *listener) Name() string {
+	return fmt.Sprintf("message listener %s", l.consumer.Name())
 }
 
-func (p *listener) Func() func(stopChan <-chan struct{}) error {
+func (l *listener) Process() worker.Process {
 	processMessage := func(msg *ConsumerMessage) {
-		err := p.handler(msg.Context, &msg.Message)
+		err := l.handler(msg.Context, &msg.Message)
 		if err != nil {
-			p.consumer.Nack(msg)
+			l.consumer.Nack(msg)
 			return
 		}
-		p.consumer.Ack(msg)
+		l.consumer.Ack(msg)
 	}
 
 	return func(stopChan <-chan struct{}) error {
 		for {
 			select {
-			case msg, ok := <-p.consumer.Messages():
+			case msg, ok := <-l.consumer.Messages():
 				if !ok {
 					return errors.New("consumer closed messages channel")
 				}
 				processMessage(msg)
 			case <-stopChan:
-				p.consumer.Close()
+				l.consumer.Close()
 				return nil
 			}
 		}

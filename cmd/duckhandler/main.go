@@ -6,17 +6,17 @@ import (
 	sqlduck "github.com/klwxsrx/go-service-template/data/sql/duck"
 	pkgduck "github.com/klwxsrx/go-service-template/internal/pkg/duck"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
-	"github.com/klwxsrx/go-service-template/pkg/hub"
-	"github.com/klwxsrx/go-service-template/pkg/log"
+	pkglog "github.com/klwxsrx/go-service-template/pkg/log"
 	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
 	pkgmetricstub "github.com/klwxsrx/go-service-template/pkg/metric/stub"
 	pkgobservability "github.com/klwxsrx/go-service-template/pkg/observability"
-	"github.com/klwxsrx/go-service-template/pkg/sig"
+	pkgsig "github.com/klwxsrx/go-service-template/pkg/sig"
+	pkgworker "github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 func main() {
 	ctx := context.Background()
-	logger := log.New(log.LevelInfo)
+	logger := pkglog.New(pkglog.LevelInfo)
 	metrics := pkgmetricstub.NewMetrics()
 	observability := pkgobservability.New()
 	defer pkgcmd.HandleAppPanic(ctx, logger)
@@ -43,12 +43,12 @@ func main() {
 			pkgmessage.WithPanicLogging(logger),
 		),
 		pkgmessage.WithMetrics(metrics),
-		pkgmessage.WithLogging(logger, log.LevelInfo, log.LevelWarn),
+		pkgmessage.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),
 	)
 	container.RegisterMessageHandlers(messageListenerManager)
 
-	listenerHub := hub.Run(pkgmessage.Must(messageListenerManager.Listeners())...)
+	hub := pkgworker.RunHub(pkgmessage.Must(messageListenerManager.Listeners())...)
 
 	logger.Info(ctx, "app is ready")
-	hub.Must(listenerHub.Wait(ctx, sig.TermSignals(), logger))
+	pkgworker.Must(hub.Wait(ctx, pkgsig.TermSignals(), logger))
 }

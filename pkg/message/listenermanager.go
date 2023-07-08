@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/iancoleman/strcase"
 	"github.com/klwxsrx/go-service-template/pkg/event"
-	"github.com/klwxsrx/go-service-template/pkg/hub"
+	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 type (
@@ -54,7 +54,7 @@ type HandlerRegistry interface {
 
 type ListenerManager interface {
 	HandlerRegistry
-	Listeners() ([]hub.Process, error)
+	Listeners() ([]worker.NamedProcess, error)
 }
 
 type listenerManager struct {
@@ -73,7 +73,7 @@ func (m *listenerManager) Register(domainName, publisherDomainName string, handl
 	m.handlerRegisters[domainData] = append(m.handlerRegisters[domainData], handlerFuncs...)
 }
 
-func (m *listenerManager) Listeners() ([]hub.Process, error) {
+func (m *listenerManager) Listeners() ([]worker.NamedProcess, error) {
 	eventDeserializer := newJSONEventDeserializer()
 	consumers := make(map[string]consumerData)
 	for domainData, registerFuncs := range m.handlerRegisters {
@@ -92,7 +92,7 @@ func (m *listenerManager) Listeners() ([]hub.Process, error) {
 		}
 	}
 
-	listeners := make([]hub.Process, 0, len(consumers))
+	listeners := make([]worker.NamedProcess, 0, len(consumers))
 	for _, data := range consumers {
 		listeners = append(listeners,
 			NewListener(

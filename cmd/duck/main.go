@@ -7,15 +7,15 @@ import (
 	pkgduck "github.com/klwxsrx/go-service-template/internal/pkg/duck"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
-	"github.com/klwxsrx/go-service-template/pkg/log"
+	pkglog "github.com/klwxsrx/go-service-template/pkg/log"
 	pkgmetricstub "github.com/klwxsrx/go-service-template/pkg/metric/stub"
 	pkgobservability "github.com/klwxsrx/go-service-template/pkg/observability"
-	"github.com/klwxsrx/go-service-template/pkg/sig"
+	pkgsig "github.com/klwxsrx/go-service-template/pkg/sig"
 )
 
 func main() {
 	ctx := context.Background()
-	logger := log.New(log.LevelInfo)
+	logger := pkglog.New(pkglog.LevelInfo)
 	metrics := pkgmetricstub.NewMetrics()
 	observability := pkgobservability.New()
 	defer pkgcmd.HandleAppPanic(ctx, logger)
@@ -50,10 +50,10 @@ func main() {
 			pkghttp.NewRandomUUIDRequestIDExtractor(),
 		),
 		pkghttp.WithMetrics(metrics),
-		pkghttp.WithLogging(logger, log.LevelInfo, log.LevelWarn),
+		pkghttp.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),
 	)
 	container.RegisterHTTPHandlers(httpServer)
 
 	logger.Info(ctx, "app is ready")
-	pkghttp.Must(httpServer.Listen(ctx, sig.TermSignals()))
+	pkghttp.Must(httpServer.Listen(ctx, pkgsig.TermSignals()))
 }

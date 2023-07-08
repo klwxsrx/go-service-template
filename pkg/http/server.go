@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gorilla/mux"
-	"github.com/klwxsrx/go-service-template/pkg/hub"
+	"github.com/klwxsrx/go-service-template/pkg/worker"
 	"net/http"
 	"os"
 	"time"
@@ -35,7 +35,7 @@ type HandlerRegistry interface {
 
 type Server interface {
 	Listen(ctx context.Context, termSignalsChan <-chan os.Signal) error
-	NewListener(ctx context.Context) hub.Process
+	NewListener(ctx context.Context) worker.NamedProcess
 	HandlerRegistry
 }
 
@@ -54,14 +54,14 @@ func (p serverProcess) Name() string {
 	return fmt.Sprintf("http server %s", p.srv.Addr)
 }
 
-func (p serverProcess) Func() func(stopChan <-chan struct{}) error {
+func (p serverProcess) Process() worker.Process {
 	return func(stopChan <-chan struct{}) error {
 		return listenAndServe(p.ctx, p.srv, stopChan)
 	}
 }
 
-func (s server) NewListener(ctx context.Context) hub.Process {
-	return &serverProcess{ctx, s.srv}
+func (s server) NewListener(ctx context.Context) worker.NamedProcess {
+	return serverProcess{ctx, s.srv}
 }
 
 func (s server) Listen(ctx context.Context, termSignalsChan <-chan os.Signal) error {
