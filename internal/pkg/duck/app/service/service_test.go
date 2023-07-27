@@ -3,7 +3,6 @@ package service_test
 import (
 	"context"
 	"errors"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
@@ -11,6 +10,7 @@ import (
 	duckdomainmock "github.com/klwxsrx/go-service-template/internal/pkg/duck/domain/mock"
 	pkgpersistencemock "github.com/klwxsrx/go-service-template/pkg/persistence/mock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 	"testing"
 )
 

@@ -1,4 +1,4 @@
-//go:generate mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Observer=Observer"
+//go:generate ${PROJECT_PATH}/tools/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Observer=Observer"
 package observability
 
 import (

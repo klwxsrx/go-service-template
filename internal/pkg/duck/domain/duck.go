@@ -1,4 +1,4 @@
-//go:generate mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "DuckRepo=DuckRepo"
+//go:generate ${PROJECT_PATH}/tools/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "DuckRepo=DuckRepo"
 package domain
 
 import (

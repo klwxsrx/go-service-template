@@ -1,4 +1,4 @@
-//go:generate mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Dispatcher=Dispatcher"
+//go:generate ${PROJECT_PATH}/tools/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Dispatcher=Dispatcher"
 package event
 
 import (

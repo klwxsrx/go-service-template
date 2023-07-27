@@ -7,7 +7,6 @@ require (
 	github.com/apache/pulsar-client-go v0.10.0
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/go-resty/resty/v2 v2.7.0
-	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/iancoleman/strcase v0.2.0
@@ -15,6 +14,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/rs/zerolog v1.29.1
 	github.com/stretchr/testify v1.8.4
+	go.uber.org/mock v0.2.0
 )
 
 require (

@@ -11,7 +11,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Prepare Go environment
-        uses: ./.github/actions/prepare-go-env
+        uses: ./.github/actions/prepare-go-environment
 
   go-lint:
     name: Lint Go code
