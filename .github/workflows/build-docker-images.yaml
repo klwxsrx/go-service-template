@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Prepare Go environment
-        uses: ./.github/actions/prepare-go-env
+        uses: ./.github/actions/prepare-go-environment
       - name: Code generation
         run: make codegen
       - name: Run golangci-lint
@@ -35,7 +35,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Prepare Go environment
-        uses: ./.github/actions/prepare-go-env
+        uses: ./.github/actions/prepare-go-environment
       - name: Code generation
         run: make codegen
       - name: Run tests
@@ -49,7 +49,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Prepare Go environment
-        uses: ./.github/actions/prepare-go-env
+        uses: ./.github/actions/prepare-go-environment
       - name: Code generation
         run: make codegen
       - name: Run go-cleanarch
@@ -70,7 +70,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Prepare Go environment
-        uses: ./.github/actions/prepare-go-env
+        uses: ./.github/actions/prepare-go-environment
       - name: Build application
         run: make bin/${{ matrix.application }}
       - name: Setup Docker
