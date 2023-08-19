@@ -3,15 +3,17 @@ package service_test
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
+
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
 	duckdomainmock "github.com/klwxsrx/go-service-template/internal/pkg/duck/domain/mock"
 	pkgpersistencemock "github.com/klwxsrx/go-service-template/pkg/persistence/mock"
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/mock/gomock"
-	"testing"
 )
 
 func TestDuckService_Create_Returns(t *testing.T) {

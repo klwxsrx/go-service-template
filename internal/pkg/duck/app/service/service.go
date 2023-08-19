@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/google/uuid"
+
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
-	"strings"
 )
 
 type DuckService interface {

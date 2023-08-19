@@ -1,10 +1,11 @@
 package http
 
 import (
-	"github.com/klwxsrx/go-service-template/pkg/log"
-	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/klwxsrx/go-service-template/pkg/log"
+	"github.com/klwxsrx/go-service-template/pkg/metric"
 )
 
 type (

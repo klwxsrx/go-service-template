@@ -2,6 +2,7 @@ package stub
 
 import (
 	"context"
+
 	"github.com/klwxsrx/go-service-template/pkg/observability"
 )
 

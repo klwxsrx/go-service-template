@@ -3,7 +3,9 @@ package pulsar
 import (
 	"context"
 	"fmt"
+
 	pulsarlog "github.com/apache/pulsar-client-go/pulsar/log"
+
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 

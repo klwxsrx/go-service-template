@@ -2,6 +2,7 @@ package duck
 
 import (
 	"context"
+
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"

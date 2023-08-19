@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"runtime/debug"
+
 	"github.com/klwxsrx/go-service-template/pkg/env"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	pkglogstub "github.com/klwxsrx/go-service-template/pkg/log/stub"
@@ -10,8 +13,6 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
-	"io/fs"
-	"runtime/debug"
 )
 
 func HandleAppPanic(ctx context.Context, logger log.Logger) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/klwxsrx/go-service-template/pkg/event"
 )
 

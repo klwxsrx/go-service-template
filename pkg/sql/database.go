@@ -4,13 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
+	"time"
+
 	sq "github.com/Masterminds/squirrel"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq" // postgresql driver
+
 	"github.com/klwxsrx/go-service-template/pkg/log"
-	_ "github.com/lib/pq" // postgres driver
-	"sync"
-	"time"
 )
 
 const defaultConnectionTimeout = 20 * time.Second

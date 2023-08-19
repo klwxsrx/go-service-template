@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
 

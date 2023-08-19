@@ -1,4 +1,4 @@
-//go:generate ${PROJECT_PATH}/tools/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Transaction=Transaction"
+//go:generate ${TOOLS_PATH}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Transaction=Transaction"
 package persistence
 
 import "context"

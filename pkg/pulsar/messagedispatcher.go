@@ -3,9 +3,11 @@ package pulsar
 import (
 	"context"
 	"fmt"
-	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/klwxsrx/go-service-template/pkg/message"
 	"sync"
+
+	"github.com/apache/pulsar-client-go/pulsar"
+
+	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
 func (b *MessageBroker) Dispatch(ctx context.Context, msg *message.Message) error {

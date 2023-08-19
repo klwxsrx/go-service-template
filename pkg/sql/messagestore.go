@@ -3,8 +3,10 @@ package sql
 import (
 	"context"
 	"fmt"
+
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 

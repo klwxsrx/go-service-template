@@ -1,8 +1,9 @@
 package http
 
 import (
-	"github.com/klwxsrx/go-service-template/pkg/log"
 	"net/http"
+
+	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
 type loggingResponseWriter struct {

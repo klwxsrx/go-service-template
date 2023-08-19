@@ -1,9 +1,11 @@
-//go:generate ${PROJECT_PATH}/tools/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "DuckRepo=DuckRepo"
+//go:generate ${TOOLS_PATH}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "DuckRepo=DuckRepo"
 package domain
 
 import (
 	"context"
+
 	"github.com/google/uuid"
+
 	"github.com/klwxsrx/go-service-template/pkg/event"
 )
 

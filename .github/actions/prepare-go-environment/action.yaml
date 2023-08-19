@@ -28,8 +28,8 @@ runs:
       id: cache-tools
       uses: actions/cache@v3
       with:
-        path: tools
-        key: go-environment.tools-go-mod-${{ hashFiles('**/.tools/go.mod', '**/.tools/go.sum') }}
+        path: tools/bin
+        key: go-environment.tools-go-mod-${{ hashFiles('**/tools/go.mod', '**/tools/go.sum') }}
     - name: Install tools
       if: steps.cache-tools.outputs.cache-hit != 'true'
       run: make tools

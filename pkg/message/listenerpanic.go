@@ -3,9 +3,10 @@ package message
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
+
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
-	"runtime/debug"
 )
 
 type Panic struct {

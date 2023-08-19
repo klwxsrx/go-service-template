@@ -3,11 +3,13 @@ package http
 import (
 	"context"
 	"fmt"
+	"net/http"
+
 	"github.com/go-resty/resty/v2"
+
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
-	"net/http"
 )
 
 type (

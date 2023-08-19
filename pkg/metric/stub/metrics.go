@@ -1,8 +1,9 @@
 package stub
 
 import (
-	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"time"
+
+	"github.com/klwxsrx/go-service-template/pkg/metric"
 )
 
 type metrics struct{}

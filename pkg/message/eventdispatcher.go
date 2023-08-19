@@ -3,6 +3,7 @@ package message
 import (
 	"context"
 	"fmt"
+
 	"github.com/klwxsrx/go-service-template/pkg/event"
 )
 

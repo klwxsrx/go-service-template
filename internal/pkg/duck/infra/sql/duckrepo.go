@@ -3,7 +3,9 @@ package sql
 import (
 	"context"
 	"fmt"
+
 	sq "github.com/Masterminds/squirrel"
+
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
 	"github.com/klwxsrx/go-service-template/pkg/event"
 	"github.com/klwxsrx/go-service-template/pkg/sql"

@@ -2,7 +2,9 @@ package message
 
 import (
 	"fmt"
+
 	"github.com/iancoleman/strcase"
+
 	"github.com/klwxsrx/go-service-template/pkg/event"
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )

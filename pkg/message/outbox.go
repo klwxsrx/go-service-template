@@ -3,12 +3,14 @@ package message
 import (
 	"context"
 	"fmt"
-	"github.com/cenkalti/backoff/v4"
-	"github.com/google/uuid"
-	"github.com/klwxsrx/go-service-template/pkg/log"
-	"github.com/klwxsrx/go-service-template/pkg/persistence"
 	"sync"
 	"time"
+
+	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
+
+	"github.com/klwxsrx/go-service-template/pkg/log"
+	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
 
 const processMessageOutboxLockName = "process_message_outbox"

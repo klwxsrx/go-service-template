@@ -1,6 +1,6 @@
-export PROJECT_PATH := $(CURDIR)
+export TOOLS_PATH := ${CURDIR}/tools/bin
 
-.PHONY: clean codegen test lint arch tools
+.PHONY: clean codegen test lint arch tools-clean tools-update tools
 
 all: clean codegen test lint arch bin/duck bin/duckhandler
 
@@ -17,18 +17,23 @@ test: codegen
 	go test ./...
 
 lint: tools
-	tools/golangci-lint run ./...
+	tools/bin/golangci-lint run ./...
 
 arch: tools
-	tools/go-cleanarch -application app -domain domain -infrastructure infra -interfaces integration
+	tools/bin/go-cleanarch -application app -domain domain -infrastructure infra -interfaces integration
 
-tools: tools/mockgen tools/golangci-lint tools/go-cleanarch
+tools: tools/bin/mockgen tools/bin/golangci-lint tools/bin/go-cleanarch
 
-tools/mockgen:
-	go build -modfile ./.tools/go.mod -o ./tools/mockgen go.uber.org/mock/mockgen
+tools/bin/mockgen:
+	go build -modfile ./tools/go.mod -o ./tools/bin/mockgen go.uber.org/mock/mockgen
 
-tools/golangci-lint:
-	go build -modfile ./.tools/go.mod -o ./tools/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+tools/bin/golangci-lint:
+	go build -modfile ./tools/go.mod -o ./tools/bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
-tools/go-cleanarch:
-	go build -modfile ./.tools/go.mod -o ./tools/go-cleanarch github.com/roblaszczak/go-cleanarch
+tools/bin/go-cleanarch:
+	go build -modfile ./tools/go.mod -o ./tools/bin/go-cleanarch github.com/roblaszczak/go-cleanarch
+
+tools-clean:
+	rm -rf tools/bin/*
+
+tools-update: tools-clean tools

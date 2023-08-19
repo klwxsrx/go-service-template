@@ -3,10 +3,12 @@ package pulsar
 import (
 	"context"
 	"fmt"
+	"sync"
+
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/google/uuid"
+
 	"github.com/klwxsrx/go-service-template/pkg/message"
-	"sync"
 )
 
 func (b *MessageBroker) ProvideConsumer(topic, subscriberName string, consumptionType message.ConsumptionType) (message.Consumer, error) {

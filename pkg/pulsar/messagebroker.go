@@ -2,11 +2,13 @@ package pulsar
 
 import (
 	"fmt"
-	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/cenkalti/backoff/v4"
-	"github.com/klwxsrx/go-service-template/pkg/log"
 	"sync"
 	"time"
+
+	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/cenkalti/backoff/v4"
+
+	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
 const defaultConnectionTimeout = 20 * time.Second

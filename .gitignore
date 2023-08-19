@@ -2,5 +2,5 @@
 /.idea/
 /.fleet/
 /bin/
-/tools/
+/tools/bin/
 mock/

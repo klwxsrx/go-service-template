@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	sq "github.com/Masterminds/squirrel"
-	"github.com/klwxsrx/go-service-template/pkg/log"
 	"io/fs"
 	"strings"
+
+	sq "github.com/Masterminds/squirrel"
+
+	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
 const (

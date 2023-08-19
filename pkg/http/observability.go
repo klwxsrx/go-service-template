@@ -1,10 +1,12 @@
 package http
 
 import (
+	"net/http"
+
 	"github.com/google/uuid"
+
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
-	"net/http"
 )
 
 const (

@@ -1,9 +1,10 @@
 package http
 
 import (
+	"net/http"
+
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
-	"net/http"
 )
 
 type createDuckHandler struct {

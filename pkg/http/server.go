@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/klwxsrx/go-service-template/pkg/worker"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/gorilla/mux"
+
+	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 const (

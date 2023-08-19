@@ -3,9 +3,10 @@ package worker
 import (
 	"context"
 	"fmt"
-	"github.com/klwxsrx/go-service-template/pkg/log"
 	"os"
 	"sync"
+
+	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
 func Must(err error) {

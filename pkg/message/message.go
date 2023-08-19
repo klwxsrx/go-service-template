@@ -2,7 +2,9 @@ package message
 
 import (
 	"context"
+
 	"github.com/google/uuid"
+
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 

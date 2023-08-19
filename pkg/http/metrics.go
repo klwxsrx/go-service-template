@@ -2,9 +2,10 @@ package http
 
 import (
 	"fmt"
-	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"net/http"
 	"time"
+
+	"github.com/klwxsrx/go-service-template/pkg/metric"
 )
 
 func WithMetrics(metrics metric.Metrics) ServerOption {

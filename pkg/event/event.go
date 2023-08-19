@@ -1,9 +1,10 @@
-//go:generate ${PROJECT_PATH}/tools/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Dispatcher=Dispatcher"
+//go:generate ${TOOLS_PATH}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Dispatcher=Dispatcher"
 package event
 
 import (
 	"context"
 	"fmt"
+
 	"github.com/google/uuid"
 )
 
