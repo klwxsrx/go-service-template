@@ -11,7 +11,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
-func (b *MessageBroker) ProvideConsumer(topic, subscriberName string, consumptionType message.ConsumptionType) (message.Consumer, error) {
+func (b *MessageBroker) Consumer(topic, subscriberName string, consumptionType message.ConsumptionType) (message.Consumer, error) {
 	var typeOption pulsar.SubscriptionType
 	switch consumptionType {
 	case message.ConsumptionTypeShared:

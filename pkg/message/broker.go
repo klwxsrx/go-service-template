@@ -23,7 +23,7 @@ type Consumer interface {
 }
 
 type ConsumerProvider interface {
-	ProvideConsumer(topic, subscriberName string, consumptionType ConsumptionType) (Consumer, error)
+	Consumer(topic, subscriberName string, consumptionType ConsumptionType) (Consumer, error)
 }
 
 type Dispatcher interface {

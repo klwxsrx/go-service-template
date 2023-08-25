@@ -62,7 +62,7 @@ type ListenerManager interface {
 type listenerManager struct {
 	panicHandler     PanicHandler
 	middlewares      []HandlerMiddleware
-	consumerProvider ConsumerProvider
+	consumers        ConsumerProvider
 	handlerRegisters map[handlerDomainData][]RegisterHandlerFunc
 }
 
@@ -132,7 +132,7 @@ func (m *listenerManager) registerHandlerFuncImpl(
 		)
 	}
 	if !ok {
-		consumer, err := m.consumerProvider.ProvideConsumer(consumerTopic, getConsumerSubscriptionName(domainName), consumptionType)
+		consumer, err := m.consumers.Consumer(consumerTopic, getConsumerSubscriptionName(domainName), consumptionType)
 		if err != nil {
 			return nil, fmt.Errorf("failed to register consumer for topic %s and consumptionType %s: %w", consumerTopic, consumptionType, err)
 		}
@@ -151,14 +151,14 @@ func (m *listenerManager) registerHandlerFuncImpl(
 }
 
 func NewListenerManager(
-	consumerProvider ConsumerProvider,
+	consumers ConsumerProvider,
 	panicHandler PanicHandler,
 	handlerMiddlewares ...HandlerMiddleware,
 ) ListenerManager {
 	return &listenerManager{
 		panicHandler:     panicHandler,
 		middlewares:      handlerMiddlewares,
-		consumerProvider: consumerProvider,
+		consumers:        consumers,
 		handlerRegisters: make(map[handlerDomainData][]RegisterHandlerFunc),
 	}
 }
