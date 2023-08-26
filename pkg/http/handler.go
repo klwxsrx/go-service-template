@@ -10,10 +10,17 @@ import (
 	pkgstrings "github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
+type ResponseWriter interface {
+	SetHeader(key, value string) ResponseWriter
+	SetStatusCode(httpCode int) ResponseWriter
+	SetCookie(cookie *http.Cookie) ResponseWriter
+	SetJSONBody(data any) ResponseWriter
+}
+
 type Handler interface {
 	Method() string
 	Path() string
-	HTTPHandler() http.HandlerFunc
+	HTTPHandler() func(ResponseWriter, *http.Request)
 }
 
 type RequestDataProvider[T any] func(*http.Request) (T, error)
@@ -110,37 +117,67 @@ func JSONBody[T any]() RequestDataProvider[T] {
 	}
 }
 
-func WithJSONResponse[T any](
-	handler func(*http.Request) (responseBody *T, statusCode int, headers http.Header),
-) http.HandlerFunc {
-	writeHeaders := func(w http.ResponseWriter, statusCode int, headers http.Header) {
-		for key, values := range headers {
-			for _, value := range values {
-				w.Header().Add(key, value)
-			}
+type responseWriter struct {
+	impl http.ResponseWriter
+
+	writeBodyFunc func() error
+	httpCode      int
+}
+
+func (w *responseWriter) SetHeader(key, value string) ResponseWriter {
+	w.impl.Header().Set(key, value)
+	return w
+}
+
+func (w *responseWriter) SetStatusCode(httpCode int) ResponseWriter {
+	w.httpCode = httpCode
+	return w
+}
+
+func (w *responseWriter) SetCookie(cookie *http.Cookie) ResponseWriter {
+	http.SetCookie(w.impl, cookie)
+	return w
+}
+
+func (w *responseWriter) SetJSONBody(data any) ResponseWriter {
+	w.writeBodyFunc = func() error {
+		bodyEncoded, err := json.Marshal(data)
+		if err != nil {
+			return fmt.Errorf("failed to encode to json: %w", err)
 		}
-		w.WriteHeader(statusCode)
+
+		_, err = w.impl.Write(bodyEncoded)
+		if err != nil {
+			return fmt.Errorf("failed to write body: %w", err)
+		}
+
+		w.impl.Header().Set("Content-Type", "application/json")
+		return nil
+	}
+	return w
+}
+
+func (w *responseWriter) Write() {
+	if w.writeBodyFunc == nil {
+		w.impl.WriteHeader(w.httpCode)
+		return
 	}
 
+	err := w.writeBodyFunc()
+	if err != nil {
+		w.httpCode = http.StatusInternalServerError
+	}
+	w.impl.WriteHeader(w.httpCode)
+}
+
+func withResponseWriter(handler func(ResponseWriter, *http.Request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, statusCode, headers := handler(r)
-		if body == nil {
-			writeHeaders(w, statusCode, headers)
-			return
+		respWriter := &responseWriter{
+			impl:          w,
+			writeBodyFunc: nil,
+			httpCode:      http.StatusOK,
 		}
-
-		bodyEncoded, err := json.Marshal(*body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		_, err = w.Write(bodyEncoded)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		writeHeaders(w, statusCode, headers)
+		handler(respWriter, r)
+		respWriter.Write()
 	}
 }

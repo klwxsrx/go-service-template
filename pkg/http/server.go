@@ -79,7 +79,10 @@ func (s server) Register(handler Handler, opts ...ServerOption) {
 		}
 	}
 
-	handlerWithPanicWrapper := panicHandlerWrapper(handler.HTTPHandler(), s.panicHandler)
+	handlerWithPanicWrapper := panicHandlerWrapper(
+		withResponseWriter(handler.HTTPHandler()),
+		s.panicHandler,
+	)
 	router.
 		Name(getRouteName(handler.Method(), handler.Path())).
 		Methods(handler.Method()).

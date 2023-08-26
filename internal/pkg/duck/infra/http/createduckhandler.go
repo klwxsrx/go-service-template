@@ -19,21 +19,21 @@ func (h *createDuckHandler) Path() string {
 	return "/duck"
 }
 
-func (h *createDuckHandler) HTTPHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (h *createDuckHandler) HTTPHandler() func(pkghttp.ResponseWriter, *http.Request) {
+	return func(w pkghttp.ResponseWriter, r *http.Request) {
 		data, err := pkghttp.Parse(pkghttp.JSONBody[CreateDuckRequest](), r, nil)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+			w.SetStatusCode(http.StatusBadRequest)
 			return
 		}
 
 		err = h.duckService.Create(r.Context(), data.Name)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.SetStatusCode(http.StatusInternalServerError)
 			return
 		}
 
-		w.WriteHeader(http.StatusCreated)
+		w.SetStatusCode(http.StatusCreated)
 	}
 }
 
