@@ -10,17 +10,19 @@ import (
 	pkgstrings "github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
+type HandlerFunc func(w ResponseWriter, r *http.Request)
+
+type Handler interface {
+	Method() string
+	Path() string
+	HTTPHandler() HandlerFunc
+}
+
 type ResponseWriter interface {
 	SetHeader(key, value string) ResponseWriter
 	SetStatusCode(httpCode int) ResponseWriter
 	SetCookie(cookie *http.Cookie) ResponseWriter
 	SetJSONBody(data any) ResponseWriter
-}
-
-type Handler interface {
-	Method() string
-	Path() string
-	HTTPHandler() func(ResponseWriter, *http.Request)
 }
 
 type RequestDataProvider[T any] func(*http.Request) (T, error)
@@ -170,7 +172,7 @@ func (w *responseWriter) Write() {
 	w.impl.WriteHeader(w.httpCode)
 }
 
-func withResponseWriter(handler func(ResponseWriter, *http.Request)) http.HandlerFunc {
+func httpHandlerFunc(handler HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		respWriter := &responseWriter{
 			impl:          w,

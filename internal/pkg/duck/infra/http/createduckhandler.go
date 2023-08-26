@@ -19,7 +19,7 @@ func (h *createDuckHandler) Path() string {
 	return "/duck"
 }
 
-func (h *createDuckHandler) HTTPHandler() func(pkghttp.ResponseWriter, *http.Request) {
+func (h *createDuckHandler) HTTPHandler() pkghttp.HandlerFunc {
 	return func(w pkghttp.ResponseWriter, r *http.Request) {
 		data, err := pkghttp.Parse(pkghttp.JSONBody[CreateDuckRequest](), r, nil)
 		if err != nil {

@@ -11,7 +11,7 @@ const (
 	healthPath = "/healthz"
 )
 
-func WithHealthCheck(customHandlerFunc http.HandlerFunc) ServerOption {
+func WithHealthCheck(customHandlerFunc HandlerFunc) ServerOption {
 	defaultHandler := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("ContentType", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -25,7 +25,7 @@ func WithHealthCheck(customHandlerFunc http.HandlerFunc) ServerOption {
 	return func(router *mux.Router) {
 		handler := defaultHandler
 		if customHandlerFunc != nil {
-			handler = customHandlerFunc
+			handler = httpHandlerFunc(customHandlerFunc)
 		}
 
 		router.

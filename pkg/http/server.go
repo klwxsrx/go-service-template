@@ -80,7 +80,7 @@ func (s server) Register(handler Handler, opts ...ServerOption) {
 	}
 
 	handlerWithPanicWrapper := panicHandlerWrapper(
-		withResponseWriter(handler.HTTPHandler()),
+		httpHandlerFunc(handler.HTTPHandler()),
 		s.panicHandler,
 	)
 	router.
