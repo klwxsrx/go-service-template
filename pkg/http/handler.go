@@ -2,14 +2,12 @@ package http
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+
+	pkgstrings "github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
 type Handler interface {
@@ -36,7 +34,7 @@ func PathParameter[T any](param string) RequestDataProvider[T] {
 			var result T
 			return result, fmt.Errorf("path parameter %s not found", param)
 		}
-		return convertRequestDataValue[T](paramValue)
+		return pkgstrings.ParseTypedValue[T](paramValue)
 	}
 }
 
@@ -47,7 +45,7 @@ func QueryParameter[T any](param string) RequestDataProvider[T] {
 			var result T
 			return result, fmt.Errorf("query parameter %s not found", param)
 		}
-		return convertRequestDataValue[T](value)
+		return pkgstrings.ParseTypedValue[T](value)
 	}
 }
 
@@ -59,7 +57,7 @@ func QueryParameters[T any](param string) RequestDataProvider[[]T] {
 		}
 		result := make([]T, 0, len(values))
 		for _, value := range values {
-			concreteValue, err := convertRequestDataValue[T](value)
+			concreteValue, err := pkgstrings.ParseTypedValue[T](value)
 			if err != nil {
 				return nil, err
 			}
@@ -76,7 +74,7 @@ func Header[T any](key string) RequestDataProvider[T] {
 			var result T
 			return result, fmt.Errorf("header with key %s not found", key)
 		}
-		return convertRequestDataValue[T](header)
+		return pkgstrings.ParseTypedValue[T](header)
 	}
 }
 
@@ -97,7 +95,7 @@ func CookieValue[T any](name string) RequestDataProvider[T] {
 			var result T
 			return result, fmt.Errorf("cookie with name %s not found", name)
 		}
-		return convertRequestDataValue[T](cookie.Value)
+		return pkgstrings.ParseTypedValue[T](cookie.Value)
 	}
 }
 
@@ -145,53 +143,4 @@ func WithJSONResponse[T any](
 
 		writeHeaders(w, statusCode, headers)
 	}
-}
-
-func convertRequestDataValue[T any](value string) (T, error) {
-	var v any
-	var err error
-	var blank T
-	switch any(blank).(type) {
-	case bool:
-		v, err = strconv.ParseBool(value)
-	case int:
-		v, err = strconv.Atoi(value)
-	case uint:
-		v, err = strconv.ParseUint(value, 10, 64)
-	case float64:
-		v, err = strconv.ParseFloat(value, 64)
-	case string:
-		v, err = value, nil
-	case time.Time:
-		v, err = time.Parse(time.RFC3339, value)
-		if err != nil {
-			break
-		}
-		v, err = time.Parse(time.RFC3339Nano, value)
-		if err != nil {
-			break
-		}
-		var unixTime int64
-		unixTime, err = strconv.ParseInt(value, 10, 32)
-		if err != nil {
-			break
-		}
-		if unixTime < 0 {
-			err = errors.New("got negative seconds value")
-			break
-		}
-
-		v = time.Unix(unixTime, 0)
-	case time.Duration:
-		v, err = time.ParseDuration(value)
-	case uuid.UUID:
-		v, err = uuid.Parse(value)
-	default:
-		return blank, fmt.Errorf("unsupported value type %T", blank)
-	}
-
-	if err != nil {
-		return blank, fmt.Errorf("failed to convert to type %T: %w", blank, err)
-	}
-	return v.(T), nil
 }
