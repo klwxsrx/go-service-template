@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gorilla/mux"
 
@@ -118,6 +120,16 @@ func shutdown(ctx context.Context, srv *http.Server) error {
 		return fmt.Errorf("failed to shutdown http server: %w", err)
 	}
 	return nil
+}
+
+func getRouteName(method, path string) string {
+	path = strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Latin, r) || unicode.IsDigit(r) {
+			return r
+		}
+		return '_'
+	}, strings.Trim(path, "/"))
+	return strings.ToLower(fmt.Sprintf("%s_%s", method, path))
 }
 
 func NewServer(

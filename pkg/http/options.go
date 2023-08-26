@@ -35,3 +35,15 @@ func WithHealthCheck(customHandlerFunc HandlerFunc) ServerOption {
 			HandlerFunc(handler)
 	}
 }
+
+func WithMW(mw ServerMiddleware) ServerOption {
+	return func(router *mux.Router) {
+		router.Use(mux.MiddlewareFunc(mw))
+	}
+}
+
+func WithCORSHandler() ServerOption {
+	return func(router *mux.Router) {
+		router.Use(mux.CORSMethodMiddleware(router))
+	}
+}
