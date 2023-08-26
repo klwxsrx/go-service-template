@@ -18,8 +18,12 @@ const (
 			id      uuid PRIMARY KEY,
 			topic   text,
 			key     text,
-			payload bytea
+			payload bytea,
+			created_at timestamptz default current_timestamp
 		)
+	`
+	messageStoreTableIndexDDL = `
+		CREATE INDEX IF NOT EXISTS message_outbox_created_at ON message_outbox(created_at)
 	`
 )
 
@@ -31,6 +35,7 @@ func (s *messageStore) GetBatch(ctx context.Context) ([]message.Message, error) 
 	query, args, err := sq.
 		Select("id", "topic", "key", "payload").
 		From("message_outbox").
+		OrderBy("created_at").
 		Limit(batchLimit).
 		ToSql()
 	if err != nil {
@@ -92,6 +97,10 @@ func (s *messageStore) Delete(ctx context.Context, ids []uuid.UUID) error {
 
 func (s *messageStore) createMessageStoreTableIfNotExists(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, messageStoreTableDDL)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, messageStoreTableIndexDDL)
 	return err
 }
 
