@@ -10,10 +10,18 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	pkglogstub "github.com/klwxsrx/go-service-template/pkg/log/stub"
 	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
-	"github.com/klwxsrx/go-service-template/pkg/persistence"
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
 )
+
+const logLevelDisabledValue = "disabled"
+
+var logLevelMap = map[string]log.Level{
+	"debug": log.LevelDebug,
+	"info":  log.LevelInfo,
+	"warn":  log.LevelWarn,
+	"error": log.LevelError,
+}
 
 func HandleAppPanic(ctx context.Context, logger log.Logger) {
 	msg := recover()
@@ -30,6 +38,23 @@ func HandleAppPanic(ctx context.Context, logger log.Logger) {
 		"message": msg,
 		"stack":   string(debug.Stack()),
 	}).Fatal(ctx, "app failed with panic")
+}
+
+func InitLogger() log.Logger {
+	logLevelStr, err := env.ParseString("LOG_LEVEL")
+	if err != nil {
+		return log.New(log.LevelInfo)
+	}
+
+	if logLevelStr == logLevelDisabledValue {
+		return pkglogstub.NewLogger()
+	}
+
+	logLevel, ok := logLevelMap[logLevelStr]
+	if !ok {
+		logLevel = log.LevelInfo
+	}
+	return log.New(logLevel)
 }
 
 func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.ReadDirFS) sql.Database {
@@ -62,21 +87,13 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 	return db
 }
 
-func MustInitSQLTransaction(
-	sqlClient sql.TxClient,
-	instanceName string,
-	onCommit func(),
-) (sql.Client, persistence.Transaction) {
-	return sql.NewTransaction(sqlClient, instanceName, onCommit)
-}
-
 func MustInitSQLMessageOutbox(
 	ctx context.Context,
 	sqlClient sql.TxClient,
 	messageDispatcher pkgmessage.Dispatcher,
 	logger log.Logger,
 ) pkgmessage.Outbox {
-	wrappedSQLClient, tx := MustInitSQLTransaction(sqlClient, "messageOutbox", func() {})
+	wrappedSQLClient, tx := sql.NewTransaction(sqlClient, "messageOutbox", func() {})
 	messageStore, err := sql.NewMessageStore(ctx, wrappedSQLClient)
 	if err != nil {
 		panic(fmt.Errorf("init message outbox: %w", err))

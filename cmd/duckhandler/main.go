@@ -17,7 +17,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	logger := pkglog.New(pkglog.LevelInfo)
+	logger := pkgcmd.InitLogger()
 	metrics := pkgmetricstub.NewMetrics()
 	observability := pkgobservability.New()
 	defer pkgcmd.HandleAppPanic(ctx, logger)

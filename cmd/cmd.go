@@ -10,7 +10,11 @@ import (
 
 const gooseServiceDestinationName = "goose"
 
-func MustInitGooseHTTPClient(observer observability.Observer, metrics metric.Metrics, logger log.Logger) http.Client {
+func MustInitGooseHTTPClient(
+	observer observability.Observer,
+	metrics metric.Metrics,
+	logger log.Logger,
+) http.Client {
 	gooseServiceHost := env.Must(env.ParseString("GOOSE_SERVICE_URL"))
 	return getHTTPClient(
 		gooseServiceHost,

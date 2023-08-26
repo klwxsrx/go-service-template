@@ -31,7 +31,7 @@ func NewDependencyContainer(
 ) *DependencyContainer {
 	d := &DependencyContainer{}
 
-	wrappedSQLClient, transaction := pkgcmd.MustInitSQLTransaction(
+	wrappedSQLClient, transaction := pkgsql.NewTransaction(
 		sqlClient,
 		domainName,
 		msgOutbox.Process,

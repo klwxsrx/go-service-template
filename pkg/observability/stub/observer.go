@@ -16,6 +16,6 @@ func (o observer) WithRequestID(ctx context.Context, _ string) context.Context {
 	return ctx
 }
 
-func New() observability.Observer {
+func NewObserver() observability.Observer {
 	return observer{}
 }
