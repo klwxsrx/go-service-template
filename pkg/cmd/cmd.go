@@ -29,13 +29,8 @@ func HandleAppPanic(ctx context.Context, logger log.Logger) {
 		return
 	}
 
-	err, ok := msg.(error)
-	if ok {
-		msg = err.Error()
-	}
-
 	logger.WithField("panic", log.Fields{
-		"message": msg,
+		"message": fmt.Sprintf("%v", msg),
 		"stack":   string(debug.Stack()),
 	}).Fatal(ctx, "app failed with panic")
 }

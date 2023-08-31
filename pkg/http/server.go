@@ -44,9 +44,8 @@ type Server interface {
 }
 
 type server struct {
-	srv          *http.Server
-	router       *mux.Router
-	panicHandler PanicHandler
+	srv    *http.Server
+	router *mux.Router
 }
 
 type serverProcess struct {
@@ -81,15 +80,12 @@ func (s server) Register(handler Handler, opts ...ServerOption) {
 		}
 	}
 
-	handlerWithPanicWrapper := panicHandlerWrapper(
-		httpHandlerFunc(handler.HTTPHandler()),
-		s.panicHandler,
-	)
+	httpHandler := httpHandlerWrapper(handler.HTTPHandler())
 	router.
 		Name(getRouteName(handler.Method(), handler.Path())).
 		Methods(handler.Method()).
 		Path(handler.Path()).
-		Handler(handlerWithPanicWrapper)
+		Handler(httpHandler)
 }
 
 func listenAndServe[signal any](ctx context.Context, srv *http.Server, termSignal <-chan signal) error {
@@ -134,10 +130,9 @@ func getRouteName(method, path string) string {
 
 func NewServer(
 	address string,
-	panicHandler PanicHandler,
 	opts ...ServerOption,
 ) Server {
-	router := mux.NewRouter()
+	router := withHandlerMetadata(mux.NewRouter())
 	for _, opt := range opts {
 		opt(router)
 	}
@@ -150,8 +145,7 @@ func NewServer(
 	}
 
 	return server{
-		srv:          srv,
-		router:       router,
-		panicHandler: panicHandler,
+		srv:    srv,
+		router: router,
 	}
 }

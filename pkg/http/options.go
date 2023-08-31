@@ -25,7 +25,7 @@ func WithHealthCheck(customHandlerFunc HandlerFunc) ServerOption {
 	return func(router *mux.Router) {
 		handler := defaultHandler
 		if customHandlerFunc != nil {
-			handler = httpHandlerFunc(customHandlerFunc)
+			handler = httpHandlerWrapper(customHandlerFunc)
 		}
 
 		router.

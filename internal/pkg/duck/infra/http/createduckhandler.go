@@ -20,20 +20,19 @@ func (h *createDuckHandler) Path() string {
 }
 
 func (h *createDuckHandler) HTTPHandler() pkghttp.HandlerFunc {
-	return func(w pkghttp.ResponseWriter, r *http.Request) {
-		data, err := pkghttp.Parse(pkghttp.JSONBody[CreateDuckRequest](), r, nil)
+	return func(w pkghttp.ResponseWriter, r *http.Request) (err error) {
+		data, err := pkghttp.Parse(pkghttp.JSONBody[createDuckRequest](), r, err)
 		if err != nil {
-			w.SetStatusCode(http.StatusBadRequest)
-			return
+			return err
 		}
 
 		err = h.duckService.Create(r.Context(), data.Name)
 		if err != nil {
-			w.SetStatusCode(http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		w.SetStatusCode(http.StatusCreated)
+		return nil
 	}
 }
 
@@ -41,6 +40,6 @@ func NewCreateDuckHandler(duckService service.DuckService) pkghttp.Handler {
 	return &createDuckHandler{duckService: duckService}
 }
 
-type CreateDuckRequest struct {
+type createDuckRequest struct {
 	Name string `json:"name"`
 }

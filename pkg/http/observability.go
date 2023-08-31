@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
 )
 
@@ -17,7 +16,6 @@ type RequestIDExtractor func(r *http.Request) (string, bool)
 
 func WithObservability(
 	observer observability.Observer,
-	optionalLogger log.Logger,
 	extractor RequestIDExtractor, fallbacks ...RequestIDExtractor,
 ) ServerOption {
 	extractors := append([]RequestIDExtractor{extractor}, fallbacks...)
@@ -39,15 +37,10 @@ func WithObservability(
 				return
 			}
 
-			r = r.WithContext(observer.WithRequestID(r.Context(), requestID))
-			if optionalLogger != nil {
-				r = r.WithContext(optionalLogger.WithContext(r.Context(), wrapFieldsWithRequestLogEntry(
-					log.Fields{
-						"requestID": requestID,
-					},
-				)))
-			}
+			meta := HandlerMeta(r.Context())
+			meta.RequestID = &requestID
 
+			r = r.WithContext(observer.WithRequestID(r.Context(), requestID))
 			handler.ServeHTTP(w, r)
 		})
 	})

@@ -20,7 +20,7 @@ const (
 	LevelDebug Level = iota
 	LevelInfo
 	LevelWarn
-	LevelError
+	LevelError // TODO: add disabled log level
 )
 
 var zerologLevelMap = map[Level]zerolog.Level{
@@ -46,7 +46,7 @@ type Logger interface {
 }
 
 type logger struct {
-	impl   zerolog.Logger
+	impl   zerolog.Logger // TODO: change to log/slog
 	fields Fields
 }
 

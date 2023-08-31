@@ -1,16 +1,19 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/gorilla/mux"
 
 	pkgstrings "github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
-type HandlerFunc func(w ResponseWriter, r *http.Request)
+type HandlerFunc func(w ResponseWriter, r *http.Request) (err error)
 
 type Handler interface {
 	Method() string
@@ -27,12 +30,18 @@ type ResponseWriter interface {
 
 type RequestDataProvider[T any] func(*http.Request) (T, error)
 
+var ErrParsingError = errors.New("failed to parse request")
+
 func Parse[T any](provider RequestDataProvider[T], from *http.Request, lastErr error) (T, error) {
 	if lastErr != nil {
 		var result T
 		return result, lastErr
 	}
-	return provider(from)
+	result, err := provider(from)
+	if err != nil {
+		return result, fmt.Errorf("%w: %s", ErrParsingError, err.Error())
+	}
+	return result, nil
 }
 
 func PathParameter[T any](param string) RequestDataProvider[T] {
@@ -145,7 +154,7 @@ func (w *responseWriter) SetJSONBody(data any) ResponseWriter {
 	w.writeBodyFunc = func() error {
 		bodyEncoded, err := json.Marshal(data)
 		if err != nil {
-			return fmt.Errorf("failed to encode to json: %w", err)
+			return fmt.Errorf("failed to encode body: %w", err)
 		}
 
 		_, err = w.impl.Write(bodyEncoded)
@@ -159,27 +168,61 @@ func (w *responseWriter) SetJSONBody(data any) ResponseWriter {
 	return w
 }
 
-func (w *responseWriter) Write() {
-	if w.writeBodyFunc == nil {
-		w.impl.WriteHeader(w.httpCode)
-		return
+func (w *responseWriter) Write(ctx context.Context, err error) {
+	var httpCode int
+	switch {
+	case errors.Is(err, ErrParsingError):
+		httpCode = http.StatusBadRequest
+	case err != nil:
+		httpCode = http.StatusInternalServerError
+	case w.writeBodyFunc != nil:
+		err = w.writeBodyFunc()
+		if err != nil {
+			httpCode = http.StatusInternalServerError
+			break
+		}
+		fallthrough
+	default:
+		httpCode = w.httpCode
 	}
 
-	err := w.writeBodyFunc()
-	if err != nil {
-		w.httpCode = http.StatusInternalServerError
-	}
-	w.impl.WriteHeader(w.httpCode)
+	meta := HandlerMeta(ctx)
+	meta.ResponseCode = httpCode
+	meta.Error = err
+
+	w.impl.WriteHeader(httpCode)
 }
 
-func httpHandlerFunc(handler HandlerFunc) http.HandlerFunc {
+func (w *responseWriter) WritePanic(ctx context.Context, panic Panic) {
+	meta := HandlerMeta(ctx)
+	meta.ResponseCode = http.StatusInternalServerError
+	meta.Panic = &panic
+
+	w.impl.WriteHeader(http.StatusInternalServerError)
+}
+
+func httpHandlerWrapper(handler HandlerFunc) http.HandlerFunc {
+	recoverPanic := func(r *http.Request, respWriter *responseWriter) {
+		msg := recover()
+		if msg == nil {
+			return
+		}
+
+		respWriter.WritePanic(r.Context(), Panic{
+			Message:    fmt.Sprintf("%v", msg),
+			Stacktrace: debug.Stack(),
+		})
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		respWriter := &responseWriter{
 			impl:          w,
 			writeBodyFunc: nil,
 			httpCode:      http.StatusOK,
 		}
-		handler(respWriter, r)
-		respWriter.Write()
+
+		defer recoverPanic(r, respWriter)
+		err := handler(respWriter, r)
+		respWriter.Write(r.Context(), err)
 	}
 }

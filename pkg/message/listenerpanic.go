@@ -10,7 +10,7 @@ import (
 )
 
 type Panic struct {
-	Message    any
+	Message    string
 	Stacktrace []byte
 }
 
@@ -19,7 +19,7 @@ type (
 	PanicHandlerOption func(context.Context, *Message, Panic)
 )
 
-func NewDefaultPanicHandler(options ...PanicHandlerOption) PanicHandler {
+func NewDefaultPanicHandler(options ...PanicHandlerOption) PanicHandler { // TODO: pass panic to context as http does
 	return func(ctx context.Context, message *Message, p Panic) error {
 		for _, opt := range options {
 			opt(ctx, message, p)
@@ -52,7 +52,7 @@ func panicHandlerWrapper(handler Handler, panicHandler PanicHandler) Handler {
 			}
 
 			p := Panic{
-				Message:    panicMsg,
+				Message:    fmt.Sprintf("%v", panicMsg),
 				Stacktrace: debug.Stack(),
 			}
 			err = panicHandler(ctx, msg, p)

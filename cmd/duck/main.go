@@ -38,15 +38,10 @@ func main() {
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,
-		pkghttp.NewDefaultPanicHandler(
-			pkghttp.WithPanicMetrics(metrics),
-			pkghttp.WithPanicLogging(logger),
-		),
 		pkghttp.WithHealthCheck(nil),
 		pkghttp.WithCORSHandler(),
 		pkghttp.WithObservability(
 			observability,
-			logger,
 			pkghttp.NewHTTPHeaderRequestIDExtractor(pkghttp.DefaultRequestIDHeader),
 			pkghttp.NewRandomUUIDRequestIDExtractor(),
 		),
