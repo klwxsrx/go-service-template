@@ -3,9 +3,8 @@ package log
 
 import (
 	"context"
+	"log/slog"
 	"os"
-
-	"github.com/rs/zerolog"
 )
 
 type contextKey int
@@ -24,11 +23,11 @@ const (
 	LevelError
 )
 
-var zerologLevelMap = map[Level]zerolog.Level{
-	LevelDebug: zerolog.DebugLevel,
-	LevelInfo:  zerolog.InfoLevel,
-	LevelWarn:  zerolog.WarnLevel,
-	LevelError: zerolog.ErrorLevel,
+var slogLevelMap = map[Level]slog.Level{
+	LevelDebug: slog.LevelDebug,
+	LevelInfo:  slog.LevelInfo,
+	LevelWarn:  slog.LevelWarn,
+	LevelError: slog.LevelError,
 }
 
 type Fields map[string]any
@@ -42,12 +41,11 @@ type Logger interface {
 	Error(ctx context.Context, str string)
 	Warn(ctx context.Context, str string)
 	Info(ctx context.Context, str string)
-	Fatal(ctx context.Context, str string)
 	Log(ctx context.Context, level Level, str string)
 }
 
 type logger struct {
-	impl   zerolog.Logger // TODO: change to log/slog
+	impl   *slog.Logger
 	fields Fields
 }
 
@@ -70,7 +68,11 @@ func (l logger) WithField(name string, v any) Logger {
 }
 
 func (l logger) WithError(err error) Logger {
-	l.impl = l.impl.With().Stack().Err(err).Logger()
+	if err == nil {
+		return l
+	}
+
+	l.impl = l.impl.With("error", err.Error())
 	return l
 }
 
@@ -91,41 +93,45 @@ func (l logger) WithContext(ctx context.Context, fields Fields) context.Context 
 }
 
 func (l logger) Debug(ctx context.Context, str string) {
-	l.loggerWithFields(ctx).Debug().Msg(str)
+	l.loggerWithFields(ctx).Debug(str)
 }
 
 func (l logger) Error(ctx context.Context, str string) {
-	l.loggerWithFields(ctx).Error().Msg(str)
+	l.loggerWithFields(ctx).Error(str)
 }
 
 func (l logger) Warn(ctx context.Context, str string) {
-	l.loggerWithFields(ctx).Warn().Msg(str)
+	l.loggerWithFields(ctx).Warn(str)
 }
 
 func (l logger) Info(ctx context.Context, str string) {
-	l.loggerWithFields(ctx).Info().Msg(str)
-}
-
-func (l logger) Fatal(ctx context.Context, str string) {
-	l.loggerWithFields(ctx).Fatal().Msg(str)
+	l.loggerWithFields(ctx).Info(str)
 }
 
 func (l logger) Log(ctx context.Context, level Level, str string) {
-	if level != LevelDisabled {
-		l.loggerWithFields(ctx).WithLevel(zerologLevelMap[level]).Msg(str)
+	if level == LevelDisabled {
+		return
 	}
+
+	l.loggerWithFields(ctx).Log(ctx, slogLevelMap[level], str)
 }
 
-func (l logger) loggerWithFields(ctx context.Context) *zerolog.Logger {
+func (l logger) loggerWithFields(ctx context.Context) *slog.Logger {
 	fields := l.fields
 	ctxFields := getFieldsFromContextOrNil(ctx)
 	if len(ctxFields) > 0 {
 		fields = deepCopyFields(l.fields, len(ctxFields))
 		mergeFields(fields, ctxFields)
 	}
+	if len(fields) == 0 {
+		return l.impl
+	}
 
-	z := l.impl.With().Fields(map[string]any(fields)).Logger()
-	return &z
+	impl := l.impl
+	for name, value := range fields {
+		impl = impl.With(name, value)
+	}
+	return impl
 }
 
 func New(level Level) Logger {
@@ -134,7 +140,9 @@ func New(level Level) Logger {
 	}
 
 	return logger{
-		impl:   zerolog.New(os.Stdout).Level(zerologLevelMap[level]).With().Timestamp().Logger(),
+		impl: slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slogLevelMap[level],
+		})),
 		fields: make(Fields),
 	}
 }

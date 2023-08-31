@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"os"
 	"runtime/debug"
 
 	"github.com/klwxsrx/go-service-template/pkg/env"
@@ -30,7 +31,8 @@ func HandleAppPanic(ctx context.Context, logger log.Logger) {
 	logger.WithField("panic", log.Fields{
 		"message": fmt.Sprintf("%v", msg),
 		"stack":   string(debug.Stack()),
-	}).Fatal(ctx, "app failed with panic")
+	}).Error(ctx, "app failed with panic")
+	os.Exit(1)
 }
 
 func InitLogger() log.Logger {
