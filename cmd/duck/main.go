@@ -46,7 +46,7 @@ func main() {
 			pkghttp.NewRandomUUIDRequestIDExtractor(),
 		),
 		pkghttp.WithMetrics(metrics),
-		pkghttp.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),
+		pkghttp.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelError),
 	)
 	container.RegisterHTTPHandlers(httpServer)
 

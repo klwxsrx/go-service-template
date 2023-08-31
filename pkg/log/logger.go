@@ -17,10 +17,11 @@ const (
 type Level int
 
 const (
-	LevelDebug Level = iota
+	LevelDisabled Level = iota
+	LevelDebug
 	LevelInfo
 	LevelWarn
-	LevelError // TODO: add disabled log level
+	LevelError
 )
 
 var zerologLevelMap = map[Level]zerolog.Level{
@@ -110,7 +111,9 @@ func (l logger) Fatal(ctx context.Context, str string) {
 }
 
 func (l logger) Log(ctx context.Context, level Level, str string) {
-	l.loggerWithFields(ctx).WithLevel(zerologLevelMap[level]).Msg(str)
+	if level != LevelDisabled {
+		l.loggerWithFields(ctx).WithLevel(zerologLevelMap[level]).Msg(str)
+	}
 }
 
 func (l logger) loggerWithFields(ctx context.Context) *zerolog.Logger {
@@ -125,10 +128,13 @@ func (l logger) loggerWithFields(ctx context.Context) *zerolog.Logger {
 	return &z
 }
 
-func New(lvl Level) Logger {
-	z := zerolog.New(os.Stdout).Level(zerologLevelMap[lvl]).With().Timestamp().Logger()
+func New(level Level) Logger {
+	if level == LevelDisabled {
+		return stub{}
+	}
+
 	return logger{
-		impl:   z,
+		impl:   zerolog.New(os.Stdout).Level(zerologLevelMap[level]).With().Timestamp().Logger(),
 		fields: make(Fields),
 	}
 }

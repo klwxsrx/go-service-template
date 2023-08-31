@@ -8,19 +8,17 @@ import (
 
 	"github.com/klwxsrx/go-service-template/pkg/env"
 	"github.com/klwxsrx/go-service-template/pkg/log"
-	pkglogstub "github.com/klwxsrx/go-service-template/pkg/log/stub"
 	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
 )
 
-const logLevelDisabledValue = "disabled"
-
 var logLevelMap = map[string]log.Level{
-	"debug": log.LevelDebug,
-	"info":  log.LevelInfo,
-	"warn":  log.LevelWarn,
-	"error": log.LevelError,
+	"disabled": log.LevelDisabled,
+	"debug":    log.LevelDebug,
+	"info":     log.LevelInfo,
+	"warn":     log.LevelWarn,
+	"error":    log.LevelError,
 }
 
 func HandleAppPanic(ctx context.Context, logger log.Logger) {
@@ -39,10 +37,6 @@ func InitLogger() log.Logger {
 	logLevelStr, err := env.ParseString("LOG_LEVEL")
 	if err != nil {
 		return log.New(log.LevelInfo)
-	}
-
-	if logLevelStr == logLevelDisabledValue {
-		return pkglogstub.NewLogger()
 	}
 
 	logLevel, ok := logLevelMap[logLevelStr]
@@ -122,7 +116,7 @@ func MustInitPulsarMessageBroker(optionalLogger log.Logger) *pulsar.MessageBroke
 	}
 
 	if optionalLogger == nil {
-		optionalLogger = pkglogstub.NewLogger()
+		optionalLogger = log.New(log.LevelDisabled)
 	}
 
 	messageBroker, err := pulsar.NewMessageBroker(config, optionalLogger)
