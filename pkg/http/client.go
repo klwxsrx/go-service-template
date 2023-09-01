@@ -36,7 +36,7 @@ func NewClient(opts ...ClientOption) Client {
 	return client{impl}
 }
 
-func WithBaseURL(url string) ClientOption {
+func WithClientBaseURL(url string) ClientOption {
 	return func(r *resty.Client) {
 		r.SetBaseURL(url)
 	}
@@ -49,6 +49,8 @@ func WithRequestObservability(observer observability.Observer, requestIDHeaderNa
 			if !ok {
 				return nil
 			}
+
+			req.SetContext(withRequestID(req.Context(), id))
 			req.SetHeader(requestIDHeaderName, id)
 			return nil
 		})
@@ -63,6 +65,7 @@ func WithRequestLogging(destinationName string, logger log.Logger, infoLevel, er
 	return func(r *resty.Client) {
 		r.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
 			logger = getRequestResponseFieldsLogger(resp.Request.RawRequest, resp.StatusCode(), logger)
+			logger = getRequestIDFieldLogger(resp.Request.Context(), logger)
 			if resp.StatusCode() >= http.StatusInternalServerError {
 				logger.Log(resp.Request.Context(), errorLevel, "http call completed with internal error")
 			} else {
@@ -71,6 +74,7 @@ func WithRequestLogging(destinationName string, logger log.Logger, infoLevel, er
 			return nil
 		})
 		r.OnError(func(req *resty.Request, err error) {
+			logger = getRequestIDFieldLogger(req.Context(), logger)
 			if req.RawRequest != nil {
 				logger = getRequestFieldsLogger(req.RawRequest, logger)
 			}
@@ -93,4 +97,12 @@ func WithRequestMetrics(destinationName string, metrics metric.Metrics) ClientOp
 			return nil
 		})
 	}
+}
+
+func getRequestIDFieldLogger(ctx context.Context, logger log.Logger) log.Logger {
+	requestID := getRequestID(ctx)
+	if requestID == nil {
+		return logger
+	}
+	return logger.WithField(requestIDLogEntry, requestID)
 }

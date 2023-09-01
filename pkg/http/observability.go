@@ -37,10 +37,9 @@ func WithObservability(
 				return
 			}
 
-			meta := HandlerMeta(r.Context())
-			meta.RequestID = &requestID
-
-			r = r.WithContext(observer.WithRequestID(r.Context(), requestID))
+			ctx := observer.WithRequestID(r.Context(), requestID)
+			ctx = withRequestID(ctx, requestID)
+			r = r.WithContext(ctx)
 			handler.ServeHTTP(w, r)
 		})
 	})

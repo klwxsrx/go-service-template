@@ -6,6 +6,8 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
+const requestIDLogEntry = "requestID"
+
 func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPaths ...string) ServerOption {
 	excludedPaths = append(excludedPaths,
 		healthPath,
@@ -27,22 +29,22 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 				return
 			}
 
-			requestMeta := HandlerMeta(r.Context())
-			if requestMeta.RequestID != nil {
-				r = r.WithContext(logger.WithContext(r.Context(), log.Fields{"requestID": *requestMeta.RequestID}))
+			requestID := getRequestID(r.Context())
+			if requestID != nil {
+				r = r.WithContext(logger.WithContext(r.Context(), log.Fields{requestIDLogEntry: *requestID}))
 			}
 
 			handler.ServeHTTP(w, r)
-			result := HandlerMeta(r.Context())
+			result := getHandlerMetadata(r.Context())
 
-			loggerWithFields := getRequestResponseFieldsLogger(r, result.ResponseCode, logger)
+			loggerWithFields := getRequestResponseFieldsLogger(r, result.Code, logger)
 			switch {
 			case result.Panic != nil:
 				loggerWithFields.WithField("panic", log.Fields{
 					"message": result.Panic.Message,
 					"stack":   string(result.Panic.Stacktrace),
 				}).Error(r.Context(), "request handled with panic")
-			case result.ResponseCode >= http.StatusInternalServerError:
+			case result.Code >= http.StatusInternalServerError:
 				loggerWithFields.
 					WithError(result.Error).
 					Log(r.Context(), errorLevel, "request handled with internal error")

@@ -11,6 +11,7 @@ type contextKey int
 
 const (
 	handlerMetaContextKey contextKey = iota
+	requestIDContextKey
 )
 
 type Panic struct {
@@ -18,27 +19,38 @@ type Panic struct {
 	Stacktrace []byte
 }
 
-type HandlerMetadata struct {
-	RequestID    *string
-	ResponseCode int
-	Panic        *Panic
-	Error        error
+type handlerMetadata struct {
+	Code  int
+	Panic *Panic
+	Error error
 }
 
 func withHandlerMetadata(router *mux.Router) *mux.Router {
 	router.Use(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), handlerMetaContextKey, &HandlerMetadata{})
+			ctx := context.WithValue(r.Context(), handlerMetaContextKey, &handlerMetadata{})
 			handler.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})
 	return router
 }
 
-func HandlerMeta(ctx context.Context) *HandlerMetadata {
-	meta, ok := ctx.Value(handlerMetaContextKey).(*HandlerMetadata)
+func getHandlerMetadata(ctx context.Context) *handlerMetadata {
+	meta, ok := ctx.Value(handlerMetaContextKey).(*handlerMetadata)
 	if ok {
 		return meta
 	}
-	return &HandlerMetadata{}
+	return &handlerMetadata{}
+}
+
+func withRequestID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, requestIDContextKey, id)
+}
+
+func getRequestID(ctx context.Context) *string {
+	id, ok := ctx.Value(requestIDContextKey).(string)
+	if ok {
+		return &id
+	}
+	return nil
 }

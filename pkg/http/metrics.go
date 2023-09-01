@@ -13,7 +13,7 @@ func WithMetrics(metrics metric.Metrics) ServerOption {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()
 			handler.ServeHTTP(w, r)
-			result := HandlerMeta(r.Context())
+			result := getHandlerMetadata(r.Context())
 
 			if result.Panic != nil {
 				metrics.With(metric.Labels{
@@ -25,7 +25,7 @@ func WithMetrics(metrics metric.Metrics) ServerOption {
 			metrics.With(metric.Labels{
 				"method": r.Method,
 				"path":   r.URL.Path,
-				"code":   fmt.Sprintf("%d", result.ResponseCode),
+				"code":   fmt.Sprintf("%d", result.Code),
 			}).Duration("http_api_request_duration_seconds", time.Since(started))
 		})
 	})

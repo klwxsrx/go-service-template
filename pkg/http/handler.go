@@ -186,16 +186,16 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 		httpCode = w.httpCode
 	}
 
-	meta := HandlerMeta(ctx)
-	meta.ResponseCode = httpCode
+	meta := getHandlerMetadata(ctx)
+	meta.Code = httpCode
 	meta.Error = err
 
 	w.impl.WriteHeader(httpCode)
 }
 
 func (w *responseWriter) WritePanic(ctx context.Context, panic Panic) {
-	meta := HandlerMeta(ctx)
-	meta.ResponseCode = http.StatusInternalServerError
+	meta := getHandlerMetadata(ctx)
+	meta.Code = http.StatusInternalServerError
 	meta.Panic = &panic
 
 	w.impl.WriteHeader(http.StatusInternalServerError)
