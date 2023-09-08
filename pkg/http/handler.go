@@ -32,16 +32,31 @@ type RequestDataProvider[T any] func(*http.Request) (T, error)
 
 var ErrParsingError = errors.New("failed to parse request")
 
-func Parse[T any](provider RequestDataProvider[T], from *http.Request, lastErr error) (T, error) {
+func Parse[T any](from *http.Request, data RequestDataProvider[T], lastErr error) (T, error) {
 	if lastErr != nil {
 		var result T
 		return result, lastErr
 	}
-	result, err := provider(from)
+
+	result, err := data(from)
 	if err != nil {
-		return result, fmt.Errorf("%w: %s", ErrParsingError, err.Error())
+		return result, err
 	}
+
 	return result, nil
+}
+
+func ParseOptional[T any](from *http.Request, data RequestDataProvider[T], lastErr error) *T {
+	if lastErr != nil {
+		return nil
+	}
+
+	result, err := data(from)
+	if err != nil {
+		return nil
+	}
+
+	return &result
 }
 
 func PathParameter[T any](param string) RequestDataProvider[T] {
@@ -50,7 +65,7 @@ func PathParameter[T any](param string) RequestDataProvider[T] {
 		paramValue, ok := params[param]
 		if !ok {
 			var result T
-			return result, fmt.Errorf("path parameter %s not found", param)
+			return result, fmt.Errorf("%w: path parameter %s not found", ErrParsingError, param)
 		}
 		return pkgstrings.ParseTypedValue[T](paramValue)
 	}
@@ -61,7 +76,7 @@ func QueryParameter[T any](param string) RequestDataProvider[T] {
 		value := r.URL.Query().Get(param)
 		if value == "" {
 			var result T
-			return result, fmt.Errorf("query parameter %s not found", param)
+			return result, fmt.Errorf("%w: query parameter %s not found", ErrParsingError, param)
 		}
 		return pkgstrings.ParseTypedValue[T](value)
 	}
@@ -71,7 +86,7 @@ func QueryParameters[T any](param string) RequestDataProvider[[]T] {
 	return func(r *http.Request) ([]T, error) {
 		values, ok := r.URL.Query()[param]
 		if !ok {
-			return nil, fmt.Errorf("query parameter %s not found", param)
+			return nil, fmt.Errorf("%w: query parameter %s not found", ErrParsingError, param)
 		}
 		result := make([]T, 0, len(values))
 		for _, value := range values {
@@ -90,7 +105,7 @@ func Header[T any](key string) RequestDataProvider[T] {
 		header := r.Header.Get(key)
 		if header == "" {
 			var result T
-			return result, fmt.Errorf("header with key %s not found", key)
+			return result, fmt.Errorf("%w: header with key %s not found", ErrParsingError, key)
 		}
 		return pkgstrings.ParseTypedValue[T](header)
 	}
@@ -100,7 +115,7 @@ func Cookie(name string) RequestDataProvider[*http.Cookie] {
 	return func(r *http.Request) (*http.Cookie, error) {
 		cookie, err := r.Cookie(name)
 		if err != nil {
-			return nil, fmt.Errorf("cookie with name %s not found", name)
+			return nil, fmt.Errorf("%w: cookie with name %s not found", ErrParsingError, name)
 		}
 		return cookie, nil
 	}
@@ -111,7 +126,7 @@ func CookieValue[T any](name string) RequestDataProvider[T] {
 		cookie, err := r.Cookie(name)
 		if err != nil {
 			var result T
-			return result, fmt.Errorf("cookie with name %s not found", name)
+			return result, fmt.Errorf("%w: cookie with name %s not found", ErrParsingError, name)
 		}
 		return pkgstrings.ParseTypedValue[T](cookie.Value)
 	}
@@ -122,7 +137,7 @@ func JSONBody[T any]() RequestDataProvider[T] {
 		var body T
 		err := json.NewDecoder(r.Body).Decode(&body)
 		if err != nil {
-			return body, fmt.Errorf("failed to encode json body: %w", err)
+			return body, fmt.Errorf("%w: failed to encode json body: %w", ErrParsingError, err)
 		}
 		return body, nil
 	}

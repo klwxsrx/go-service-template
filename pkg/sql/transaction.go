@@ -11,8 +11,8 @@ import (
 type instanceID string
 
 type txData struct {
-	tx        ClientTx
-	createdBy instanceID
+	tx         ClientTx
+	instanceID instanceID
 }
 
 type transaction struct {
@@ -28,7 +28,7 @@ func (t *transaction) Execute(
 ) error {
 	var err error
 	storedTx, ok := ctx.Value(databaseTransactionContextKey).(txData)
-	hasParentTx := ok && storedTx.createdBy == t.id
+	hasParentTx := ok && storedTx.instanceID == t.id
 	if !hasParentTx {
 		var tx ClientTx
 		tx, err = t.client.Begin(ctx)
@@ -41,7 +41,7 @@ func (t *transaction) Execute(
 			}
 		}()
 
-		storedTx.createdBy = t.id
+		storedTx.instanceID = t.id
 		storedTx.tx = tx
 		ctx = context.WithValue(ctx, databaseTransactionContextKey, storedTx)
 	}

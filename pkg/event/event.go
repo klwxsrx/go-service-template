@@ -1,4 +1,4 @@
-//go:generate ${TOOLS_PATH}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Dispatcher=Dispatcher"
+//go:generate ${TOOLS_PATH}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Event=Event,Dispatcher=Dispatcher"
 package event
 
 import (
@@ -64,7 +64,7 @@ func RegisterHandler[T Event](handler TypedHandler[T]) RegisterHandlerFunc {
 }
 
 func NewDispatcher(handlers ...RegisterHandlerFunc) (Dispatcher, error) {
-	handlersMap := make(map[string]Handler)
+	handlersMap := make(map[string]Handler, len(handlers))
 	for _, registerFunc := range handlers {
 		eventType, handler, err := registerFunc()
 		if err != nil {

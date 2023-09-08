@@ -35,9 +35,9 @@ func main() {
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
 
-	container := pkgduck.NewDependencyContainer(ctx, sqlDB, sqlMessageOutbox, gooseClient)
+	container := pkgduck.MustInitDependencyContainer(ctx, sqlDB, sqlMessageOutbox, gooseClient)
 
-	messageListenerManager := pkgmessage.NewListenerManager(
+	messageBusListener := pkgmessage.NewBusListener(
 		msgBroker,
 		pkgmessage.NewDefaultPanicHandler(
 			pkgmessage.WithPanicMetrics(metrics),
@@ -46,9 +46,9 @@ func main() {
 		pkgmessage.WithMetrics(metrics),
 		pkgmessage.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),
 	)
-	container.RegisterMessageHandlers(messageListenerManager)
+	container.RegisterMessageHandlers(messageBusListener)
 
-	hub := pkgworker.RunHub(pkgmessage.Must(messageListenerManager.Listeners())...)
+	hub := pkgworker.RunHub(pkgmessage.Must(messageBusListener.ListenerWorkers())...)
 
 	logger.Info(ctx, "app is ready")
 	pkgworker.Must(hub.Wait(ctx, pkgsig.TermSignals(), logger))

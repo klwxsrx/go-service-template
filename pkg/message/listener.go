@@ -16,17 +16,20 @@ import (
 type HandlerMiddleware func(Handler) Handler
 
 type listener struct {
-	handler  Handler
 	consumer Consumer
+	handler  Handler
 }
 
 func NewListener(
-	handler Handler,
 	consumer Consumer,
+	handler Handler,
 	panicHandler PanicHandler,
 	mws ...HandlerMiddleware,
 ) worker.NamedProcess {
-	l := &listener{handler, consumer}
+	l := &listener{
+		consumer: consumer,
+		handler:  handler,
+	}
 	l.handler = panicHandlerWrapper(l.handler, panicHandler)
 	for i := len(mws) - 1; i >= 0; i-- {
 		l.handler = mws[i](l.handler)

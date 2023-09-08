@@ -2,6 +2,7 @@ package duck
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
@@ -23,7 +24,7 @@ type DependencyContainer struct {
 	duckService service.DuckService
 }
 
-func NewDependencyContainer(
+func MustInitDependencyContainer(
 	ctx context.Context,
 	sqlClient pkgsql.TxClient,
 	msgOutbox pkgmessage.Outbox,
@@ -37,11 +38,13 @@ func NewDependencyContainer(
 		msgOutbox.Process,
 	)
 
-	messageStore := pkgcmd.MustInitSQLMessageStore(ctx, wrappedSQLClient)
-	eventDispatcher := pkgmessage.NewEventDispatcher(
+	messageBus := pkgmessage.NewBus(
 		domainName,
-		pkgmessage.NewStoreDispatcher(messageStore),
+		pkgcmd.MustInitSQLMessageOutboxProducer(ctx, wrappedSQLClient),
 	)
+	d.mustRegisterMessageBus(messageBus)
+
+	eventDispatcher := pkgmessage.NewEventDispatcher(messageBus)
 
 	duckRepo := sql.NewDuckRepo(wrappedSQLClient, eventDispatcher)
 	d.duckService = service.NewDuckService(duckRepo, transaction)
@@ -54,12 +57,21 @@ func (d *DependencyContainer) RegisterHTTPHandlers(registry pkghttp.HandlerRegis
 }
 
 func (d *DependencyContainer) RegisterMessageHandlers(registry pkgmessage.HandlerRegistry) {
-	registry.Register(
+	registry.RegisterHandler(
 		domainName, domainName,
 		pkgmessage.RegisterEventHandler[domain.EventDuckCreated](d.duckService.HandleDuckCreated),
 	)
-	registry.Register(
+	registry.RegisterHandler(
 		domainName, integration.DomainNameGoose,
 		pkgmessage.RegisterEventHandler[external.EventGooseQuacked](d.duckService.HandleGooseQuacked),
 	)
+}
+
+func (d *DependencyContainer) mustRegisterMessageBus(messageBus pkgmessage.Bus) {
+	err := messageBus.RegisterMessage(
+		pkgmessage.RegisterEvent[domain.EventDuckCreated](),
+	)
+	if err != nil {
+		panic(fmt.Errorf("failed to register message bus messages: %w", err))
+	}
 }

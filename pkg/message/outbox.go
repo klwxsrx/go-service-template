@@ -15,14 +15,20 @@ import (
 
 const processMessageOutboxLockName = "process_message_outbox"
 
+type OutboxStorage interface {
+	GetBatch(ctx context.Context) ([]Message, error)
+	Store(ctx context.Context, msgs []Message) error
+	Delete(ctx context.Context, ids []uuid.UUID) error
+}
+
 type Outbox interface {
 	Process()
 	Close()
 }
 
 type outbox struct {
-	store       Store
-	out         Dispatcher
+	storage     OutboxStorage
+	out         Producer
 	transaction persistence.Transaction
 	retry       *backoff.ExponentialBackOff
 	logger      log.Logger
@@ -30,6 +36,35 @@ type outbox struct {
 	processChan chan struct{}
 	stopChan    chan struct{}
 	onceCloser  *sync.Once
+}
+
+func NewOutbox(
+	storage OutboxStorage,
+	out Producer,
+	transaction persistence.Transaction,
+	logger log.Logger,
+) Outbox {
+	retry := backoff.NewExponentialBackOff()
+	retry.InitialInterval = time.Second
+	retry.RandomizationFactor = 0
+	retry.MaxInterval = time.Minute
+	retry.Multiplier = 2
+	retry.MaxElapsedTime = 0
+
+	mo := &outbox{
+		storage:     storage,
+		out:         out,
+		transaction: transaction,
+		retry:       retry,
+		logger:      logger,
+		processChan: make(chan struct{}, 1),
+		stopChan:    make(chan struct{}),
+		onceCloser:  &sync.Once{},
+	}
+
+	go mo.run()
+	mo.Process()
+	return mo
 }
 
 func (o *outbox) Process() {
@@ -84,7 +119,7 @@ func (o *outbox) processSend() {
 }
 
 func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool, err error) {
-	msgs, err := o.store.GetBatch(ctx)
+	msgs, err := o.storage.GetBatch(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to get messages for send: %w", err)
 	}
@@ -95,12 +130,12 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 	for _, msg := range msgs {
 		v := msg
 
-		err := o.out.Dispatch(ctx, &v)
+		err := o.out.Produce(ctx, &v)
 		if err != nil {
 			return false, fmt.Errorf("failed to send message: %w", err)
 		}
 
-		err = o.store.Delete(ctx, []uuid.UUID{msg.ID})
+		err = o.storage.Delete(ctx, []uuid.UUID{msg.ID})
 		if err != nil {
 			return false, fmt.Errorf("failed to delete sent messages: %w", err)
 		}
@@ -108,30 +143,16 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 	return true, nil
 }
 
-func NewOutbox(
-	out Dispatcher,
-	store Store,
-	transaction persistence.Transaction,
-	logger log.Logger,
-) Outbox {
-	retry := backoff.NewExponentialBackOff()
-	retry.InitialInterval = time.Second
-	retry.RandomizationFactor = 0
-	retry.MaxInterval = time.Minute
-	retry.Multiplier = 2
-	retry.MaxElapsedTime = 0
+type outboxProducer struct {
+	storage OutboxStorage
+}
 
-	mo := &outbox{
-		store:       store,
-		out:         out,
-		transaction: transaction,
-		retry:       retry,
-		logger:      logger,
-		processChan: make(chan struct{}, 1),
-		stopChan:    make(chan struct{}),
-		onceCloser:  &sync.Once{},
+func (p outboxProducer) Produce(ctx context.Context, msg *Message) error {
+	return p.storage.Store(ctx, []Message{*msg})
+}
+
+func NewOutboxProducer(storage OutboxStorage) Producer {
+	return outboxProducer{
+		storage: storage,
 	}
-	go mo.run()
-	mo.Process()
-	return mo
 }

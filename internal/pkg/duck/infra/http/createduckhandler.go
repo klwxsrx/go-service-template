@@ -7,6 +7,8 @@ import (
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 )
 
+const utmSourceQueryParamName = "utm"
+
 type createDuckHandler struct {
 	duckService service.DuckService
 }
@@ -21,7 +23,8 @@ func (h *createDuckHandler) Path() string {
 
 func (h *createDuckHandler) HTTPHandler() pkghttp.HandlerFunc {
 	return func(w pkghttp.ResponseWriter, r *http.Request) (err error) {
-		data, err := pkghttp.Parse(pkghttp.JSONBody[createDuckRequest](), r, err)
+		data, err := pkghttp.Parse(r, pkghttp.JSONBody[createDuckRequest](), err)
+		_ = pkghttp.ParseOptional(r, pkghttp.QueryParameter[*string](utmSourceQueryParamName), err)
 		if err != nil {
 			return err
 		}

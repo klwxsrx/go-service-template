@@ -81,31 +81,31 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 func MustInitSQLMessageOutbox(
 	ctx context.Context,
 	sqlClient sql.TxClient,
-	messageDispatcher pkgmessage.Dispatcher,
+	messageProducer pkgmessage.Producer,
 	logger log.Logger,
 ) pkgmessage.Outbox {
 	wrappedSQLClient, tx := sql.NewTransaction(sqlClient, "messageOutbox", func() {})
-	messageStore, err := sql.NewMessageStore(ctx, wrappedSQLClient)
+	messageStorage, err := sql.NewMessageOutboxStorage(ctx, wrappedSQLClient)
 	if err != nil {
 		panic(fmt.Errorf("init message outbox: %w", err))
 	}
 	return pkgmessage.NewOutbox(
-		messageDispatcher,
-		messageStore,
+		messageStorage,
+		messageProducer,
 		tx,
 		logger,
 	)
 }
 
-func MustInitSQLMessageStore(
+func MustInitSQLMessageOutboxProducer(
 	ctx context.Context,
 	sqlClient sql.Client,
-) pkgmessage.Store {
-	messageStore, err := sql.NewMessageStore(ctx, sqlClient)
+) pkgmessage.Producer {
+	messageStorage, err := sql.NewMessageOutboxStorage(ctx, sqlClient)
 	if err != nil {
-		panic(fmt.Errorf("init message store: %w", err))
+		panic(fmt.Errorf("init message outbox storage: %w", err))
 	}
-	return messageStore
+	return pkgmessage.NewOutboxProducer(messageStorage)
 }
 
 func MustInitPulsarMessageBroker(optionalLogger log.Logger) *pulsar.MessageBroker {

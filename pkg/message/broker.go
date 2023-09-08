@@ -22,15 +22,15 @@ type Consumer interface {
 	Close()
 }
 
-type ConsumerProvider interface {
+type Consumers interface {
 	Consumer(topic, subscriberName string, consumptionType ConsumptionType) (Consumer, error)
 }
 
-type Dispatcher interface {
-	Dispatch(ctx context.Context, msg *Message) error
+type Producer interface {
+	Produce(ctx context.Context, msg *Message) error
 }
 
 type Broker interface {
-	ConsumerProvider
-	Dispatcher
+	Consumers
+	Producer
 }

@@ -18,7 +18,7 @@ type Message struct {
 
 type Handler func(ctx context.Context, msg *Message) error
 
-func NewCompositeHandler(handlers []Handler, optionalWP worker.Pool) Handler {
+func NewCompositeHandler(handlers []Handler, optionalPool worker.Pool) Handler {
 	if len(handlers) == 0 {
 		return func(ctx context.Context, msg *Message) error {
 			return nil
@@ -32,7 +32,7 @@ func NewCompositeHandler(handlers []Handler, optionalWP worker.Pool) Handler {
 		}
 	}
 
-	if optionalWP == nil {
+	if optionalPool == nil {
 		return func(ctx context.Context, msg *Message) error {
 			for _, handler := range handlers {
 				err := handler(ctx, msg)
@@ -45,7 +45,7 @@ func NewCompositeHandler(handlers []Handler, optionalWP worker.Pool) Handler {
 	}
 
 	return func(ctx context.Context, msg *Message) error {
-		group := worker.WithinFailSafeGroup(ctx, optionalWP)
+		group := worker.WithinFailSafeGroup(ctx, optionalPool)
 		for _, handler := range handlers {
 			handlerImpl := handler
 			group.Do(func(ctx context.Context) error {

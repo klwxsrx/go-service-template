@@ -10,7 +10,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
-func (b *MessageBroker) Dispatch(ctx context.Context, msg *message.Message) error {
+func (b *MessageBroker) Produce(ctx context.Context, msg *message.Message) error {
 	producer, err := b.getOrCreateProducer(msg.Topic)
 	if err != nil {
 		return err

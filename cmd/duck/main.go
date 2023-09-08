@@ -34,7 +34,7 @@ func main() {
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
 
-	container := pkgduck.NewDependencyContainer(ctx, sqlDB, sqlMessageOutbox, gooseClient)
+	container := pkgduck.MustInitDependencyContainer(ctx, sqlDB, sqlMessageOutbox, gooseClient)
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,

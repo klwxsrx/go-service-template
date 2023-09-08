@@ -13,7 +13,7 @@ import (
 const (
 	batchLimit = 500
 
-	messageStoreTableDDL = `
+	messageOutboxStorageTableDDL = `
 		CREATE TABLE IF NOT EXISTS message_outbox (
 			id      uuid PRIMARY KEY,
 			topic   text,
@@ -22,16 +22,16 @@ const (
 			created_at timestamptz default current_timestamp
 		)
 	`
-	messageStoreTableIndexDDL = `
+	messageOutboxStorageTableIndexDDL = `
 		CREATE INDEX IF NOT EXISTS message_outbox_created_at ON message_outbox(created_at)
 	`
 )
 
-type messageStore struct {
+type messageOutboxStorage struct {
 	db Client
 }
 
-func (s *messageStore) GetBatch(ctx context.Context) ([]message.Message, error) {
+func (s *messageOutboxStorage) GetBatch(ctx context.Context) ([]message.Message, error) {
 	query, args, err := sq.
 		Select("id", "topic", "key", "payload").
 		From("message_outbox").
@@ -60,7 +60,7 @@ func (s *messageStore) GetBatch(ctx context.Context) ([]message.Message, error) 
 	return result, nil
 }
 
-func (s *messageStore) Store(ctx context.Context, msgs []message.Message) error {
+func (s *messageOutboxStorage) Store(ctx context.Context, msgs []message.Message) error {
 	qb := sq.Insert("message_outbox").Columns("id", "topic", "key", "payload")
 	for _, msg := range msgs {
 		qb = qb.Values(msg.ID, msg.Topic, msg.Key, msg.Payload)
@@ -78,7 +78,7 @@ func (s *messageStore) Store(ctx context.Context, msgs []message.Message) error 
 	return nil
 }
 
-func (s *messageStore) Delete(ctx context.Context, ids []uuid.UUID) error {
+func (s *messageOutboxStorage) Delete(ctx context.Context, ids []uuid.UUID) error {
 	query, args, err := sq.
 		Delete("message_outbox").
 		Where(sq.Eq{"id": ids}).
@@ -95,18 +95,18 @@ func (s *messageStore) Delete(ctx context.Context, ids []uuid.UUID) error {
 	return nil
 }
 
-func (s *messageStore) createMessageStoreTableIfNotExists(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, messageStoreTableDDL)
+func (s *messageOutboxStorage) createStorageTableIfNotExists(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, messageOutboxStorageTableDDL)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, messageStoreTableIndexDDL)
+	_, err = s.db.ExecContext(ctx, messageOutboxStorageTableIndexDDL)
 	return err
 }
 
-func NewMessageStore(ctx context.Context, db Client) (message.Store, error) {
-	s := &messageStore{db: db}
-	err := s.createMessageStoreTableIfNotExists(ctx)
+func NewMessageOutboxStorage(ctx context.Context, db Client) (message.OutboxStorage, error) {
+	s := &messageOutboxStorage{db: db}
+	err := s.createStorageTableIfNotExists(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create message store table: %w", err)
 	}
