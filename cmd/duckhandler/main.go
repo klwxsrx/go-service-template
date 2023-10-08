@@ -39,10 +39,6 @@ func main() {
 
 	messageBusListener := pkgmessage.NewBusListener(
 		msgBroker,
-		pkgmessage.NewDefaultPanicHandler(
-			pkgmessage.WithPanicMetrics(metrics),
-			pkgmessage.WithPanicLogging(logger),
-		),
 		pkgmessage.WithMetrics(metrics),
 		pkgmessage.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),
 	)

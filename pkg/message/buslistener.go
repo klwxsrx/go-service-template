@@ -38,7 +38,6 @@ type (
 )
 
 type busListener struct {
-	panicHandler     PanicHandler
 	middlewares      []HandlerMiddleware
 	consumers        Consumers
 	handlerRegisters map[handlerData][]RegisterHandlerFunc
@@ -46,11 +45,9 @@ type busListener struct {
 
 func NewBusListener(
 	consumers Consumers,
-	panicHandler PanicHandler,
 	handlerMiddlewares ...HandlerMiddleware, // TODO: add observability to pass request id
 ) BusListener {
 	return &busListener{
-		panicHandler:     panicHandler,
 		middlewares:      handlerMiddlewares,
 		consumers:        consumers,
 		handlerRegisters: make(map[handlerData][]RegisterHandlerFunc),
@@ -92,7 +89,6 @@ func (b *busListener) ListenerWorkers() ([]worker.NamedProcess, error) {
 			NewListener(
 				data.Consumer,
 				NewCompositeHandler(data.MessageHandlers, nil),
-				b.panicHandler,
 				b.middlewares...,
 			),
 		)

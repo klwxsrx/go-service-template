@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,17 +24,18 @@ type listener struct {
 func NewListener(
 	consumer Consumer,
 	handler Handler,
-	panicHandler PanicHandler,
 	mws ...HandlerMiddleware,
 ) worker.NamedProcess {
 	l := &listener{
 		consumer: consumer,
 		handler:  handler,
 	}
-	l.handler = panicHandlerWrapper(l.handler, panicHandler)
+
+	l.handler = handlerWrapper(l.handler)
 	for i := len(mws) - 1; i >= 0; i-- {
 		l.handler = mws[i](l.handler)
 	}
+
 	return l
 }
 
@@ -43,7 +45,8 @@ func (l *listener) Name() string {
 
 func (l *listener) Process() worker.Process {
 	processMessage := func(msg *ConsumerMessage) {
-		err := l.handler(msg.Context, &msg.Message)
+		ctx := withHandlerMetadata(msg.Context)
+		err := l.handler(ctx, &msg.Message)
 		if err != nil {
 			l.consumer.Nack(msg)
 			return
@@ -79,8 +82,16 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) HandlerMidd
 			})
 
 			err := handler(ctx, msg)
+			meta := getHandlerMetadata(ctx)
+			if meta.Panic != nil {
+				logger.WithField("panic", log.Fields{
+					"message": meta.Panic.Message,
+					"stack":   string(meta.Panic.Stacktrace),
+				}).Error(ctx, "message handled with panic")
+				return err
+			}
 			if err != nil {
-				logger.WithError(err).Log(ctx, errorLevel, "failed to handle message")
+				logger.WithError(err).Log(ctx, errorLevel, "message handled with error")
 				return err
 			}
 
@@ -94,12 +105,40 @@ func WithMetrics(metrics metric.Metrics) HandlerMiddleware {
 	return func(handler Handler) Handler {
 		return func(ctx context.Context, msg *Message) error {
 			started := time.Now()
+
 			err := handler(ctx, msg)
+			meta := getHandlerMetadata(ctx)
+			if meta.Panic != nil {
+				metrics.WithLabel("topic", msg.Topic).Increment("msg_handle_panics_total")
+			}
+
 			metrics.With(metric.Labels{
 				"topic":   msg.Topic,
 				"success": err == nil,
 			}).Duration("msg_handle_duration_seconds", time.Since(started))
 			return err
 		}
+	}
+}
+
+func handlerWrapper(handler Handler) Handler {
+	return func(ctx context.Context, msg *Message) (err error) {
+		recoverPanic := func(ctx context.Context) {
+			panicMsg := recover()
+			if panicMsg == nil {
+				return
+			}
+
+			meta := getHandlerMetadata(ctx)
+			meta.Panic = &Panic{
+				Message:    fmt.Sprintf("%v", panicMsg),
+				Stacktrace: debug.Stack(),
+			}
+
+			err = fmt.Errorf("message handled with panic: %v", panicMsg)
+		}
+
+		defer recoverPanic(ctx)
+		return handler(ctx, msg)
 	}
 }
