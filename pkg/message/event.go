@@ -100,7 +100,7 @@ func RegisterEventHandler[T event.Event](handler event.TypedHandler[T]) Register
 
 		return buildEventTopic(publisherDomain, aggregateName),
 			ConsumptionTypeSingle,
-			eventHandlerImpl[T](publisherDomain, messageClassEvent, handler, deserializer),
+			eventHandlerImpl[T](publisherDomain, handler, deserializer),
 			nil
 	}
 }
@@ -113,12 +113,11 @@ func buildEventTopic(domainName, aggregateName string) string {
 
 func eventHandlerImpl[T event.Event](
 	publisherDomain string,
-	messageClass string,
 	handler event.TypedHandler[T],
 	deserializer Deserializer,
 ) Handler {
 	return func(ctx context.Context, msg *Message) error {
-		evt, err := deserializer.Deserialize(ctx, publisherDomain, messageClass, msg)
+		evt, err := deserializer.Deserialize(ctx, publisherDomain, messageClassEvent, msg)
 		if errors.Is(err, ErrDeserializeNotValidMessage) || errors.Is(err, ErrDeserializeUnknownMessage) {
 			return nil
 		}

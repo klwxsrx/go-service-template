@@ -34,7 +34,7 @@ func (d dispatcher) Dispatch(ctx context.Context, events []Event) error {
 	for _, evt := range events {
 		handler, ok := d.handlers[evt.Type()]
 		if !ok {
-			continue
+			return fmt.Errorf("handler not registered for %s", evt.Type())
 		}
 
 		err := handler(ctx, evt)
@@ -70,6 +70,10 @@ func NewDispatcher(handlers ...RegisterHandlerFunc) (Dispatcher, error) {
 		if err != nil {
 			return nil, err
 		}
+		if _, ok := handlersMap[eventType]; ok {
+			return nil, fmt.Errorf("event handler for %s already exists", eventType)
+		}
+
 		handlersMap[eventType] = handler
 	}
 

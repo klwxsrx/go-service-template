@@ -23,7 +23,7 @@ type (
 	}
 )
 
-// TODO: Command and Task implementations
+// TODO: Task implementation
 
 type bus struct {
 	domainName string
