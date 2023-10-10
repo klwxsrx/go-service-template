@@ -11,7 +11,7 @@ type contextKey int
 
 const (
 	handlerMetaContextKey contextKey = iota
-	requestIDContextKey
+	clientMetaContextKey
 )
 
 type Panic struct {
@@ -20,9 +20,14 @@ type Panic struct {
 }
 
 type handlerMetadata struct {
-	Code  int
-	Panic *Panic
-	Error error
+	RequestID *string
+	Code      int
+	Panic     *Panic
+	Error     error
+}
+
+type clientMetadata struct {
+	RequestID *string
 }
 
 func withHandlerMetadata(router *mux.Router) *mux.Router {
@@ -43,14 +48,14 @@ func getHandlerMetadata(ctx context.Context) *handlerMetadata {
 	return &handlerMetadata{}
 }
 
-func withRequestID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, requestIDContextKey, id)
+func withClientMetadata(ctx context.Context, meta *clientMetadata) context.Context {
+	return context.WithValue(ctx, clientMetaContextKey, meta)
 }
 
-func getRequestID(ctx context.Context) *string {
-	id, ok := ctx.Value(requestIDContextKey).(string)
+func getClientMetadata(ctx context.Context) *clientMetadata {
+	meta, ok := ctx.Value(clientMetaContextKey).(*clientMetadata)
 	if ok {
-		return &id
+		return meta
 	}
-	return nil
+	return &clientMetadata{}
 }

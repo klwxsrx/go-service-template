@@ -50,7 +50,9 @@ func WithRequestObservability(observer observability.Observer, requestIDHeaderNa
 				return nil
 			}
 
-			req.SetContext(withRequestID(req.Context(), id))
+			req.SetContext(withClientMetadata(req.Context(), &clientMetadata{
+				RequestID: &id,
+			}))
 			req.SetHeader(requestIDHeaderName, id)
 			return nil
 		})
@@ -100,9 +102,9 @@ func WithRequestMetrics(destinationName string, metrics metric.Metrics) ClientOp
 }
 
 func getRequestIDFieldLogger(ctx context.Context, logger log.Logger) log.Logger {
-	requestID := getRequestID(ctx)
-	if requestID == nil {
+	clientMeta := getClientMetadata(ctx)
+	if clientMeta.RequestID == nil {
 		return logger
 	}
-	return logger.WithField(requestIDLogEntry, requestID)
+	return logger.WithField(requestIDLogEntry, *clientMeta.RequestID)
 }

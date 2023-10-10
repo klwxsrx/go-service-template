@@ -29,9 +29,10 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 				return
 			}
 
-			requestID := getRequestID(r.Context())
-			if requestID != nil {
-				r = r.WithContext(logger.WithContext(r.Context(), log.Fields{requestIDLogEntry: *requestID}))
+			meta := getHandlerMetadata(r.Context())
+			if meta.RequestID != nil {
+				ctx := logger.WithContext(r.Context(), log.Fields{requestIDLogEntry: *meta.RequestID})
+				r = r.WithContext(ctx)
 			}
 
 			handler.ServeHTTP(w, r)
