@@ -3,6 +3,7 @@ package message
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -18,26 +19,24 @@ type (
 	) (messageClass, messageType string, topicBuilder TopicBuilderFunc, keyBuilder KeyBuilderFunc, err error)
 
 	Bus interface {
-		Produce(ctx context.Context, messageClass string, msg StructuredMessage) error
+		Produce(ctx context.Context, messageClass string, msg StructuredMessage, scheduleAt time.Time) error
 		RegisterMessage(message RegisterStructuredMessageFunc, messages ...RegisterStructuredMessageFunc) error
 	}
 )
 
-// TODO: Task implementation
-
 type bus struct {
 	domainName string
-	producer   Producer
+	storage    OutboxStorage
 	serializer jsonSerializer
 }
 
-func (b bus) Produce(ctx context.Context, messageClass string, msg StructuredMessage) error {
+func (b bus) Produce(ctx context.Context, messageClass string, msg StructuredMessage, scheduleAt time.Time) error {
 	serializedMsg, err := b.serializer.Serialize(ctx, b.domainName, messageClass, msg)
 	if err != nil {
 		return fmt.Errorf("failed to serialize message %T: %w", msg, err)
 	}
 
-	return b.producer.Produce(ctx, serializedMsg)
+	return b.storage.Store(ctx, []Message{*serializedMsg}, scheduleAt)
 }
 
 func (b bus) RegisterMessage(message RegisterStructuredMessageFunc, messages ...RegisterStructuredMessageFunc) error {
@@ -56,10 +55,10 @@ func (b bus) RegisterMessage(message RegisterStructuredMessageFunc, messages ...
 	return nil
 }
 
-func NewBus(domainName string, producer Producer) Bus { // TODO: add observability to pass request id
+func NewBus(domainName string, storage OutboxStorage) Bus { // TODO: add observability to pass request id
 	return bus{
 		domainName: domainName,
-		producer:   producer,
+		storage:    storage,
 		serializer: newJSONSerializer(),
 	}
 }

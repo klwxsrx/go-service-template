@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/iancoleman/strcase"
 
@@ -26,7 +27,7 @@ func NewEventDispatcher(
 
 func (d eventDispatcher) Dispatch(ctx context.Context, events []event.Event) error {
 	for _, evt := range events {
-		err := d.bus.Produce(ctx, messageClassEvent, evt)
+		err := d.bus.Produce(ctx, messageClassEvent, evt, time.Now())
 		if err != nil {
 			return fmt.Errorf("failed to dispatch event: %w", err)
 		}
@@ -57,7 +58,7 @@ func RegisterEvent[T event.Event]() RegisterStructuredMessageFunc {
 
 		return messageClassEvent,
 			eventType,
-			func(domainName string) string {
+			func(string) string {
 				return buildEventTopic(domainName, aggregateName)
 			},
 			func(msg StructuredMessage) string {

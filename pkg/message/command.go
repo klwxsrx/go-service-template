@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/iancoleman/strcase"
 
@@ -24,7 +25,7 @@ func NewCommandBus(bus Bus) command.Bus {
 
 func (b commandBus) Publish(ctx context.Context, commands []command.Command) error {
 	for _, cmd := range commands {
-		err := b.bus.Produce(ctx, messageClassCommand, cmd)
+		err := b.bus.Produce(ctx, messageClassCommand, cmd, time.Now())
 		if err != nil {
 			return fmt.Errorf("failed to publish command: %w", err)
 		}
@@ -47,7 +48,9 @@ func RegisterCommand[T command.Command]() RegisterStructuredMessageFunc {
 		return messageClassCommand,
 			commandType,
 			buildCommandTopic,
-			func(StructuredMessage) string { return "" },
+			func(StructuredMessage) string {
+				return ""
+			},
 			nil
 	}
 }

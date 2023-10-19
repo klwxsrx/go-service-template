@@ -10,7 +10,6 @@ import (
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/http"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/sql"
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/integration"
-	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
 	pkgsql "github.com/klwxsrx/go-service-template/pkg/sql"
@@ -40,7 +39,7 @@ func MustInitDependencyContainer(
 
 	messageBus := pkgmessage.NewBus(
 		domainName,
-		pkgcmd.MustInitSQLMessageOutboxProducer(ctx, wrappedSQLClient),
+		d.mustInitSQLMessageOutboxStorage(ctx, wrappedSQLClient),
 	)
 	d.mustRegisterMessageBus(messageBus)
 
@@ -74,4 +73,12 @@ func (d *DependencyContainer) mustRegisterMessageBus(messageBus pkgmessage.Bus) 
 	if err != nil {
 		panic(fmt.Errorf("failed to register message bus messages: %w", err))
 	}
+}
+
+func (d *DependencyContainer) mustInitSQLMessageOutboxStorage(ctx context.Context, client pkgsql.Client) pkgmessage.OutboxStorage {
+	storage, err := pkgsql.NewMessageOutboxStorage(ctx, client)
+	if err != nil {
+		panic(fmt.Errorf("failed to initialize message outbox storage: %w", err))
+	}
+	return storage
 }

@@ -11,13 +11,18 @@ import (
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
+	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
-const processMessageOutboxLockName = "process_message_outbox"
+const (
+	DefaultOutboxProcessingInterval = time.Second
+
+	processMessageOutboxLockName = "process_message_outbox"
+)
 
 type OutboxStorage interface {
-	GetBatch(ctx context.Context) ([]Message, error)
-	Store(ctx context.Context, msgs []Message) error
+	GetBatch(ctx context.Context, scheduledBefore time.Time) ([]Message, error)
+	Store(ctx context.Context, msgs []Message, scheduledAt time.Time) error
 	Delete(ctx context.Context, ids []uuid.UUID) error
 }
 
@@ -119,7 +124,7 @@ func (o *outbox) processSend() {
 }
 
 func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool, err error) {
-	msgs, err := o.storage.GetBatch(ctx)
+	msgs, err := o.storage.GetBatch(ctx, time.Now())
 	if err != nil {
 		return false, fmt.Errorf("failed to get messages for send: %w", err)
 	}
@@ -130,7 +135,7 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 	for _, msg := range msgs {
 		v := msg
 
-		err := o.out.Produce(ctx, &v)
+		err := o.out.Produce(ctx, &v) // TODO: WithLogging
 		if err != nil {
 			return false, fmt.Errorf("failed to send message: %w", err)
 		}
@@ -143,16 +148,36 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 	return true, nil
 }
 
-type outboxProducer struct {
-	storage OutboxStorage
+type outboxProcessor struct {
+	ticker *time.Ticker
+	outbox Outbox
 }
 
-func (p outboxProducer) Produce(ctx context.Context, msg *Message) error {
-	return p.storage.Store(ctx, []Message{*msg})
+func (o outboxProcessor) Name() string {
+	return "message outbox processor"
 }
 
-func NewOutboxProducer(storage OutboxStorage) Producer {
-	return outboxProducer{
-		storage: storage,
+func (o outboxProcessor) Process() worker.Process {
+
+	return func(stopChan <-chan struct{}) error {
+		for {
+			select {
+			case <-o.ticker.C:
+				o.outbox.Process()
+			case <-stopChan:
+				o.ticker.Stop()
+				o.outbox.Close()
+			}
+		}
+	}
+}
+
+func NewOutboxProcessor(
+	processingInterval time.Duration,
+	outbox Outbox,
+) worker.NamedProcess {
+	return outboxProcessor{
+		ticker: time.NewTicker(processingInterval),
+		outbox: outbox,
 	}
 }

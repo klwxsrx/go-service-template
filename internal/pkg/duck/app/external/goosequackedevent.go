@@ -11,8 +11,8 @@ const (
 )
 
 type EventGooseQuacked struct {
-	EventID uuid.UUID `json:"event_id"`
-	GooseID uuid.UUID `json:"goose_id"`
+	EventID uuid.UUID `json:"eventID"`
+	GooseID uuid.UUID `json:"gooseID"`
 }
 
 func (e EventGooseQuacked) ID() uuid.UUID {

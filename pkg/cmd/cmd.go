@@ -75,6 +75,7 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 	if err != nil {
 		panic(fmt.Errorf("execute migrations: %w", err))
 	}
+
 	return db
 }
 
@@ -89,23 +90,13 @@ func MustInitSQLMessageOutbox(
 	if err != nil {
 		panic(fmt.Errorf("init message outbox: %w", err))
 	}
+
 	return pkgmessage.NewOutbox(
 		messageStorage,
 		messageProducer,
 		tx,
 		logger,
 	)
-}
-
-func MustInitSQLMessageOutboxProducer(
-	ctx context.Context,
-	sqlClient sql.Client,
-) pkgmessage.Producer {
-	messageStorage, err := sql.NewMessageOutboxStorage(ctx, sqlClient)
-	if err != nil {
-		panic(fmt.Errorf("init message outbox storage: %w", err))
-	}
-	return pkgmessage.NewOutboxProducer(messageStorage)
 }
 
 func MustInitPulsarMessageBroker(optionalLogger log.Logger) *pulsar.MessageBroker {

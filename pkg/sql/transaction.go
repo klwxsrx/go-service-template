@@ -66,7 +66,10 @@ func (t *transaction) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	t.onCommit()
+	if t.onCommit != nil {
+		t.onCommit()
+	}
+
 	return nil
 }
 

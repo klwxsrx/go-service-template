@@ -2,7 +2,7 @@ export TOOLS_PATH := ${CURDIR}/tools/bin
 
 .PHONY: clean codegen test lint arch tools-clean tools-update tools
 
-all: clean codegen test lint arch bin/duck bin/duckhandler
+all: clean codegen test lint arch bin/duck bin/duckhandler bin/messageoutbox
 
 clean:
 	rm -rf bin/*

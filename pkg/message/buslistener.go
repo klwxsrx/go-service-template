@@ -33,7 +33,7 @@ type (
 
 	BusListener interface {
 		HandlerRegistry
-		ListenerWorkers() ([]worker.NamedProcess, error)
+		ListenerProcesses() ([]worker.NamedProcess, error)
 	}
 )
 
@@ -64,7 +64,7 @@ func (b *busListener) RegisterHandler(subscriberDomain, publisherDomain string, 
 	b.handlerRegisters[handlerID] = append(b.handlerRegisters[handlerID], handlers...)
 }
 
-func (b *busListener) ListenerWorkers() ([]worker.NamedProcess, error) {
+func (b *busListener) ListenerProcesses() ([]worker.NamedProcess, error) {
 	deserializer := newJSONDeserializer()
 	consumers := make(map[string]consumerData)
 	for domainData, registerFuncs := range b.handlerRegisters {

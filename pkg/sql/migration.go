@@ -176,9 +176,16 @@ func (m *Migration) createMigrationRecord(ctx context.Context, client Client, fi
 }
 
 func (m *Migration) splitToQueries(sql string) []string {
-	return strings.Split(sql, querySeparator)
+	queries := strings.Split(sql, querySeparator)
+	result := make([]string, 0, len(queries))
+	for _, query := range queries {
+		if query != "" {
+			result = append(result, query)
+		}
+	}
+	return result
 }
 
-func NewMigration(txClient TxClient, migrations fs.ReadDirFS, logger log.Logger) *Migration {
+func NewMigration(txClient TxClient, migrations fs.ReadDirFS, logger log.Logger) *Migration { // TODO: use MigrationSource interface; replace migrations in code by interface impl
 	return &Migration{txClient, migrations, logger}
 }

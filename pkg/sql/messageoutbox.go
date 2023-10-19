@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
@@ -15,15 +16,15 @@ const (
 
 	messageOutboxStorageTableDDL = `
 		CREATE TABLE IF NOT EXISTS message_outbox (
-			id      uuid PRIMARY KEY,
-			topic   text,
-			key     text,
-			payload bytea,
-			created_at timestamptz default current_timestamp
+			id           uuid PRIMARY KEY,
+			topic        text        NOT NULL,
+			key          text        NOT NULL,
+			payload      bytea       NOT NULL,
+			scheduled_at timestamptz NOT NULL
 		)
 	`
 	messageOutboxStorageTableIndexDDL = `
-		CREATE INDEX IF NOT EXISTS message_outbox_created_at ON message_outbox(created_at)
+		CREATE INDEX IF NOT EXISTS message_outbox_scheduled_at ON message_outbox(scheduled_at)
 	`
 )
 
@@ -31,11 +32,12 @@ type messageOutboxStorage struct {
 	db Client
 }
 
-func (s *messageOutboxStorage) GetBatch(ctx context.Context) ([]message.Message, error) {
+func (s *messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore time.Time) ([]message.Message, error) {
 	query, args, err := sq.
 		Select("id", "topic", "key", "payload").
 		From("message_outbox").
-		OrderBy("created_at").
+		Where(sq.LtOrEq{"scheduled_at": scheduledBefore}).
+		OrderBy("scheduled_at").
 		Limit(batchLimit).
 		ToSql()
 	if err != nil {
@@ -60,10 +62,10 @@ func (s *messageOutboxStorage) GetBatch(ctx context.Context) ([]message.Message,
 	return result, nil
 }
 
-func (s *messageOutboxStorage) Store(ctx context.Context, msgs []message.Message) error {
-	qb := sq.Insert("message_outbox").Columns("id", "topic", "key", "payload")
+func (s *messageOutboxStorage) Store(ctx context.Context, msgs []message.Message, scheduledAt time.Time) error {
+	qb := sq.Insert("message_outbox").Columns("id", "topic", "key", "payload", "scheduled_at")
 	for _, msg := range msgs {
-		qb = qb.Values(msg.ID, msg.Topic, msg.Key, msg.Payload)
+		qb = qb.Values(msg.ID, msg.Topic, msg.Key, msg.Payload, scheduledAt)
 	}
 	query, args, err := qb.ToSql()
 	if err != nil {

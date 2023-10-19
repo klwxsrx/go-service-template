@@ -66,6 +66,8 @@ jobs:
             image-file: duck.image.tar
           - application: duckhandler
             image-file: duckhandler.image.tar
+          - application: messageoutbox
+            image-file: messageoutbox.image.tar
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -102,6 +104,8 @@ jobs:
             image-file: duck.image.tar
           - image-tag: klwxsrx/duck-event-handler
             image-file: duckhandler.image.tar
+          - image-tag: klwxsrx/duck-message-outbox
+            image-file: messageoutbox.image.tar
     steps:
       - name: Setup Docker
         uses: docker/setup-buildx-action@v2

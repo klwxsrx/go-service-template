@@ -72,7 +72,7 @@ func (h *hub) Wait(ctx context.Context, termSignalChan <-chan os.Signal, logger 
 	return h.result
 }
 
-func RunHub(ps ...NamedProcess) Hub {
+func Run(ps ...NamedProcess) Hub {
 	stopChan := make(chan struct{})
 	errChan := make(chan errProcessFailed)
 

@@ -11,8 +11,8 @@ const (
 )
 
 type EventDuckCreated struct {
-	EventID uuid.UUID `json:"event_id"`
-	DuckID  uuid.UUID `json:"duck_id"`
+	EventID uuid.UUID `json:"eventID"`
+	DuckID  uuid.UUID `json:"duckID"`
 }
 
 func (e EventDuckCreated) ID() uuid.UUID {
@@ -20,7 +20,7 @@ func (e EventDuckCreated) ID() uuid.UUID {
 }
 
 func (e EventDuckCreated) Type() string {
-	return fmt.Sprintf("%s.created", aggregateNameDuck)
+	return fmt.Sprintf("%s.created", aggregateNameDuck) // TODO: concat in message handler to ensure Type() is unique for different aggregates with the same type
 }
 
 func (e EventDuckCreated) AggregateID() uuid.UUID {
