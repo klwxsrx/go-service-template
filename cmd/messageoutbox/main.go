@@ -6,6 +6,7 @@ import (
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
 	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
 	pkgsig "github.com/klwxsrx/go-service-template/pkg/sig"
+	pkgsql "github.com/klwxsrx/go-service-template/pkg/sql"
 	pkgworker "github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
@@ -16,7 +17,7 @@ func main() {
 
 	logger.Info(ctx, "app is starting")
 
-	sqlDB := pkgcmd.MustInitSQL(ctx, logger, nil) // TODO: add outbox migrations
+	sqlDB := pkgcmd.MustInitSQL(ctx, logger, pkgsql.MessageOutboxMigrations)
 	defer sqlDB.Close(ctx)
 
 	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
@@ -24,7 +25,7 @@ func main() {
 
 	msgOutboxProcessor := pkgmessage.NewOutboxProcessor(
 		pkgmessage.DefaultOutboxProcessingInterval,
-		pkgcmd.MustInitSQLMessageOutbox(ctx, sqlDB, msgBroker, logger),
+		pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger),
 	)
 
 	logger.Info(ctx, "app is ready")

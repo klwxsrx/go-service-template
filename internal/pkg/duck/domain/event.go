@@ -20,7 +20,7 @@ func (e EventDuckCreated) ID() uuid.UUID {
 }
 
 func (e EventDuckCreated) Type() string {
-	return fmt.Sprintf("%s.created", aggregateNameDuck) // TODO: concat in message handler to ensure Type() is unique for different aggregates with the same type
+	return fmt.Sprintf("%s.created", aggregateNameDuck)
 }
 
 func (e EventDuckCreated) AggregateID() uuid.UUID {

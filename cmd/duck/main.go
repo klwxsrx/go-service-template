@@ -12,6 +12,7 @@ import (
 	pkgmetricstub "github.com/klwxsrx/go-service-template/pkg/metric/stub"
 	pkgobservability "github.com/klwxsrx/go-service-template/pkg/observability"
 	pkgsig "github.com/klwxsrx/go-service-template/pkg/sig"
+	pkgsql "github.com/klwxsrx/go-service-template/pkg/sql"
 )
 
 func main() {
@@ -23,18 +24,18 @@ func main() {
 
 	logger.Info(ctx, "app is starting")
 
-	sqlDB := pkgcmd.MustInitSQL(ctx, logger, sqlduck.Migrations)
+	sqlDB := pkgcmd.MustInitSQL(ctx, logger, pkgsql.MessageOutboxMigrations, sqlduck.Migrations)
 	defer sqlDB.Close(ctx)
 
 	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
 	defer msgBroker.Close()
 
-	sqlMessageOutbox := pkgcmd.MustInitSQLMessageOutbox(ctx, sqlDB, msgBroker, logger)
+	sqlMessageOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
 	defer sqlMessageOutbox.Close()
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
 
-	container := pkgduck.MustInitDependencyContainer(ctx, sqlDB, sqlMessageOutbox, gooseClient)
+	container := pkgduck.MustInitDependencyContainer(sqlDB, sqlMessageOutbox, gooseClient)
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,

@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"runtime/debug"
 
@@ -48,7 +47,7 @@ func InitLogger() log.Logger {
 	return log.New(logLevel)
 }
 
-func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.ReadDirFS) sql.Database {
+func MustInitSQL(ctx context.Context, logger log.Logger, migrations ...sql.MigrationSource) sql.Database {
 	sqlConfig := &sql.Config{
 		DSN: sql.DSN{
 			User:     env.Must(env.ParseString("SQL_USER")),
@@ -67,11 +66,10 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 		panic(fmt.Errorf("open sql connection: %w", err))
 	}
 
-	if optionalMigrations == nil {
+	if len(migrations) == 0 {
 		return db
 	}
-	sqlMigration := sql.NewMigration(db, optionalMigrations, logger)
-	err = sqlMigration.Execute(ctx)
+	err = sql.NewMigrator(db, logger).Execute(ctx, migrations...)
 	if err != nil {
 		panic(fmt.Errorf("execute migrations: %w", err))
 	}
@@ -80,16 +78,12 @@ func MustInitSQL(ctx context.Context, logger log.Logger, optionalMigrations fs.R
 }
 
 func MustInitSQLMessageOutbox(
-	ctx context.Context,
 	sqlClient sql.TxClient,
 	messageProducer pkgmessage.Producer,
 	logger log.Logger,
 ) pkgmessage.Outbox {
 	wrappedSQLClient, tx := sql.NewTransaction(sqlClient, "messageOutbox", func() {})
-	messageStorage, err := sql.NewMessageOutboxStorage(ctx, wrappedSQLClient)
-	if err != nil {
-		panic(fmt.Errorf("init message outbox: %w", err))
-	}
+	messageStorage := sql.NewMessageOutboxStorage(wrappedSQLClient)
 
 	return pkgmessage.NewOutbox(
 		messageStorage,

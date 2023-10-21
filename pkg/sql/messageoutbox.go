@@ -13,26 +13,17 @@ import (
 
 const (
 	batchLimit = 500
-
-	messageOutboxStorageTableDDL = `
-		CREATE TABLE IF NOT EXISTS message_outbox (
-			id           uuid PRIMARY KEY,
-			topic        text        NOT NULL,
-			key          text        NOT NULL,
-			payload      bytea       NOT NULL,
-			scheduled_at timestamptz NOT NULL
-		)
-	`
-	messageOutboxStorageTableIndexDDL = `
-		CREATE INDEX IF NOT EXISTS message_outbox_scheduled_at ON message_outbox(scheduled_at)
-	`
 )
 
 type messageOutboxStorage struct {
 	db Client
 }
 
-func (s *messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore time.Time) ([]message.Message, error) {
+func NewMessageOutboxStorage(db Client) message.OutboxStorage {
+	return messageOutboxStorage{db: db}
+}
+
+func (s messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore time.Time) ([]message.Message, error) {
 	query, args, err := sq.
 		Select("id", "topic", "key", "payload").
 		From("message_outbox").
@@ -62,7 +53,7 @@ func (s *messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore tim
 	return result, nil
 }
 
-func (s *messageOutboxStorage) Store(ctx context.Context, msgs []message.Message, scheduledAt time.Time) error {
+func (s messageOutboxStorage) Store(ctx context.Context, msgs []message.Message, scheduledAt time.Time) error {
 	qb := sq.Insert("message_outbox").Columns("id", "topic", "key", "payload", "scheduled_at")
 	for _, msg := range msgs {
 		qb = qb.Values(msg.ID, msg.Topic, msg.Key, msg.Payload, scheduledAt)
@@ -80,7 +71,7 @@ func (s *messageOutboxStorage) Store(ctx context.Context, msgs []message.Message
 	return nil
 }
 
-func (s *messageOutboxStorage) Delete(ctx context.Context, ids []uuid.UUID) error {
+func (s messageOutboxStorage) Delete(ctx context.Context, ids []uuid.UUID) error {
 	query, args, err := sq.
 		Delete("message_outbox").
 		Where(sq.Eq{"id": ids}).
@@ -97,22 +88,23 @@ func (s *messageOutboxStorage) Delete(ctx context.Context, ids []uuid.UUID) erro
 	return nil
 }
 
-func (s *messageOutboxStorage) createStorageTableIfNotExists(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, messageOutboxStorageTableDDL)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.ExecContext(ctx, messageOutboxStorageTableIndexDDL)
-	return err
-}
+func MessageOutboxMigrations() ([]Migration, error) {
+	return []Migration{
+		{
+			ID: "0000-00-00-001-create-message-outbox-table",
+			SQL: `
+				CREATE TABLE IF NOT EXISTS message_outbox (
+					id           uuid PRIMARY KEY,
+					topic        text        NOT NULL,
+					key          text        NOT NULL,
+					payload      bytea       NOT NULL,
+					scheduled_at timestamptz NOT NULL
+				);
 
-func NewMessageOutboxStorage(ctx context.Context, db Client) (message.OutboxStorage, error) {
-	s := &messageOutboxStorage{db: db}
-	err := s.createStorageTableIfNotExists(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create message store table: %w", err)
-	}
-	return s, nil
+				CREATE INDEX IF NOT EXISTS message_outbox_scheduled_at ON message_outbox(scheduled_at)
+			`,
+		},
+	}, nil
 }
 
 type sqlxMessage struct {

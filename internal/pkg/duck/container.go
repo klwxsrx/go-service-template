@@ -1,7 +1,6 @@
 package duck
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
@@ -24,7 +23,6 @@ type DependencyContainer struct {
 }
 
 func MustInitDependencyContainer(
-	ctx context.Context,
 	sqlClient pkgsql.TxClient,
 	msgOutbox pkgmessage.Outbox,
 	_ pkghttp.Client,
@@ -39,7 +37,7 @@ func MustInitDependencyContainer(
 
 	messageBus := pkgmessage.NewBus(
 		domainName,
-		d.mustInitSQLMessageOutboxStorage(ctx, wrappedSQLClient),
+		pkgsql.NewMessageOutboxStorage(wrappedSQLClient),
 	)
 	d.mustRegisterMessageBus(messageBus)
 
@@ -73,12 +71,4 @@ func (d *DependencyContainer) mustRegisterMessageBus(messageBus pkgmessage.Bus) 
 	if err != nil {
 		panic(fmt.Errorf("failed to register message bus messages: %w", err))
 	}
-}
-
-func (d *DependencyContainer) mustInitSQLMessageOutboxStorage(ctx context.Context, client pkgsql.Client) pkgmessage.OutboxStorage {
-	storage, err := pkgsql.NewMessageOutboxStorage(ctx, client)
-	if err != nil {
-		panic(fmt.Errorf("failed to initialize message outbox storage: %w", err))
-	}
-	return storage
 }

@@ -5,32 +5,63 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/lib/pq"
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
 const (
-	migrationLock  = "perform_migration_lock"
-	querySeparator = ";\n"
-
-	migrationTableDDL = `
-		CREATE TABLE IF NOT EXISTS migration (
-			id text PRIMARY KEY
-		)
-	`
+	migrationLockName               = "perform_migration"
+	querySeparator                  = ";\n"
+	pqErrorCodeRelationDoesNotExist = "42P01"
 )
 
-type Migration struct {
-	txClient   TxClient
-	migrations fs.ReadDirFS
-	logger     log.Logger
+type (
+	Migration struct {
+		ID  string
+		SQL string
+	}
+
+	MigrationSource func() ([]Migration, error)
+)
+
+type Migrator struct {
+	txClient TxClient
+	logger   log.Logger
 }
 
-func (m *Migration) Execute(ctx context.Context) error {
-	lock := newLock(ctx, migrationLock, m.txClient)
+func NewMigrator(txClient TxClient, logger log.Logger) *Migrator {
+	return &Migrator{
+		txClient: txClient,
+		logger:   logger,
+	}
+}
+
+func (m *Migrator) Execute(ctx context.Context, migrationSources ...MigrationSource) error {
+	if len(migrationSources) == 0 {
+		return nil
+	}
+
+	migrationSources = append(migrationSources, migrationTableDDL)
+
+	var migrations []Migration
+	for _, migrationSource := range migrationSources {
+		sourceMigrations, err := migrationSource()
+		if err != nil {
+			return fmt.Errorf("failed to get migrations from source: %w", err)
+		}
+		migrations = append(migrations, sourceMigrations...)
+	}
+	sort.Slice(migrations, func(i, j int) bool {
+		return migrations[i].ID < migrations[j].ID
+	})
+
+	lock := newLock(ctx, migrationLockName, m.txClient)
 
 	err := lock.Get()
 	if err != nil {
@@ -38,39 +69,21 @@ func (m *Migration) Execute(ctx context.Context) error {
 	}
 	defer lock.Release()
 
-	err = m.createMigrationTableIfNotExists(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to create migration table: %w", err)
-	}
-
-	return m.performFileMigrations(ctx)
+	return m.performMigrations(ctx, migrations)
 }
 
-func (m *Migration) performFileMigrations(ctx context.Context) error {
-	migrationIDs, err := m.getFileNames()
-	if err != nil {
-		return fmt.Errorf("failed to get migration file names: %w", err)
-	}
-	if len(migrationIDs) == 0 {
-		return nil
-	}
-
+func (m *Migrator) performMigrations(ctx context.Context, migrations []Migration) error {
 	performedMigrationIDs, err := m.getPerformedMigrationIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get performed migrations: %w", err)
 	}
 
-	for _, migrationID := range migrationIDs {
-		if _, ok := performedMigrationIDs[migrationID]; ok {
+	for _, migration := range migrations {
+		if _, ok := performedMigrationIDs[migration.ID]; ok {
 			continue
 		}
 
-		migrationSQL, err := m.readFile(migrationID)
-		if err != nil {
-			return fmt.Errorf("failed to read migration sql: %w", err)
-		}
-
-		err = m.performMigration(ctx, migrationID, migrationSQL)
+		err = m.performMigration(ctx, migration)
 		if err != nil {
 			return err
 		}
@@ -78,39 +91,40 @@ func (m *Migration) performFileMigrations(ctx context.Context) error {
 	return nil
 }
 
-func (m *Migration) getFileNames() ([]string, error) {
-	entries, err := m.migrations.ReadDir(".")
+func (m *Migrator) getPerformedMigrationIDs(ctx context.Context) (map[string]struct{}, error) {
+	query, _, err := sq.Select("id").From("migration").ToSql()
 	if err != nil {
 		return nil, err
 	}
-	result := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		result = append(result, entry.Name())
+
+	var pqErr *pq.Error
+	var fileNames []string
+	err = m.txClient.SelectContext(ctx, &fileNames, query)
+	if errors.As(err, &pqErr) && pqErr.Code == pqErrorCodeRelationDoesNotExist {
+		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]struct{}, len(fileNames))
+	for _, id := range fileNames {
+		result[id] = struct{}{}
+	}
+
 	return result, nil
 }
 
-func (m *Migration) readFile(fileName string) (string, error) {
-	content, err := fs.ReadFile(m.migrations, fileName)
-	if err != nil {
-		return "", err
-	}
-	return string(content), nil
-}
-
-func (m *Migration) performMigration(ctx context.Context, migrationID, migrationSQL string) error {
+func (m *Migrator) performMigration(ctx context.Context, migration Migration) error {
 	tx, err := m.txClient.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start tx: %w", err)
 	}
 
-	err = m.processMigration(ctx, tx, migrationID, migrationSQL)
+	err = m.performMigrationImpl(ctx, tx, migration)
 	if err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf("migration %s failed: %w", migrationID, err)
+		return fmt.Errorf("migration %s failed: %w", migration.ID, err)
 	}
 
 	err = tx.Commit()
@@ -118,54 +132,46 @@ func (m *Migration) performMigration(ctx context.Context, migrationID, migration
 		return fmt.Errorf("failed to commit tx: %w", err)
 	}
 
-	m.logger.WithField("migrationID", migrationID).Info(ctx, "migration executed successfully")
+	m.logger.WithField("migrationID", migration.ID).Info(ctx, "migration executed successfully")
 	return nil
 }
 
-func (m *Migration) processMigration(ctx context.Context, client Client, migrationID, migrationSQL string) error {
-	if migrationSQL == "" {
+func (m *Migrator) performMigrationImpl(ctx context.Context, client Client, migration Migration) error {
+	migration.SQL = strings.TrimSpace(migration.SQL)
+	if migration.SQL == "" {
 		return errors.New("empty migration")
 	}
 
-	err := m.createMigrationRecord(ctx, client, migrationID)
-	if err != nil {
-		return err
-	}
-
-	queries := m.splitToQueries(migrationSQL)
+	var err error
+	queries := m.splitIntoQueries(migration.SQL)
 	for _, query := range queries {
 		_, err = client.ExecContext(ctx, query)
 		if err != nil {
 			return err
 		}
 	}
+
+	err = m.createMigrationRecord(ctx, client, migration.ID)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (m *Migration) createMigrationTableIfNotExists(ctx context.Context) error {
-	_, err := m.txClient.ExecContext(ctx, migrationTableDDL)
-	return err
+func (m *Migrator) splitIntoQueries(sql string) []string {
+	queries := strings.Split(sql, querySeparator)
+	result := make([]string, 0, len(queries))
+	for _, query := range queries {
+		query = strings.TrimSpace(query)
+		if query != "" {
+			result = append(result, query)
+		}
+	}
+	return result
 }
 
-func (m *Migration) getPerformedMigrationIDs(ctx context.Context) (map[string]struct{}, error) {
-	query, _, err := sq.Select("id").From("migration").ToSql()
-	if err != nil {
-		return nil, err
-	}
-
-	var fileNames []string
-	err = m.txClient.SelectContext(ctx, &fileNames, query)
-	if err != nil {
-		return nil, err
-	}
-	result := make(map[string]struct{}, len(fileNames))
-	for _, id := range fileNames {
-		result[id] = struct{}{}
-	}
-	return result, nil
-}
-
-func (m *Migration) createMigrationRecord(ctx context.Context, client Client, fileName string) error {
+func (m *Migrator) createMigrationRecord(ctx context.Context, client Client, fileName string) error {
 	query, args, err := sq.Insert("migration").Values(fileName).ToSql()
 	if err != nil {
 		return err
@@ -175,17 +181,44 @@ func (m *Migration) createMigrationRecord(ctx context.Context, client Client, fi
 	return err
 }
 
-func (m *Migration) splitToQueries(sql string) []string {
-	queries := strings.Split(sql, querySeparator)
-	result := make([]string, 0, len(queries))
-	for _, query := range queries {
-		if query != "" {
-			result = append(result, query)
+func FSMigrations(fsys fs.ReadDirFS) MigrationSource {
+	return func() ([]Migration, error) {
+		entries, err := fsys.ReadDir(".")
+		if err != nil {
+			return nil, fmt.Errorf("failed to read filesystem: %w", err)
 		}
+
+		result := make([]Migration, 0, len(entries))
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+
+			fileName := entry.Name()
+			fileContent, err := fs.ReadFile(fsys, entry.Name())
+			if err != nil {
+				return nil, fmt.Errorf("failed to read %s file", entry.Name())
+			}
+
+			result = append(result, Migration{
+				ID:  strings.TrimSuffix(fileName, filepath.Ext(fileName)),
+				SQL: string(fileContent),
+			})
+		}
+
+		return result, nil
 	}
-	return result
 }
 
-func NewMigration(txClient TxClient, migrations fs.ReadDirFS, logger log.Logger) *Migration { // TODO: use MigrationSource interface; replace migrations in code by interface impl
-	return &Migration{txClient, migrations, logger}
+func migrationTableDDL() ([]Migration, error) {
+	return []Migration{
+		{
+			ID: "0000-00-00-000-create-migration-table",
+			SQL: `
+				CREATE TABLE IF NOT EXISTS migration (
+					id text PRIMARY KEY
+				)
+			`,
+		},
+	}, nil
 }
