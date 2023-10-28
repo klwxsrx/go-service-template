@@ -23,14 +23,14 @@ type (
 )
 
 type Dispatcher interface {
-	Dispatch(ctx context.Context, events []Event) error
+	Dispatch(ctx context.Context, events ...Event) error
 }
 
 type dispatcher struct {
 	handlers map[string]Handler
 }
 
-func (d dispatcher) Dispatch(ctx context.Context, events []Event) error {
+func (d dispatcher) Dispatch(ctx context.Context, events ...Event) error {
 	for _, evt := range events {
 		handler, ok := d.handlers[evt.Type()]
 		if !ok {

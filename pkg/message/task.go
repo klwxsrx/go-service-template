@@ -23,7 +23,7 @@ func NewTaskScheduler(bus Bus) task.Scheduler {
 	}
 }
 
-func (s taskScheduler) Schedule(ctx context.Context, tasks []task.Task, at time.Time) error {
+func (s taskScheduler) Schedule(ctx context.Context, at time.Time, tasks ...task.Task) error {
 	for _, tsk := range tasks {
 		err := s.bus.Produce(ctx, messageClassTask, tsk, at)
 		if err != nil {
@@ -58,7 +58,7 @@ func RegisterTask[T task.Task]() RegisterStructuredMessageFunc {
 }
 
 func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHandlerFunc {
-	return func(publisherDomain string, deserializer Deserializer) (string, ConsumptionType, Handler, error) {
+	return func(subscriberDomain string, deserializer Deserializer) (string, ConsumptionType, Handler, error) {
 		var blank T
 		taskType := blank.Type()
 		if taskType == "" {
@@ -68,7 +68,7 @@ func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHand
 				fmt.Errorf("failed to get task type for %T: blank task must return const value", blank)
 		}
 
-		err := deserializer.RegisterDeserializer(publisherDomain, messageClassTask, taskType, TypedDeserializer[T]())
+		err := deserializer.RegisterDeserializer(subscriberDomain, messageClassTask, taskType, TypedDeserializer[T]())
 		if err != nil {
 			return "",
 				"",
@@ -76,9 +76,9 @@ func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHand
 				fmt.Errorf("failed to register task %T deserializer: %w", blank, err)
 		}
 
-		return buildTaskTopic(publisherDomain, taskType),
+		return buildTaskTopic(subscriberDomain, taskType),
 			ConsumptionTypeShared,
-			taskHandlerImpl[T](publisherDomain, handler, deserializer),
+			taskHandlerImpl[T](subscriberDomain, handler, deserializer),
 			nil
 	}
 }

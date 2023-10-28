@@ -11,6 +11,7 @@ import (
 type (
 	StructuredMessage interface {
 		ID() uuid.UUID
+		// Type must be unique string for message class
 		Type() string
 	}
 
@@ -20,7 +21,7 @@ type (
 
 	Bus interface {
 		Produce(ctx context.Context, messageClass string, msg StructuredMessage, scheduleAt time.Time) error
-		RegisterMessage(message RegisterStructuredMessageFunc, messages ...RegisterStructuredMessageFunc) error
+		RegisterMessages(message RegisterStructuredMessageFunc, messages ...RegisterStructuredMessageFunc) error
 	}
 )
 
@@ -39,7 +40,7 @@ func (b bus) Produce(ctx context.Context, messageClass string, msg StructuredMes
 	return b.storage.Store(ctx, []Message{*serializedMsg}, scheduleAt)
 }
 
-func (b bus) RegisterMessage(message RegisterStructuredMessageFunc, messages ...RegisterStructuredMessageFunc) error {
+func (b bus) RegisterMessages(message RegisterStructuredMessageFunc, messages ...RegisterStructuredMessageFunc) error {
 	messages = append([]RegisterStructuredMessageFunc{message}, messages...)
 	for _, registerFunc := range messages {
 		messageClass, messageType, topicBuilder, keyBuilder, err := registerFunc(b.domainName)

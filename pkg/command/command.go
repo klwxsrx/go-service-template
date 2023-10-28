@@ -21,14 +21,14 @@ type (
 )
 
 type Bus interface {
-	Publish(ctx context.Context, commands []Command) error
+	Publish(ctx context.Context, commands ...Command) error
 }
 
 type bus struct {
 	handlers map[string]Handler
 }
 
-func (b bus) Publish(ctx context.Context, commands []Command) error {
+func (b bus) Publish(ctx context.Context, commands ...Command) error {
 	for _, command := range commands {
 		handler, ok := b.handlers[command.Type()]
 		if !ok {

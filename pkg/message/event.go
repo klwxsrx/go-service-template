@@ -25,7 +25,7 @@ func NewEventDispatcher(
 	}
 }
 
-func (d eventDispatcher) Dispatch(ctx context.Context, events []event.Event) error {
+func (d eventDispatcher) Dispatch(ctx context.Context, events ...event.Event) error {
 	for _, evt := range events {
 		err := d.bus.Produce(ctx, messageClassEvent, evt, time.Now())
 		if err != nil {
@@ -72,8 +72,8 @@ func RegisterEvent[T event.Event]() RegisterStructuredMessageFunc {
 	}
 }
 
-func RegisterEventHandler[T event.Event](handler event.TypedHandler[T]) RegisterHandlerFunc {
-	return func(publisherDomain string, deserializer Deserializer) (string, ConsumptionType, Handler, error) {
+func RegisterEventHandler[T event.Event](publisherDomain string, handler event.TypedHandler[T]) RegisterHandlerFunc {
+	return func(_ string, deserializer Deserializer) (string, ConsumptionType, Handler, error) {
 		var blank T
 		aggregateName := blank.AggregateName()
 		if aggregateName == "" {

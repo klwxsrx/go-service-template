@@ -19,8 +19,8 @@ type DuckService interface {
 }
 
 type duckService struct {
-	duckRepo domain.DuckRepo
 	tx       persistence.Transaction
+	duckRepo domain.DuckRepo
 }
 
 func (s *duckService) Create(ctx context.Context, name string) error {
@@ -44,11 +44,11 @@ func (s *duckService) HandleGooseQuacked(_ context.Context, _ external.EventGoos
 }
 
 func NewDuckService(
-	duckRepo domain.DuckRepo,
 	tx persistence.Transaction,
+	duckRepo domain.DuckRepo,
 ) DuckService {
 	return &duckService{
-		duckRepo: duckRepo,
 		tx:       tx,
+		duckRepo: duckRepo,
 	}
 }

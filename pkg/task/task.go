@@ -19,5 +19,5 @@ type (
 )
 
 type Scheduler interface {
-	Schedule(ctx context.Context, tasks []Task, at time.Time) error
+	Schedule(ctx context.Context, at time.Time, tasks ...Task) error
 }

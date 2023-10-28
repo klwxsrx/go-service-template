@@ -23,7 +23,7 @@ func NewCommandBus(bus Bus) command.Bus {
 	}
 }
 
-func (b commandBus) Publish(ctx context.Context, commands []command.Command) error {
+func (b commandBus) Publish(ctx context.Context, commands ...command.Command) error {
 	for _, cmd := range commands {
 		err := b.bus.Produce(ctx, messageClassCommand, cmd, time.Now())
 		if err != nil {
@@ -56,7 +56,7 @@ func RegisterCommand[T command.Command]() RegisterStructuredMessageFunc {
 }
 
 func RegisterCommandHandler[T command.Command](handler command.TypedHandler[T]) RegisterHandlerFunc {
-	return func(publisherDomain string, deserializer Deserializer) (string, ConsumptionType, Handler, error) {
+	return func(subscriberDomain string, deserializer Deserializer) (string, ConsumptionType, Handler, error) {
 		var blank T
 		commandType := blank.Type()
 		if commandType == "" {
@@ -66,7 +66,7 @@ func RegisterCommandHandler[T command.Command](handler command.TypedHandler[T]) 
 				fmt.Errorf("failed to get command type for %T: blank command must return const value", blank)
 		}
 
-		err := deserializer.RegisterDeserializer(publisherDomain, messageClassCommand, commandType, TypedDeserializer[T]())
+		err := deserializer.RegisterDeserializer(subscriberDomain, messageClassCommand, commandType, TypedDeserializer[T]())
 		if err != nil {
 			return "",
 				"",
@@ -74,9 +74,9 @@ func RegisterCommandHandler[T command.Command](handler command.TypedHandler[T]) 
 				fmt.Errorf("failed to register command %T deserializer: %w", blank, err)
 		}
 
-		return buildCommandTopic(publisherDomain),
+		return buildCommandTopic(subscriberDomain),
 			ConsumptionTypeSingle,
-			commandHandlerImpl[T](publisherDomain, handler, deserializer),
+			commandHandlerImpl[T](subscriberDomain, handler, deserializer),
 			nil
 	}
 }

@@ -30,12 +30,12 @@ func main() {
 	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
 	defer msgBroker.Close()
 
-	sqlMessageOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
-	defer sqlMessageOutbox.Close()
+	msgOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
+	defer msgOutbox.Close()
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
 
-	container := pkgduck.MustInitDependencyContainer(sqlDB, sqlMessageOutbox, gooseClient)
+	container := pkgduck.MustInitDependencyContainer(sqlDB, gooseClient, msgOutbox.Process)
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,
@@ -49,7 +49,7 @@ func main() {
 		pkghttp.WithMetrics(metrics),
 		pkghttp.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelError),
 	)
-	container.RegisterHTTPHandlers(httpServer)
+	container.MustRegisterHTTPHandlers(httpServer)
 
 	logger.Info(ctx, "app is ready")
 	pkghttp.Must(httpServer.Listen(ctx, pkgsig.TermSignals()))

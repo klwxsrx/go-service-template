@@ -31,22 +31,20 @@ func main() {
 	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
 	defer msgBroker.Close()
 
-	sqlMessageOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
-	defer sqlMessageOutbox.Close()
+	msgOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
+	defer msgOutbox.Close()
 
 	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
 
-	container := pkgduck.MustInitDependencyContainer(sqlDB, sqlMessageOutbox, gooseClient)
+	container := pkgduck.MustInitDependencyContainer(sqlDB, gooseClient, msgOutbox.Process)
 
-	messageBusListener := pkgmessage.NewBusListener(
+	msgBusListener := pkgmessage.NewBusListener(
 		msgBroker,
 		pkgmessage.WithMetrics(metrics),
 		pkgmessage.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),
 	)
-	container.RegisterMessageHandlers(messageBusListener)
-
-	listenerProcesses := pkgmessage.Must(messageBusListener.ListenerProcesses())
+	container.MustRegisterMessageHandlers(msgBusListener)
 
 	logger.Info(ctx, "app is ready")
-	pkgworker.Must(pkgworker.Run(listenerProcesses...).Wait(ctx, pkgsig.TermSignals(), logger))
+	pkgworker.Must(pkgworker.Run(msgBusListener.ListenerProcesses()...).Wait(ctx, pkgsig.TermSignals(), logger))
 }

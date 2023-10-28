@@ -17,7 +17,7 @@ type duckRepo struct {
 }
 
 func (r *duckRepo) Store(ctx context.Context, duck *domain.Duck) error {
-	err := r.eventDispatcher.Dispatch(ctx, duck.Changes)
+	err := r.eventDispatcher.Dispatch(ctx, duck.Changes...)
 	if err != nil {
 		return fmt.Errorf("failed to dispatch events: %w", err)
 	}

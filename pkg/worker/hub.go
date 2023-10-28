@@ -39,6 +39,7 @@ type hub struct {
 func (h *hub) Wait(ctx context.Context, termSignalChan <-chan os.Signal, logger log.Logger) error {
 	h.onceCloser.Do(func() {
 		select {
+		case <-ctx.Done():
 		case <-termSignalChan:
 		case err := <-h.errChan:
 			logger.WithField("processName", err.name).

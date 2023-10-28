@@ -9,7 +9,7 @@ import (
 )
 
 type RegisterHandlerFunc func(
-	publisherDomain string,
+	subscriberDomain string,
 	deserializer Deserializer,
 ) (consumerTopic string, consumptionType ConsumptionType, handler Handler, err error)
 
@@ -19,28 +19,22 @@ func RegisterMessageHandler(topic string, consumptionType ConsumptionType, handl
 	}
 }
 
-func Must[T any](result T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return result
-}
-
 type (
 	HandlerRegistry interface {
-		RegisterHandler(subscriberDomain, publisherDomain string, handler RegisterHandlerFunc, handlers ...RegisterHandlerFunc)
+		RegisterHandlers(subscriberDomain string, handler RegisterHandlerFunc, handlers ...RegisterHandlerFunc) error
 	}
 
 	BusListener interface {
 		HandlerRegistry
-		ListenerProcesses() ([]worker.NamedProcess, error)
+		ListenerProcesses() []worker.NamedProcess
 	}
 )
 
 type busListener struct {
-	middlewares      []HandlerMiddleware
-	consumers        Consumers
-	handlerRegisters map[handlerData][]RegisterHandlerFunc
+	consumers     Consumers
+	middlewares   []HandlerMiddleware
+	deserializer  Deserializer
+	consumersData map[string]consumerData
 }
 
 func NewBusListener(
@@ -48,43 +42,33 @@ func NewBusListener(
 	handlerMiddlewares ...HandlerMiddleware, // TODO: add observability to pass request id
 ) BusListener {
 	return &busListener{
-		middlewares:      handlerMiddlewares,
-		consumers:        consumers,
-		handlerRegisters: make(map[handlerData][]RegisterHandlerFunc),
+		middlewares:   handlerMiddlewares,
+		consumers:     consumers,
+		deserializer:  newJSONDeserializer(),
+		consumersData: make(map[string]consumerData),
 	}
 }
 
-func (b *busListener) RegisterHandler(subscriberDomain, publisherDomain string, handler RegisterHandlerFunc, handlers ...RegisterHandlerFunc) {
+func (b *busListener) RegisterHandlers(subscriberDomain string, handler RegisterHandlerFunc, handlers ...RegisterHandlerFunc) error {
 	handlers = append([]RegisterHandlerFunc{handler}, handlers...)
-
-	handlerID := handlerData{
-		SubscriberDomain: subscriberDomain,
-		PublisherDomain:  publisherDomain,
-	}
-	b.handlerRegisters[handlerID] = append(b.handlerRegisters[handlerID], handlers...)
-}
-
-func (b *busListener) ListenerProcesses() ([]worker.NamedProcess, error) {
-	deserializer := newJSONDeserializer()
-	consumers := make(map[string]consumerData)
-	for domainData, registerFuncs := range b.handlerRegisters {
-		for _, registerFunc := range registerFuncs {
-			var err error
-			consumers, err = b.registerHandlerFuncImpl(
-				domainData.SubscriberDomain,
-				domainData.PublisherDomain,
-				registerFunc,
-				consumers,
-				deserializer,
-			)
-			if err != nil {
-				return nil, err
-			}
+	for _, registerFunc := range handlers {
+		var err error
+		b.consumersData, err = b.registerHandlerFuncImpl(
+			subscriberDomain,
+			registerFunc,
+			b.consumersData,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to register handler func: %w", err)
 		}
 	}
 
-	listeners := make([]worker.NamedProcess, 0, len(consumers))
-	for _, data := range consumers {
+	return nil
+}
+
+func (b *busListener) ListenerProcesses() []worker.NamedProcess {
+	listeners := make([]worker.NamedProcess, 0, len(b.consumersData))
+	for _, data := range b.consumersData {
 		listeners = append(listeners,
 			NewListener(
 				data.Consumer,
@@ -94,23 +78,21 @@ func (b *busListener) ListenerProcesses() ([]worker.NamedProcess, error) {
 		)
 	}
 
-	return listeners, nil
+	return listeners
 }
 
 func (b *busListener) registerHandlerFuncImpl(
 	subscriberDomain string,
-	publisherDomain string,
 	handlerFunc RegisterHandlerFunc,
-	consumers map[string]consumerData,
-	deserializer Deserializer,
+	consumersData map[string]consumerData,
 ) (map[string]consumerData, error) {
-	consumerTopic, consumptionType, messageHandler, err := handlerFunc(publisherDomain, deserializer)
+	consumerTopic, consumptionType, messageHandler, err := handlerFunc(subscriberDomain, b.deserializer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute register func of %v to publisher %v: %w", subscriberDomain, publisherDomain, err)
+		return nil, fmt.Errorf("failed to execute register func of %v: %w", subscriberDomain, err)
 	}
 
 	consumerKey := fmt.Sprintf("%s/%s", subscriberDomain, consumerTopic)
-	data, ok := consumers[consumerKey]
+	data, ok := consumersData[consumerKey]
 	if ok && data.ConsumptionType != consumptionType {
 		return nil, fmt.Errorf(
 			"failed to register handler for topic %v and consumption type %v, topic already registered with another consumptionType %v",
@@ -120,7 +102,7 @@ func (b *busListener) registerHandlerFuncImpl(
 		)
 	}
 	if !ok {
-		consumer, err := b.consumers.Consumer(consumerTopic, getConsumerSubscriptionName(subscriberDomain), consumptionType)
+		consumer, err := b.consumers.Consumer(consumerTopic, b.getConsumerSubscriptionName(subscriberDomain), consumptionType)
 		if err != nil {
 			return nil, fmt.Errorf("failed to register consumer for topic %s and consumptionType %s: %w", consumerTopic, consumptionType, err)
 		}
@@ -133,25 +115,18 @@ func (b *busListener) registerHandlerFuncImpl(
 	}
 
 	data.MessageHandlers = append(data.MessageHandlers, messageHandler)
-	consumers[consumerKey] = data
+	b.consumersData[consumerKey] = data
 
-	return consumers, nil
+	return b.consumersData, nil
 }
 
-func getConsumerSubscriptionName(domainName string) string {
+func (b *busListener) getConsumerSubscriptionName(domainName string) string {
 	domainName = strcase.ToKebab(domainName)
 	return fmt.Sprintf("%s-domain", domainName)
 }
 
-type (
-	handlerData struct {
-		SubscriberDomain string
-		PublisherDomain  string
-	}
-
-	consumerData struct {
-		Consumer        Consumer
-		ConsumptionType ConsumptionType
-		MessageHandlers []Handler
-	}
-)
+type consumerData struct {
+	Consumer        Consumer
+	ConsumptionType ConsumptionType
+	MessageHandlers []Handler
+}
