@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 
-	"github.com/klwxsrx/go-service-template/cmd"
 	sqlduck "github.com/klwxsrx/go-service-template/data/sql/duck"
-	pkgduck "github.com/klwxsrx/go-service-template/internal/pkg/duck"
+	"github.com/klwxsrx/go-service-template/internal/duck"
+	commonhttp "github.com/klwxsrx/go-service-template/internal/pkg/http"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 	pkglog "github.com/klwxsrx/go-service-template/pkg/log"
@@ -33,9 +33,9 @@ func main() {
 	msgOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
 	defer msgOutbox.Close()
 
-	gooseClient := cmd.MustInitGooseHTTPClient(observability, metrics, logger)
+	httpClients := commonhttp.NewClientFactory(observability, metrics, logger)
 
-	container := pkgduck.MustInitDependencyContainer(sqlDB, gooseClient, msgOutbox.Process)
+	container := duck.MustInitDependencyContainer(sqlDB, httpClients, msgOutbox.Process)
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,

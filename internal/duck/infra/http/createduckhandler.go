@@ -3,14 +3,14 @@ package http
 import (
 	"net/http"
 
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
+	"github.com/klwxsrx/go-service-template/internal/duck/api"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 )
 
 const utmSourceQueryParamName = "utm"
 
 type createDuckHandler struct {
-	duckService service.DuckService
+	duckService api.DuckService
 }
 
 func (h *createDuckHandler) Method() string {
@@ -39,7 +39,7 @@ func (h *createDuckHandler) HTTPHandler() pkghttp.HandlerFunc {
 	}
 }
 
-func NewCreateDuckHandler(duckService service.DuckService) pkghttp.Handler {
+func NewCreateDuckHandler(duckService api.DuckService) pkghttp.Handler {
 	return &createDuckHandler{duckService: duckService}
 }
 

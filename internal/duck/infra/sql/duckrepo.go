@@ -6,7 +6,7 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
+	"github.com/klwxsrx/go-service-template/internal/duck/domain"
 	"github.com/klwxsrx/go-service-template/pkg/event"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
 )
@@ -19,7 +19,7 @@ type duckRepo struct {
 func (r *duckRepo) Store(ctx context.Context, duck *domain.Duck) error {
 	err := r.eventDispatcher.Dispatch(ctx, duck.Changes...)
 	if err != nil {
-		return fmt.Errorf("failed to dispatch events: %w", err)
+		return fmt.Errorf("failed to dispatch events: %w", err) // TODO: remove failed to
 	}
 
 	query, args, err := sq.

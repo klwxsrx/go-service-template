@@ -18,14 +18,23 @@ type (
 
 type Client interface {
 	NewRequest(ctx context.Context) *resty.Request
+	With(opts ...ClientOption) Client
 }
 
 type client struct {
 	impl *resty.Client
+	opts []ClientOption
 }
 
 func (c client) NewRequest(ctx context.Context) *resty.Request {
 	return c.impl.NewRequest().SetContext(ctx)
+}
+
+func (c client) With(opts ...ClientOption) Client {
+	mergedOpts := make([]ClientOption, 0, len(c.opts)+len(opts))
+	mergedOpts = append(mergedOpts, c.opts...)
+	mergedOpts = append(mergedOpts, opts...)
+	return NewClient(mergedOpts...)
 }
 
 func NewClient(opts ...ClientOption) Client {
@@ -33,7 +42,7 @@ func NewClient(opts ...ClientOption) Client {
 	for _, opt := range opts {
 		opt(impl)
 	}
-	return client{impl}
+	return client{impl, opts}
 }
 
 func WithClientBaseURL(url string) ClientOption {

@@ -3,12 +3,13 @@ package duck
 import (
 	"fmt"
 
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/http"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/infra/sql"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/integration"
+	"github.com/klwxsrx/go-service-template/internal/duck/app/external"
+	"github.com/klwxsrx/go-service-template/internal/duck/app/service"
+	"github.com/klwxsrx/go-service-template/internal/duck/domain"
+	"github.com/klwxsrx/go-service-template/internal/duck/infra/goose"
+	"github.com/klwxsrx/go-service-template/internal/duck/infra/http"
+	"github.com/klwxsrx/go-service-template/internal/duck/infra/sql"
+	commonhttp "github.com/klwxsrx/go-service-template/internal/pkg/http"
 	pkgevent "github.com/klwxsrx/go-service-template/pkg/event"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
@@ -20,12 +21,12 @@ const (
 )
 
 type DependencyContainer struct {
-	duckService service.DuckService
+	duckService *service.DuckService
 }
 
 func MustInitDependencyContainer(
 	sqlClient pkgsql.TxClient,
-	_ pkghttp.Client,
+	httpClients *commonhttp.ClientFactory,
 	onCommit func(),
 ) *DependencyContainer {
 	wrappedSQLClient, transaction := pkgsql.NewTransaction(
@@ -39,11 +40,14 @@ func MustInitDependencyContainer(
 		pkgsql.NewMessageOutboxStorage(wrappedSQLClient),
 	)
 
+	gooseServiceHTTPClient := httpClients.MustInitClient(commonhttp.DestinationGooseService)
+	gooseService := goose.NewService(gooseServiceHTTPClient)
+
 	eventDispatcher := mustInitEventDispatcher(msgBus)
 	duckRepo := sql.NewDuckRepo(wrappedSQLClient, eventDispatcher)
 
 	return &DependencyContainer{
-		duckService: service.NewDuckService(transaction, duckRepo),
+		duckService: service.NewDuckService(gooseService, transaction, duckRepo),
 	}
 }
 
@@ -55,7 +59,7 @@ func (c *DependencyContainer) MustRegisterMessageHandlers(registry pkgmessage.Ha
 	err := registry.RegisterHandlers(
 		domainName,
 		pkgmessage.RegisterEventHandler[domain.EventDuckCreated](domainName, c.duckService.HandleDuckCreated),
-		pkgmessage.RegisterEventHandler[external.EventGooseQuacked](integration.DomainNameGoose, c.duckService.HandleGooseQuacked),
+		pkgmessage.RegisterEventHandler[external.EventGooseQuacked](goose.DomainName, c.duckService.HandleGooseQuacked),
 	)
 	if err != nil {
 		panic(fmt.Errorf("failed to register %s message handlers: %w", domainName, err))

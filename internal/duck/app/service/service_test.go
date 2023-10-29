@@ -9,18 +9,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/external"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/app/service"
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
-	duckdomainmock "github.com/klwxsrx/go-service-template/internal/pkg/duck/domain/mock"
+	"github.com/klwxsrx/go-service-template/internal/duck/app/external"
+	duckappexternalmock "github.com/klwxsrx/go-service-template/internal/duck/app/external/mock"
+	"github.com/klwxsrx/go-service-template/internal/duck/app/service"
+	"github.com/klwxsrx/go-service-template/internal/duck/domain"
+	duckdomainmock "github.com/klwxsrx/go-service-template/internal/duck/domain/mock"
 	pkgpersistencemock "github.com/klwxsrx/go-service-template/pkg/persistence/mock"
 )
 
 func TestDuckService_Create_Returns(t *testing.T) {
 	tests := []struct {
 		name        string
-		duckRepo    func(ctrl *gomock.Controller) *duckdomainmock.DuckRepo
 		transaction func(ctrl *gomock.Controller) *pkgpersistencemock.Transaction
+		duckRepo    func(ctrl *gomock.Controller) *duckdomainmock.DuckRepo
 		expect      func(t *testing.T, err error)
 	}{
 		{
@@ -104,6 +105,7 @@ func TestDuckService_Create_Returns(t *testing.T) {
 			defer ctrl.Finish()
 
 			srv := service.NewDuckService(
+				duckappexternalmock.NewGooseService(ctrl),
 				tc.transaction(ctrl),
 				tc.duckRepo(ctrl),
 			)
@@ -119,9 +121,11 @@ func TestDuckService_HandleDuckCreated_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	mockGooseService := duckappexternalmock.NewGooseService(ctrl)
+	mockGooseService.EXPECT().DoSome().Return(nil)
 	mockTransaction := pkgpersistencemock.NewTransaction(ctrl)
 	mockDuckRepo := duckdomainmock.NewDuckRepo(ctrl)
-	srv := service.NewDuckService(mockTransaction, mockDuckRepo)
+	srv := service.NewDuckService(mockGooseService, mockTransaction, mockDuckRepo)
 
 	err := srv.HandleDuckCreated(context.Background(), domain.EventDuckCreated{})
 	assert.NoError(t, err)
@@ -131,9 +135,10 @@ func TestDuckService_HandleGooseQuacked_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	mockGooseService := duckappexternalmock.NewGooseService(ctrl)
 	mockTransaction := pkgpersistencemock.NewTransaction(ctrl)
 	mockDuckRepo := duckdomainmock.NewDuckRepo(ctrl)
-	srv := service.NewDuckService(mockTransaction, mockDuckRepo)
+	srv := service.NewDuckService(mockGooseService, mockTransaction, mockDuckRepo)
 
 	err := srv.HandleGooseQuacked(context.Background(), external.EventGooseQuacked{})
 	assert.NoError(t, err)

@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/klwxsrx/go-service-template/internal/pkg/duck/domain"
+	"github.com/klwxsrx/go-service-template/internal/duck/domain"
 )
 
 func TestNewDuck_Created_Success(t *testing.T) {
