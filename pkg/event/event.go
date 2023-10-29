@@ -39,7 +39,7 @@ func (d dispatcher) Dispatch(ctx context.Context, events ...Event) error {
 
 		err := handler(ctx, evt)
 		if err != nil {
-			return fmt.Errorf("failed to handle event: %w", err)
+			return fmt.Errorf("handle event: %w", err)
 		}
 	}
 	return nil
@@ -50,7 +50,7 @@ func RegisterHandler[T Event](handler TypedHandler[T]) RegisterHandlerFunc {
 		var blankEvent T
 		eventType := blankEvent.Type()
 		if eventType == "" {
-			return "", nil, fmt.Errorf("failed to get event type for %T: blank event must return const value", blankEvent)
+			return "", nil, fmt.Errorf("get event type for %T: blank event must return const value", blankEvent)
 		}
 
 		return eventType, func(ctx context.Context, event Event) error {

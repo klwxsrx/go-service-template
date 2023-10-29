@@ -30,7 +30,7 @@ type ResponseWriter interface {
 
 type RequestDataProvider[T any] func(*http.Request) (T, error)
 
-var ErrParsingError = errors.New("failed to parse request")
+var ErrParsingError = errors.New("invalid request data")
 
 func Parse[T any](from *http.Request, data RequestDataProvider[T], lastErr error) (T, error) {
 	if lastErr != nil {
@@ -137,7 +137,7 @@ func JSONBody[T any]() RequestDataProvider[T] {
 		var body T
 		err := json.NewDecoder(r.Body).Decode(&body)
 		if err != nil {
-			return body, fmt.Errorf("%w: failed to encode json body: %w", ErrParsingError, err)
+			return body, fmt.Errorf("%w: encode json body: %w", ErrParsingError, err)
 		}
 		return body, nil
 	}
@@ -169,12 +169,12 @@ func (w *responseWriter) SetJSONBody(data any) ResponseWriter {
 	w.writeBodyFunc = func() error {
 		bodyEncoded, err := json.Marshal(data)
 		if err != nil {
-			return fmt.Errorf("failed to encode body: %w", err)
+			return fmt.Errorf("encode body: %w", err)
 		}
 
 		_, err = w.impl.Write(bodyEncoded)
 		if err != nil {
-			return fmt.Errorf("failed to write body: %w", err)
+			return fmt.Errorf("write body: %w", err)
 		}
 
 		w.impl.Header().Set("Content-Type", "application/json")

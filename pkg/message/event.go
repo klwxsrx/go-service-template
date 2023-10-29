@@ -29,7 +29,7 @@ func (d eventDispatcher) Dispatch(ctx context.Context, events ...event.Event) er
 	for _, evt := range events {
 		err := d.bus.Produce(ctx, messageClassEvent, evt, time.Now())
 		if err != nil {
-			return fmt.Errorf("failed to dispatch event: %w", err)
+			return fmt.Errorf("dispatch event: %w", err)
 		}
 	}
 	return nil
@@ -44,7 +44,7 @@ func RegisterEvent[T event.Event]() RegisterStructuredMessageFunc {
 				"",
 				nil,
 				nil,
-				fmt.Errorf("failed to get aggregate name for %T: blank event must return const value", blank)
+				fmt.Errorf("get aggregate name for %T: blank event must return const value", blank)
 		}
 
 		eventType := blank.Type()
@@ -53,7 +53,7 @@ func RegisterEvent[T event.Event]() RegisterStructuredMessageFunc {
 				"",
 				nil,
 				nil,
-				fmt.Errorf("failed to get event type for %T: blank event must return const value", blank)
+				fmt.Errorf("get event type for %T: blank event must return const value", blank)
 		}
 
 		return messageClassEvent,
@@ -80,7 +80,7 @@ func RegisterEventHandler[T event.Event](publisherDomain string, handler event.T
 			return "",
 				"",
 				nil,
-				fmt.Errorf("failed to get aggregate name for %T: blank event must return const value", blank)
+				fmt.Errorf("get aggregate name for %T: blank event must return const value", blank)
 		}
 
 		eventType := blank.Type()
@@ -88,7 +88,7 @@ func RegisterEventHandler[T event.Event](publisherDomain string, handler event.T
 			return "",
 				"",
 				nil,
-				fmt.Errorf("failed to get event type for %T: blank event must return const value", blank)
+				fmt.Errorf("get event type for %T: blank event must return const value", blank)
 		}
 
 		err := deserializer.RegisterDeserializer(publisherDomain, messageClassEvent, eventType, TypedDeserializer[T]())
@@ -96,7 +96,7 @@ func RegisterEventHandler[T event.Event](publisherDomain string, handler event.T
 			return "",
 				"",
 				nil,
-				fmt.Errorf("failed to register event %T deserializer: %w", blank, err)
+				fmt.Errorf("register event %T deserializer: %w", blank, err)
 		}
 
 		return buildEventTopic(publisherDomain, aggregateName),
@@ -123,7 +123,7 @@ func eventHandlerImpl[T event.Event](
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("failed to deserialize message %v: %w", msg.ID, err)
+			return fmt.Errorf("deserialize message %v: %w", msg.ID, err)
 		}
 
 		concreteEvent, ok := evt.(T)

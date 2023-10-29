@@ -50,7 +50,7 @@ func (s jsonSerializer) Serialize(_ context.Context, domainName, messageClass st
 
 	messageEncoded, err := json.Marshal(msg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode message %v %s: %w", msg.ID(), msg.Type(), err)
+		return nil, fmt.Errorf("encode message %v %s: %w", msg.ID(), msg.Type(), err)
 	}
 
 	payload, err := json.Marshal(jsonPayload{
@@ -59,7 +59,7 @@ func (s jsonSerializer) Serialize(_ context.Context, domainName, messageClass st
 		Meta: nil,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode message payload for %s: %w", msg.Type(), err)
+		return nil, fmt.Errorf("encode message payload for %s: %w", msg.Type(), err)
 	}
 
 	return &Message{

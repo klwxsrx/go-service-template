@@ -29,7 +29,7 @@ type (
 
 func Must(err error) {
 	if err != nil {
-		panic(fmt.Errorf("unable to listen the server: %w", err))
+		panic(fmt.Errorf("listen the server: %w", err))
 	}
 }
 
@@ -113,7 +113,7 @@ func shutdown(ctx context.Context, srv *http.Server) error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("failed to shutdown http server: %w", err)
+		return fmt.Errorf("shutdown http server: %w", err)
 	}
 	return nil
 }

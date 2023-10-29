@@ -39,7 +39,7 @@ func (b *MessageBroker) getOrCreateProducer(topic string) (pulsar.Producer, erro
 		Topic: topic,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create producer for topic %s: %w", topic, err)
+		return nil, fmt.Errorf("create producer for topic %s: %w", topic, err)
 	}
 
 	b.producers[topic] = producer

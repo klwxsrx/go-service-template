@@ -51,7 +51,7 @@ func ParseTypedValue[T any](value string) (T, error) {
 	}
 
 	if err != nil {
-		return blank, fmt.Errorf("failed to convert to type %T: %w", blank, err)
+		return blank, fmt.Errorf("convert to type %T: %w", blank, err)
 	}
 	return v.(T), nil
 }

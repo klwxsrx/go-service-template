@@ -53,7 +53,7 @@ func (m *Migrator) Execute(ctx context.Context, migrationSources ...MigrationSou
 	for _, migrationSource := range migrationSources {
 		sourceMigrations, err := migrationSource()
 		if err != nil {
-			return fmt.Errorf("failed to get migrations from source: %w", err)
+			return fmt.Errorf("get migrations from source: %w", err)
 		}
 		migrations = append(migrations, sourceMigrations...)
 	}
@@ -65,7 +65,7 @@ func (m *Migrator) Execute(ctx context.Context, migrationSources ...MigrationSou
 
 	err := lock.Get()
 	if err != nil {
-		return fmt.Errorf("failed to get migration lock: %w", err)
+		return fmt.Errorf("get migration lock: %w", err)
 	}
 	defer lock.Release()
 
@@ -75,7 +75,7 @@ func (m *Migrator) Execute(ctx context.Context, migrationSources ...MigrationSou
 func (m *Migrator) performMigrations(ctx context.Context, migrations []Migration) error {
 	performedMigrationIDs, err := m.getPerformedMigrationIDs(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get performed migrations: %w", err)
+		return fmt.Errorf("get performed migrations: %w", err)
 	}
 
 	for _, migration := range migrations {
@@ -118,7 +118,7 @@ func (m *Migrator) getPerformedMigrationIDs(ctx context.Context) (map[string]str
 func (m *Migrator) performMigration(ctx context.Context, migration Migration) error {
 	tx, err := m.txClient.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to start tx: %w", err)
+		return fmt.Errorf("start tx: %w", err)
 	}
 
 	err = m.performMigrationImpl(ctx, tx, migration)
@@ -129,7 +129,7 @@ func (m *Migrator) performMigration(ctx context.Context, migration Migration) er
 
 	err = tx.Commit()
 	if err != nil {
-		return fmt.Errorf("failed to commit tx: %w", err)
+		return fmt.Errorf("commit tx: %w", err)
 	}
 
 	m.logger.WithField("migrationID", migration.ID).Info(ctx, "migration executed successfully")
@@ -185,7 +185,7 @@ func FSMigrations(fsys fs.ReadDirFS) MigrationSource {
 	return func() ([]Migration, error) {
 		entries, err := fsys.ReadDir(".")
 		if err != nil {
-			return nil, fmt.Errorf("failed to read filesystem: %w", err)
+			return nil, fmt.Errorf("read filesystem: %w", err)
 		}
 
 		result := make([]Migration, 0, len(entries))
@@ -197,7 +197,7 @@ func FSMigrations(fsys fs.ReadDirFS) MigrationSource {
 			fileName := entry.Name()
 			fileContent, err := fs.ReadFile(fsys, entry.Name())
 			if err != nil {
-				return nil, fmt.Errorf("failed to read %s file", entry.Name())
+				return nil, fmt.Errorf("read %s file", entry.Name())
 			}
 
 			result = append(result, Migration{

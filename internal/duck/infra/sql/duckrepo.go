@@ -19,7 +19,7 @@ type duckRepo struct {
 func (r *duckRepo) Store(ctx context.Context, duck *domain.Duck) error {
 	err := r.eventDispatcher.Dispatch(ctx, duck.Changes...)
 	if err != nil {
-		return fmt.Errorf("failed to dispatch events: %w", err) // TODO: remove failed to
+		return fmt.Errorf("dispatch events: %w", err)
 	}
 
 	query, args, err := sq.
@@ -28,12 +28,12 @@ func (r *duckRepo) Store(ctx context.Context, duck *domain.Duck) error {
 		Values(duck.ID, duck.Name).
 		ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build sql: %w", err)
+		return fmt.Errorf("build sql: %w", err)
 	}
 
 	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to insert duck: %w", err)
+		return fmt.Errorf("insert duck: %w", err)
 	}
 	return nil
 }

@@ -57,7 +57,7 @@ func NewMessageBroker(config *Config, logger log.Logger) (*MessageBroker, error)
 		Logger: newLoggerAdapter(logger),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create pulsar client: %w", err)
+		return nil, fmt.Errorf("create pulsar client: %w", err)
 	}
 
 	conn := &MessageBroker{
@@ -72,7 +72,7 @@ func NewMessageBroker(config *Config, logger log.Logger) (*MessageBroker, error)
 	}
 	err = conn.testCreateProducer(connTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to broker: %w", err)
+		return nil, fmt.Errorf("connect to broker: %w", err)
 	}
 
 	return conn, nil

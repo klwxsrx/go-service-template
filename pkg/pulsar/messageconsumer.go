@@ -29,7 +29,7 @@ func (b *MessageBroker) Consumer(topic, subscriberName string, consumptionType m
 	}
 	cons, err := b.client.Subscribe(opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to subscribe to topic %s by %s subscriber", topic, subscriberName)
+		return nil, fmt.Errorf("subscribe to topic %s by %s subscriber", topic, subscriberName)
 	}
 	return newMessageConsumer(cons, topic), nil
 }

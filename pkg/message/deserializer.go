@@ -69,7 +69,7 @@ func TypedDeserializer[T StructuredMessage]() DeserializerFunc {
 		var result T
 		err := json.Unmarshal([]byte(serializedPayload), &result)
 		if err != nil {
-			return nil, fmt.Errorf("failed to deserialize message %T: %w", result, err)
+			return nil, fmt.Errorf("deserialize message %T: %w", result, err)
 		}
 		return result, nil
 	}

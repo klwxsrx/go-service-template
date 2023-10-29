@@ -32,13 +32,13 @@ func (s messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore time
 		Limit(batchLimit).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build sql: %w", err)
+		return nil, fmt.Errorf("build sql: %w", err)
 	}
 
 	var sqlxResult []sqlxMessage
 	err = s.db.SelectContext(ctx, &sqlxResult, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to select messages: %w", err)
+		return nil, fmt.Errorf("select messages: %w", err)
 	}
 
 	result := make([]message.Message, 0, len(sqlxResult))
@@ -60,12 +60,12 @@ func (s messageOutboxStorage) Store(ctx context.Context, msgs []message.Message,
 	}
 	query, args, err := qb.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build sql: %w", err)
+		return fmt.Errorf("build sql: %w", err)
 	}
 
 	_, err = s.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to insert messages: %w", err)
+		return fmt.Errorf("insert messages: %w", err)
 	}
 
 	return nil
@@ -77,12 +77,12 @@ func (s messageOutboxStorage) Delete(ctx context.Context, ids []uuid.UUID) error
 		Where(sq.Eq{"id": ids}).
 		ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build sql: %w", err)
+		return fmt.Errorf("build sql: %w", err)
 	}
 
 	_, err = s.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete messages: %w", err)
+		return fmt.Errorf("delete messages: %w", err)
 	}
 
 	return nil

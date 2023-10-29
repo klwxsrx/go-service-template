@@ -59,7 +59,7 @@ func (b *busListener) RegisterHandlers(subscriberDomain string, handler Register
 			b.consumersData,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to register handler func: %w", err)
+			return fmt.Errorf("register handler func: %w", err)
 		}
 	}
 
@@ -88,14 +88,14 @@ func (b *busListener) registerHandlerFuncImpl(
 ) (map[string]consumerData, error) {
 	consumerTopic, consumptionType, messageHandler, err := handlerFunc(subscriberDomain, b.deserializer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute register func of %v: %w", subscriberDomain, err)
+		return nil, fmt.Errorf("execute register func of %v: %w", subscriberDomain, err)
 	}
 
 	consumerKey := fmt.Sprintf("%s/%s", subscriberDomain, consumerTopic)
 	data, ok := consumersData[consumerKey]
 	if ok && data.ConsumptionType != consumptionType {
 		return nil, fmt.Errorf(
-			"failed to register handler for topic %v and consumption type %v, topic already registered with another consumptionType %v",
+			"register handler for topic %v and consumption type %v: topic already registered with another consumptionType %v",
 			consumerTopic,
 			consumptionType,
 			data.ConsumptionType,
@@ -104,7 +104,7 @@ func (b *busListener) registerHandlerFuncImpl(
 	if !ok {
 		consumer, err := b.consumers.Consumer(consumerTopic, b.getConsumerSubscriptionName(subscriberDomain), consumptionType)
 		if err != nil {
-			return nil, fmt.Errorf("failed to register consumer for topic %s and consumptionType %s: %w", consumerTopic, consumptionType, err)
+			return nil, fmt.Errorf("register consumer for topic %s and consumptionType %s: %w", consumerTopic, consumptionType, err)
 		}
 
 		data = consumerData{

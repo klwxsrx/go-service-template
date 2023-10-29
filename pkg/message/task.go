@@ -27,7 +27,7 @@ func (s taskScheduler) Schedule(ctx context.Context, at time.Time, tasks ...task
 	for _, tsk := range tasks {
 		err := s.bus.Produce(ctx, messageClassTask, tsk, at)
 		if err != nil {
-			return fmt.Errorf("failed to publish task: %w", err)
+			return fmt.Errorf("publish task: %w", err)
 		}
 	}
 	return nil
@@ -42,7 +42,7 @@ func RegisterTask[T task.Task]() RegisterStructuredMessageFunc {
 				"",
 				nil,
 				nil,
-				fmt.Errorf("failed to get task type for %T: blank task must return const value", blank)
+				fmt.Errorf("get task type for %T: blank task must return const value", blank)
 		}
 
 		return messageClassTask,
@@ -65,7 +65,7 @@ func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHand
 			return "",
 				"",
 				nil,
-				fmt.Errorf("failed to get task type for %T: blank task must return const value", blank)
+				fmt.Errorf("get task type for %T: blank task must return const value", blank)
 		}
 
 		err := deserializer.RegisterDeserializer(subscriberDomain, messageClassTask, taskType, TypedDeserializer[T]())
@@ -73,7 +73,7 @@ func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHand
 			return "",
 				"",
 				nil,
-				fmt.Errorf("failed to register task %T deserializer: %w", blank, err)
+				fmt.Errorf("register task %T deserializer: %w", blank, err)
 		}
 
 		return buildTaskTopic(subscriberDomain, taskType),
@@ -100,12 +100,12 @@ func taskHandlerImpl[T task.Task](
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("failed to deserialize message %v: %w", msg.ID, err)
+			return fmt.Errorf("deserialize message %v: %w", msg.ID, err)
 		}
 
 		concreteTask, ok := tsk.(T)
 		if !ok {
-			return fmt.Errorf("invalid tsk struct type %T for messageID %v, expected %T", tsk, msg.ID, concreteTask)
+			return fmt.Errorf("invalid task struct type %T for messageID %v, expected %T", tsk, msg.ID, concreteTask)
 		}
 
 		return handler(ctx, concreteTask)

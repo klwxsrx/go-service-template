@@ -17,7 +17,7 @@ type availableTypes interface {
 
 func Must[T any](val T, err error) T {
 	if err != nil {
-		panic(fmt.Errorf("failed to parse environment: %w", err))
+		panic(fmt.Errorf("parse environment: %w", err))
 	}
 	return val
 }

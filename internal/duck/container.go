@@ -62,7 +62,7 @@ func (c *DependencyContainer) MustRegisterMessageHandlers(registry pkgmessage.Ha
 		pkgmessage.RegisterEventHandler[external.EventGooseQuacked](goose.DomainName, c.duckService.HandleGooseQuacked),
 	)
 	if err != nil {
-		panic(fmt.Errorf("failed to register %s message handlers: %w", domainName, err))
+		panic(fmt.Errorf("register %s message handlers: %w", domainName, err))
 	}
 }
 
@@ -72,7 +72,7 @@ func mustInitEventDispatcher(msgBus pkgmessage.Bus) pkgevent.Dispatcher {
 		pkgmessage.RegisterEvent[domain.EventDuckCreated](),
 	)
 	if err != nil {
-		panic(fmt.Errorf("failed to register %s events: %w", domainName, err))
+		panic(fmt.Errorf("register %s events: %w", domainName, err))
 	}
 	return dispatcher
 }

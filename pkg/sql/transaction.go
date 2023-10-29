@@ -33,7 +33,7 @@ func (t *transaction) Execute(
 		var tx ClientTx
 		tx, err = t.client.Begin(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to start db transaction: %w", err)
+			return fmt.Errorf("start db transaction: %w", err)
 		}
 		defer func() {
 			if err != nil {
@@ -64,7 +64,7 @@ func (t *transaction) Execute(
 
 	err = storedTx.tx.Commit()
 	if err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 	if t.onCommit != nil {
 		t.onCommit()

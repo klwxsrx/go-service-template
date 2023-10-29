@@ -23,7 +23,7 @@ func (s *DuckService) Create(ctx context.Context, name string) error {
 		duck := domain.NewDuck(uuid.New(), strings.TrimSpace(name))
 		err := s.duckRepo.Store(ctx, duck)
 		if err != nil {
-			return fmt.Errorf("failed to store duck, repo error: %w", err)
+			return fmt.Errorf("store duck: %w", err)
 		}
 
 		return nil
@@ -33,7 +33,7 @@ func (s *DuckService) Create(ctx context.Context, name string) error {
 func (s *DuckService) HandleDuckCreated(_ context.Context, _ domain.EventDuckCreated) error {
 	err := s.gooseService.DoSome()
 	if err != nil {
-		return fmt.Errorf("failed to do some, goose error: %w", err)
+		return fmt.Errorf("do some: %w", err)
 	}
 
 	return nil

@@ -126,7 +126,7 @@ func (o *outbox) processSend() {
 func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool, err error) {
 	msgs, err := o.storage.GetBatch(ctx, time.Now())
 	if err != nil {
-		return false, fmt.Errorf("failed to get messages for send: %w", err)
+		return false, fmt.Errorf("get messages for send: %w", err)
 	}
 	if len(msgs) == 0 {
 		return false, nil
@@ -137,12 +137,12 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 
 		err := o.out.Produce(ctx, &v) // TODO: WithLogging
 		if err != nil {
-			return false, fmt.Errorf("failed to send message: %w", err)
+			return false, fmt.Errorf("send message: %w", err)
 		}
 
 		err = o.storage.Delete(ctx, []uuid.UUID{msg.ID})
 		if err != nil {
-			return false, fmt.Errorf("failed to delete sent messages: %w", err)
+			return false, fmt.Errorf("delete sent messages: %w", err)
 		}
 	}
 	return true, nil

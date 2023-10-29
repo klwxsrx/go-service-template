@@ -29,7 +29,7 @@ func getLockIDByName(name string) (int64, error) {
 	hash := fnv.New64a()
 	_, err := hash.Write([]byte(name))
 	if err != nil {
-		return 0, fmt.Errorf("failed to create name hash for lock: %w", err)
+		return 0, fmt.Errorf("create name hash for lock: %w", err)
 	}
 	return int64(hash.Sum64()), nil
 }
@@ -42,7 +42,7 @@ func lockDatabase(ctx context.Context, client Client, query, lockName string) er
 
 	_, err = client.ExecContext(ctx, query, lockID)
 	if err != nil {
-		return fmt.Errorf("failed to get lock %s: %w", lockName, err)
+		return fmt.Errorf("get lock %s: %w", lockName, err)
 	}
 	return nil
 }

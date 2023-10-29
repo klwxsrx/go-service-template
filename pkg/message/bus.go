@@ -34,7 +34,7 @@ type bus struct {
 func (b bus) Produce(ctx context.Context, messageClass string, msg StructuredMessage, scheduleAt time.Time) error {
 	serializedMsg, err := b.serializer.Serialize(ctx, b.domainName, messageClass, msg)
 	if err != nil {
-		return fmt.Errorf("failed to serialize message %T: %w", msg, err)
+		return fmt.Errorf("serialize message %T: %w", msg, err)
 	}
 
 	return b.storage.Store(ctx, []Message{*serializedMsg}, scheduleAt)
@@ -45,12 +45,12 @@ func (b bus) RegisterMessages(message RegisterStructuredMessageFunc, messages ..
 	for _, registerFunc := range messages {
 		messageClass, messageType, topicBuilder, keyBuilder, err := registerFunc(b.domainName)
 		if err != nil {
-			return fmt.Errorf("failed to register message for domain %s: %w", b.domainName, err)
+			return fmt.Errorf("register message for domain %s: %w", b.domainName, err)
 		}
 
 		err = b.serializer.RegisterSerializer(b.domainName, messageClass, messageType, topicBuilder, keyBuilder)
 		if err != nil {
-			return fmt.Errorf("failed to register message serializer for message class %s type %s, domain %s: %w", messageClass, messageType, b.domainName, err)
+			return fmt.Errorf("register message serializer for message class %s type %s, domain %s: %w", messageClass, messageType, b.domainName, err)
 		}
 	}
 	return nil

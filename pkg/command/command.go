@@ -37,7 +37,7 @@ func (b bus) Publish(ctx context.Context, commands ...Command) error {
 
 		err := handler(ctx, command)
 		if err != nil {
-			return fmt.Errorf("failed to execute command: %w", err)
+			return fmt.Errorf("execute command: %w", err)
 		}
 	}
 	return nil
@@ -48,7 +48,7 @@ func RegisterHandler[T Command](handler TypedHandler[T]) RegisterHandlerFunc {
 		var blankCommand T
 		commandType := blankCommand.Type()
 		if commandType == "" {
-			return "", nil, fmt.Errorf("failed to get command type for %T: blank command must return const value", blankCommand)
+			return "", nil, fmt.Errorf("get command type for %T: blank command must return const value", blankCommand)
 		}
 
 		return commandType, func(ctx context.Context, command Command) error {

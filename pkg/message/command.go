@@ -27,7 +27,7 @@ func (b commandBus) Publish(ctx context.Context, commands ...command.Command) er
 	for _, cmd := range commands {
 		err := b.bus.Produce(ctx, messageClassCommand, cmd, time.Now())
 		if err != nil {
-			return fmt.Errorf("failed to publish command: %w", err)
+			return fmt.Errorf("publish command: %w", err)
 		}
 	}
 	return nil
@@ -42,7 +42,7 @@ func RegisterCommand[T command.Command]() RegisterStructuredMessageFunc {
 				"",
 				nil,
 				nil,
-				fmt.Errorf("failed to get command type for %T: blank command must return const value", blank)
+				fmt.Errorf("get command type for %T: blank command must return const value", blank)
 		}
 
 		return messageClassCommand,
@@ -63,7 +63,7 @@ func RegisterCommandHandler[T command.Command](handler command.TypedHandler[T]) 
 			return "",
 				"",
 				nil,
-				fmt.Errorf("failed to get command type for %T: blank command must return const value", blank)
+				fmt.Errorf("get command type for %T: blank command must return const value", blank)
 		}
 
 		err := deserializer.RegisterDeserializer(subscriberDomain, messageClassCommand, commandType, TypedDeserializer[T]())
@@ -71,7 +71,7 @@ func RegisterCommandHandler[T command.Command](handler command.TypedHandler[T]) 
 			return "",
 				"",
 				nil,
-				fmt.Errorf("failed to register command %T deserializer: %w", blank, err)
+				fmt.Errorf("register command %T deserializer: %w", blank, err)
 		}
 
 		return buildCommandTopic(subscriberDomain),
@@ -97,7 +97,7 @@ func commandHandlerImpl[T command.Command](
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("failed to deserialize message %v: %w", msg.ID, err)
+			return fmt.Errorf("deserialize message %v: %w", msg.ID, err)
 		}
 
 		concreteCommand, ok := cmd.(T)
