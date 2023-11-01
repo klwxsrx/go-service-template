@@ -105,7 +105,7 @@ func (o *outbox) processSend() {
 
 		for {
 			err = o.transaction.Execute(ctx, func(ctx context.Context) error {
-				atLeastOneProcessed, err = o.processSendBatch(ctx)
+				atLeastOneProcessed, err = o.processSendBatch(ctx) // TODO: long tx here
 				return err
 			}, processMessageOutboxLockName)
 			if !atLeastOneProcessed || err != nil {
@@ -135,7 +135,7 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 	for _, msg := range msgs {
 		v := msg
 
-		err := o.out.Produce(ctx, &v) // TODO: WithLogging
+		err = o.out.Produce(ctx, &v) // TODO: WithLogging, WithMetrics
 		if err != nil {
 			return false, fmt.Errorf("send message: %w", err)
 		}

@@ -1,10 +1,11 @@
 package message
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 )
+
+const requestIDMetadataKey = "requestID"
 
 type (
 	TopicBuilderFunc func(domainName string) string
@@ -15,8 +16,8 @@ type jsonSerializer struct {
 	serializers map[messageIdentity]serializerHelper
 }
 
-func newJSONSerializer() jsonSerializer {
-	return jsonSerializer{
+func newJSONSerializer() *jsonSerializer {
+	return &jsonSerializer{
 		serializers: make(map[messageIdentity]serializerHelper),
 	}
 }
@@ -38,7 +39,12 @@ func (s jsonSerializer) RegisterSerializer(domainName, messageClass, messageType
 	return nil
 }
 
-func (s jsonSerializer) Serialize(_ context.Context, domainName, messageClass string, msg StructuredMessage) (*Message, error) {
+func (s jsonSerializer) Serialize(
+	domainName string,
+	messageClass string,
+	msg StructuredMessage,
+	meta Metadata,
+) (*Message, error) {
 	serializer, ok := s.serializers[messageIdentity{
 		DomainName:   domainName,
 		MessageClass: messageClass,
@@ -56,7 +62,9 @@ func (s jsonSerializer) Serialize(_ context.Context, domainName, messageClass st
 	payload, err := json.Marshal(jsonPayload{
 		Type: msg.Type(),
 		Data: string(messageEncoded),
-		Meta: nil,
+		jsonPayloadMetadata: jsonPayloadMetadata{
+			Meta: meta,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode message payload for %s: %w", msg.Type(), err)
@@ -68,6 +76,14 @@ func (s jsonSerializer) Serialize(_ context.Context, domainName, messageClass st
 		Key:     serializer.Key(msg),
 		Payload: payload,
 	}, nil
+}
+
+func getRequestIDFromMetadata(data Metadata) *string {
+	requestID, ok := data[requestIDMetadataKey].(string)
+	if !ok {
+		return nil
+	}
+	return &requestID
 }
 
 type (
@@ -83,8 +99,12 @@ type (
 	}
 
 	jsonPayload struct {
-		Type string         `json:"type"`
-		Data string         `json:"data"`
-		Meta map[string]any `json:"meta,omitempty"`
+		Type string `json:"type"`
+		Data string `json:"data"`
+		jsonPayloadMetadata
+	}
+
+	jsonPayloadMetadata struct {
+		Meta Metadata `json:"meta,omitempty"`
 	}
 )

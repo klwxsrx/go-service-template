@@ -6,6 +6,7 @@ import (
 	sqlduck "github.com/klwxsrx/go-service-template/data/sql/duck"
 	"github.com/klwxsrx/go-service-template/internal/duck"
 	commonhttp "github.com/klwxsrx/go-service-template/internal/pkg/http"
+	commonmessage "github.com/klwxsrx/go-service-template/internal/pkg/message"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 	pkglog "github.com/klwxsrx/go-service-template/pkg/log"
@@ -30,12 +31,14 @@ func main() {
 	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
 	defer msgBroker.Close()
 
+	msgBuses := commonmessage.NewBusFactory(observability, metrics, logger)
+
 	msgOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
 	defer msgOutbox.Close()
 
 	httpClients := commonhttp.NewClientFactory(observability, metrics, logger)
 
-	container := duck.MustInitDependencyContainer(sqlDB, httpClients, msgOutbox.Process)
+	container := duck.MustInitDependencyContainer(sqlDB, msgBuses, httpClients, msgOutbox.Process)
 
 	httpServer := pkghttp.NewServer(
 		pkghttp.DefaultServerAddress,

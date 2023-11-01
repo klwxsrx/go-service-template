@@ -39,7 +39,7 @@ type busListener struct {
 
 func NewBusListener(
 	consumers Consumers,
-	handlerMiddlewares ...HandlerMiddleware, // TODO: add observability to pass request id
+	handlerMiddlewares ...HandlerMiddleware,
 ) BusListener {
 	return &busListener{
 		middlewares:   handlerMiddlewares,

@@ -24,12 +24,16 @@ func NewTaskScheduler(bus Bus) task.Scheduler {
 }
 
 func (s taskScheduler) Schedule(ctx context.Context, at time.Time, tasks ...task.Task) error {
+	msgs := make([]StructuredMessage, 0, len(tasks))
 	for _, tsk := range tasks {
-		err := s.bus.Produce(ctx, messageClassTask, tsk, at)
-		if err != nil {
-			return fmt.Errorf("publish task: %w", err)
-		}
+		msgs = append(msgs, StructuredMessage(tsk))
 	}
+
+	err := s.bus.Produce(ctx, messageClassTask, msgs, at)
+	if err != nil {
+		return fmt.Errorf("publish task: %w", err)
+	}
+
 	return nil
 }
 
@@ -95,7 +99,7 @@ func taskHandlerImpl[T task.Task](
 	deserializer Deserializer,
 ) Handler {
 	return func(ctx context.Context, msg *Message) error {
-		tsk, err := deserializer.Deserialize(ctx, publisherDomain, messageClassTask, msg)
+		tsk, err := deserializer.Deserialize(publisherDomain, messageClassTask, msg)
 		if errors.Is(err, ErrDeserializeNotValidMessage) || errors.Is(err, ErrDeserializeUnknownMessage) {
 			return nil
 		}

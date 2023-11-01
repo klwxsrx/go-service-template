@@ -11,14 +11,18 @@ import (
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
+	"github.com/klwxsrx/go-service-template/pkg/observability"
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
+
+const requestIDLogEntry = "requestID"
 
 type HandlerMiddleware func(Handler) Handler
 
 type listener struct {
-	consumer Consumer
-	handler  Handler
+	consumer          Consumer
+	handler           Handler
+	metadataExtractor metadataExtractor
 }
 
 func NewListener(
@@ -27,8 +31,9 @@ func NewListener(
 	mws ...HandlerMiddleware,
 ) worker.NamedProcess {
 	l := &listener{
-		consumer: consumer,
-		handler:  handler,
+		consumer:          consumer,
+		handler:           handler,
+		metadataExtractor: newMetadataExtractor(),
 	}
 
 	l.handler = handlerWrapper(l.handler)
@@ -45,12 +50,14 @@ func (l *listener) Name() string {
 
 func (l *listener) Process() worker.Process {
 	processMessage := func(msg *ConsumerMessage) {
-		ctx := withHandlerMetadata(msg.Context)
+		ctx := l.enrichWithHandlerMetadata(msg.Context, &msg.Message)
+
 		err := l.handler(ctx, &msg.Message)
 		if err != nil {
 			l.consumer.Nack(msg)
 			return
 		}
+
 		l.consumer.Ack(msg)
 	}
 
@@ -70,7 +77,12 @@ func (l *listener) Process() worker.Process {
 	}
 }
 
-func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) HandlerMiddleware {
+func (l *listener) enrichWithHandlerMetadata(ctx context.Context, msg *Message) context.Context {
+	metadata, _ := l.metadataExtractor.Extract(msg.Payload)
+	return withHandlerMetadata(ctx, metadata)
+}
+
+func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) HandlerMiddleware {
 	return func(handler Handler) Handler {
 		return func(ctx context.Context, msg *Message) error {
 			ctx = logger.WithContext(ctx, log.Fields{
@@ -81,8 +93,14 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) HandlerMidd
 				},
 			})
 
-			err := handler(ctx, msg)
 			meta := getHandlerMetadata(ctx)
+			requestID := getRequestIDFromMetadata(meta.Data)
+			if requestID != nil {
+				ctx = logger.WithContext(ctx, log.Fields{requestIDLogEntry: *requestID})
+			}
+
+			err := handler(ctx, msg)
+			meta = getHandlerMetadata(ctx)
 			if meta.Panic != nil {
 				logger.WithField("panic", log.Fields{
 					"message": meta.Panic.Message,
@@ -101,7 +119,7 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) HandlerMidd
 	}
 }
 
-func WithMetrics(metrics metric.Metrics) HandlerMiddleware {
+func WithHandlerMetrics(metrics metric.Metrics) HandlerMiddleware {
 	return func(handler Handler) Handler {
 		return func(ctx context.Context, msg *Message) error {
 			started := time.Now()
@@ -117,6 +135,21 @@ func WithMetrics(metrics metric.Metrics) HandlerMiddleware {
 				"success": err == nil,
 			}).Duration("msg_handle_duration_seconds", time.Since(started))
 			return err
+		}
+	}
+}
+
+func WithHandlerObservability(observer observability.Observer) HandlerMiddleware {
+	return func(handler Handler) Handler {
+		return func(ctx context.Context, msg *Message) error {
+			meta := getHandlerMetadata(ctx)
+			requestID := getRequestIDFromMetadata(meta.Data)
+			if requestID == nil {
+				return handler(ctx, msg)
+			}
+
+			ctx = observer.WithRequestID(ctx, *requestID)
+			return handler(ctx, msg)
 		}
 	}
 }

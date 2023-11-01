@@ -42,7 +42,7 @@ jobs:
         run: make test
 
   go-arch:
-    name: Validate architecture rules
+    name: Validate backend architecture
     needs: go-prepare-env
     runs-on: ubuntu-latest
     steps:

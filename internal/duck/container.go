@@ -10,6 +10,7 @@ import (
 	"github.com/klwxsrx/go-service-template/internal/duck/infra/http"
 	"github.com/klwxsrx/go-service-template/internal/duck/infra/sql"
 	commonhttp "github.com/klwxsrx/go-service-template/internal/pkg/http"
+	commonmessage "github.com/klwxsrx/go-service-template/internal/pkg/message"
 	pkgevent "github.com/klwxsrx/go-service-template/pkg/event"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
@@ -26,6 +27,7 @@ type DependencyContainer struct {
 
 func MustInitDependencyContainer(
 	sqlClient pkgsql.TxClient,
+	msgBuses *commonmessage.BusFactory,
 	httpClients *commonhttp.ClientFactory,
 	onCommit func(),
 ) *DependencyContainer {
@@ -35,7 +37,7 @@ func MustInitDependencyContainer(
 		onCommit,
 	)
 
-	msgBus := pkgmessage.NewBus(
+	msgBus := msgBuses.New(
 		domainName,
 		pkgsql.NewMessageOutboxStorage(wrappedSQLClient),
 	)

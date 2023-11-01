@@ -30,6 +30,6 @@ func (o observer) WithRequestID(ctx context.Context, id string) context.Context 
 	return context.WithValue(ctx, requestIDContextKey, id)
 }
 
-func New() Observer {
+func New() Observer { // TODO: WithLogging
 	return observer{}
 }

@@ -1,7 +1,6 @@
 package message
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +13,7 @@ var (
 
 type (
 	Deserializer interface {
-		Deserialize(ctx context.Context, publisherDomain, messageClass string, msg *Message) (StructuredMessage, error)
+		Deserialize(publisherDomain, messageClass string, msg *Message) (StructuredMessage, error)
 		RegisterDeserializer(publisherDomain, messageClass, messageType string, deserializer DeserializerFunc) error
 	}
 
@@ -45,7 +44,7 @@ func (d jsonDeserializer) RegisterDeserializer(publisherDomain, messageClass, me
 	return nil
 }
 
-func (d jsonDeserializer) Deserialize(_ context.Context, publisherDomain, messageClass string, msg *Message) (StructuredMessage, error) {
+func (d jsonDeserializer) Deserialize(publisherDomain, messageClass string, msg *Message) (StructuredMessage, error) {
 	var messagePayload jsonPayload
 	err := json.Unmarshal(msg.Payload, &messagePayload)
 	if err != nil {
@@ -62,6 +61,22 @@ func (d jsonDeserializer) Deserialize(_ context.Context, publisherDomain, messag
 	}
 
 	return deserializer(messagePayload.Data)
+}
+
+type metadataExtractor struct{}
+
+func newMetadataExtractor() metadataExtractor {
+	return metadataExtractor{}
+}
+
+func (d *metadataExtractor) Extract(msgPayload []byte) (Metadata, error) {
+	var data jsonPayloadMetadata
+	err := json.Unmarshal(msgPayload, &data)
+	if err != nil {
+		return nil, ErrDeserializeNotValidMessage
+	}
+
+	return data.Meta, nil
 }
 
 func TypedDeserializer[T StructuredMessage]() DeserializerFunc {

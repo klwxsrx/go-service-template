@@ -24,12 +24,16 @@ func NewCommandBus(bus Bus) command.Bus {
 }
 
 func (b commandBus) Publish(ctx context.Context, commands ...command.Command) error {
+	msgs := make([]StructuredMessage, 0, len(commands))
 	for _, cmd := range commands {
-		err := b.bus.Produce(ctx, messageClassCommand, cmd, time.Now())
-		if err != nil {
-			return fmt.Errorf("publish command: %w", err)
-		}
+		msgs = append(msgs, StructuredMessage(cmd))
 	}
+
+	err := b.bus.Produce(ctx, messageClassCommand, msgs, time.Now())
+	if err != nil {
+		return fmt.Errorf("publish command: %w", err)
+	}
+
 	return nil
 }
 
@@ -75,7 +79,7 @@ func RegisterCommandHandler[T command.Command](handler command.TypedHandler[T]) 
 		}
 
 		return buildCommandTopic(subscriberDomain),
-			ConsumptionTypeSingle,
+			ConsumptionTypeShared,
 			commandHandlerImpl[T](subscriberDomain, handler, deserializer),
 			nil
 	}
@@ -92,7 +96,7 @@ func commandHandlerImpl[T command.Command](
 	deserializer Deserializer,
 ) Handler {
 	return func(ctx context.Context, msg *Message) error {
-		cmd, err := deserializer.Deserialize(ctx, publisherDomain, messageClassCommand, msg)
+		cmd, err := deserializer.Deserialize(publisherDomain, messageClassCommand, msg)
 		if errors.Is(err, ErrDeserializeNotValidMessage) || errors.Is(err, ErrDeserializeUnknownMessage) {
 			return nil
 		}

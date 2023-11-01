@@ -26,12 +26,16 @@ func NewEventDispatcher(
 }
 
 func (d eventDispatcher) Dispatch(ctx context.Context, events ...event.Event) error {
+	msgs := make([]StructuredMessage, 0, len(events))
 	for _, evt := range events {
-		err := d.bus.Produce(ctx, messageClassEvent, evt, time.Now())
-		if err != nil {
-			return fmt.Errorf("dispatch event: %w", err)
-		}
+		msgs = append(msgs, StructuredMessage(evt))
 	}
+
+	err := d.bus.Produce(ctx, messageClassEvent, msgs, time.Now())
+	if err != nil {
+		return fmt.Errorf("dispatch event: %w", err)
+	}
+
 	return nil
 }
 
@@ -118,7 +122,7 @@ func eventHandlerImpl[T event.Event](
 	deserializer Deserializer,
 ) Handler {
 	return func(ctx context.Context, msg *Message) error {
-		evt, err := deserializer.Deserialize(ctx, publisherDomain, messageClassEvent, msg)
+		evt, err := deserializer.Deserialize(publisherDomain, messageClassEvent, msg)
 		if errors.Is(err, ErrDeserializeNotValidMessage) || errors.Is(err, ErrDeserializeUnknownMessage) {
 			return nil
 		}

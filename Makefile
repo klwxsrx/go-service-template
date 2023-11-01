@@ -23,7 +23,7 @@ lint-fix: tools
 	tools/bin/golangci-lint run --fix ./...
 
 arch: tools
-	tools/bin/go-cleanarch -application app -domain domain -infrastructure infra -interfaces api
+	tools/bin/go-cleanarch -interfaces api -application app -domain domain -infrastructure infra
 
 tools: tools/bin/mockgen tools/bin/golangci-lint tools/bin/go-cleanarch
 
