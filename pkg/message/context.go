@@ -8,7 +8,6 @@ type contextKey int
 
 const (
 	handlerMetaContextKey contextKey = iota
-	busMetaContextKey
 )
 
 type Panic struct {
@@ -19,10 +18,6 @@ type Panic struct {
 type handlerMetadata struct {
 	Panic *Panic
 	Data  Metadata
-}
-
-type busMetadata struct {
-	RequestID *string
 }
 
 func withHandlerMetadata(ctx context.Context, data Metadata) context.Context {
@@ -40,16 +35,4 @@ func getHandlerMetadata(ctx context.Context) *handlerMetadata {
 		return meta
 	}
 	return &handlerMetadata{}
-}
-
-func withBusMetadata(ctx context.Context) context.Context {
-	return context.WithValue(ctx, busMetaContextKey, &busMetadata{})
-}
-
-func getBusMetadata(ctx context.Context) *busMetadata {
-	meta, ok := ctx.Value(busMetaContextKey).(*busMetadata)
-	if ok {
-		return meta
-	}
-	return &busMetadata{}
 }

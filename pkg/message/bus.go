@@ -12,11 +12,13 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/observability"
 )
 
+const requestIDMetadataKey = "requestID"
+
 type (
 	StructuredMessage interface {
 		ID() uuid.UUID
 		// Type must be unique string for message class
-		Type() string // TODO: add Class() method
+		Type() string
 	}
 
 	RegisterStructuredMessageFunc func(
@@ -73,7 +75,7 @@ func NewBus(
 
 func (b bus) Produce(ctx context.Context, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
 	return b.producerImpl(
-		withBusMetadata(ctx),
+		ctx,
 		b.domainName,
 		msgClass,
 		msgs,
@@ -140,20 +142,6 @@ func newBusProducerImpl(
 }
 
 func WithObservability(observer observability.Observer) BusOption {
-	observabilityMW := func(impl BusProducerFunc) BusProducerFunc {
-		return func(ctx context.Context, domainName string, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
-			requestID, ok := observer.RequestID(ctx)
-			if !ok {
-				return nil
-			}
-
-			meta := getBusMetadata(ctx)
-			meta.RequestID = &requestID
-
-			return impl(ctx, domainName, msgClass, msgs, scheduleAt)
-		}
-	}
-
 	observabilityMetadataBuilder := func(ctx context.Context) (Metadata, error) { // nolint:unparam
 		requestID, ok := observer.RequestID(ctx)
 		if !ok {
@@ -164,7 +152,7 @@ func WithObservability(observer observability.Observer) BusOption {
 	}
 
 	return func() (BusProducerMW, MetadataBuilderFunc) {
-		return observabilityMW, observabilityMetadataBuilder
+		return nil, observabilityMetadataBuilder
 	}
 }
 
@@ -194,11 +182,6 @@ func WithMetrics(metrics metric.Metrics) BusOption {
 func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusOption {
 	loggingMW := func(impl BusProducerFunc) BusProducerFunc {
 		return func(ctx context.Context, domainName string, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
-			meta := getBusMetadata(ctx)
-			if meta.RequestID != nil {
-				ctx = logger.WithContext(ctx, log.Fields{requestIDLogEntry: *meta.RequestID})
-			}
-
 			messageIDTypes := make([]log.Fields, 0, len(msgs))
 			for _, msg := range msgs {
 				messageIDTypes = append(messageIDTypes, log.Fields{

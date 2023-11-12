@@ -15,8 +15,6 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
-const requestIDLogEntry = "requestID"
-
 type HandlerMiddleware func(Handler) Handler
 
 type listener struct {
@@ -93,14 +91,8 @@ func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) Hand
 				},
 			})
 
-			meta := getHandlerMetadata(ctx)
-			requestID := getRequestIDFromMetadata(meta.Data)
-			if requestID != nil {
-				ctx = logger.WithContext(ctx, log.Fields{requestIDLogEntry: *requestID})
-			}
-
 			err := handler(ctx, msg)
-			meta = getHandlerMetadata(ctx)
+			meta := getHandlerMetadata(ctx)
 			if meta.Panic != nil {
 				logger.WithField("panic", log.Fields{
 					"message": meta.Panic.Message,
@@ -174,4 +166,12 @@ func handlerWrapper(handler Handler) Handler {
 		defer recoverPanic(ctx)
 		return handler(ctx, msg)
 	}
+}
+
+func getRequestIDFromMetadata(data Metadata) *string {
+	requestID, ok := data[requestIDMetadataKey].(string)
+	if !ok {
+		return nil
+	}
+	return &requestID
 }

@@ -20,7 +20,9 @@ func main() {
 	ctx := context.Background()
 	logger := pkgcmd.InitLogger()
 	metrics := pkgmetricstub.NewMetrics()
-	observability := pkgobservability.New()
+	observability := pkgobservability.New(
+		pkgobservability.WithFieldsLogging(logger, pkgobservability.LogFieldRequestID),
+	)
 	defer pkgcmd.HandleAppPanic(ctx, logger)
 
 	logger.Info(ctx, "app is starting")

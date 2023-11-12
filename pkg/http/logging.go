@@ -6,8 +6,6 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
-const requestIDLogEntry = "requestID"
-
 func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPaths ...string) ServerOption {
 	excludedPaths = append(excludedPaths,
 		healthPath,
@@ -27,12 +25,6 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 			if isExcluded(r.URL.Path) {
 				handler.ServeHTTP(w, r)
 				return
-			}
-
-			meta := getHandlerMetadata(r.Context())
-			if meta.RequestID != nil {
-				ctx := logger.WithContext(r.Context(), log.Fields{requestIDLogEntry: *meta.RequestID})
-				r = r.WithContext(ctx)
 			}
 
 			handler.ServeHTTP(w, r)

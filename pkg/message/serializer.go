@@ -5,8 +5,6 @@ import (
 	"fmt"
 )
 
-const requestIDMetadataKey = "requestID"
-
 type (
 	TopicBuilderFunc func(domainName string) string
 	KeyBuilderFunc   func(StructuredMessage) string
@@ -76,14 +74,6 @@ func (s jsonSerializer) Serialize(
 		Key:     serializer.Key(msg),
 		Payload: payload,
 	}, nil
-}
-
-func getRequestIDFromMetadata(data Metadata) *string {
-	requestID, ok := data[requestIDMetadataKey].(string)
-	if !ok {
-		return nil
-	}
-	return &requestID
 }
 
 type (
