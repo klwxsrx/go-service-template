@@ -13,14 +13,14 @@ const (
 	handlerMetaContextKey contextKey = iota
 )
 
-type Panic struct {
+type panicErr struct {
 	Message    string
 	Stacktrace []byte
 }
 
 type handlerMetadata struct {
 	Code  int
-	Panic *Panic
+	Panic *panicErr
 	Error error
 }
 

@@ -7,8 +7,9 @@ import (
 	"runtime/debug"
 
 	"github.com/klwxsrx/go-service-template/pkg/env"
+	"github.com/klwxsrx/go-service-template/pkg/http"
 	"github.com/klwxsrx/go-service-template/pkg/log"
-	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
+	"github.com/klwxsrx/go-service-template/pkg/message"
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
 )
@@ -47,6 +48,14 @@ func InitLogger() log.Logger {
 	return log.New(logLevel)
 }
 
+func InitHTTPClientFactory(
+	opts ...http.ClientOption,
+) HTTPClientFactory {
+	return HTTPClientFactory{
+		impl: http.NewClientFactory(opts...),
+	}
+}
+
 func MustInitSQL(ctx context.Context, logger log.Logger, migrations ...sql.MigrationSource) sql.Database {
 	sqlConfig := &sql.Config{
 		DSN: sql.DSN{
@@ -79,13 +88,13 @@ func MustInitSQL(ctx context.Context, logger log.Logger, migrations ...sql.Migra
 
 func MustInitSQLMessageOutbox(
 	sqlClient sql.TxClient,
-	messageProducer pkgmessage.Producer,
+	messageProducer message.Producer,
 	logger log.Logger,
-) pkgmessage.Outbox {
+) message.Outbox {
 	wrappedSQLClient, tx := sql.NewTransaction(sqlClient, "messageOutbox", func() {})
 	messageStorage := sql.NewMessageOutboxStorage(wrappedSQLClient)
 
-	return pkgmessage.NewOutbox(
+	return message.NewOutbox(
 		messageStorage,
 		messageProducer,
 		tx,

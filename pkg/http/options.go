@@ -12,7 +12,7 @@ const (
 )
 
 func WithHealthCheck(customHandlerFunc HandlerFunc) ServerOption {
-	defaultHandler := func(w http.ResponseWriter, _ *http.Request) {
+	handler := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("ContentType", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(struct {
@@ -21,13 +21,11 @@ func WithHealthCheck(customHandlerFunc HandlerFunc) ServerOption {
 			Status: "OK",
 		})
 	}
+	if customHandlerFunc != nil {
+		handler = httpHandlerWrapper(customHandlerFunc)
+	}
 
 	return func(router *mux.Router) {
-		handler := defaultHandler
-		if customHandlerFunc != nil {
-			handler = httpHandlerWrapper(customHandlerFunc)
-		}
-
 		router.
 			Name(getRouteName(http.MethodGet, healthPath)).
 			Methods(http.MethodGet).

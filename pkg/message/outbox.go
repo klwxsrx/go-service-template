@@ -158,7 +158,6 @@ func (o outboxProcessor) Name() string {
 }
 
 func (o outboxProcessor) Process() worker.Process {
-
 	return func(stopChan <-chan struct{}) error {
 		for {
 			select {

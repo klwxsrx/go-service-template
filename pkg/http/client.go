@@ -13,24 +13,31 @@ import (
 )
 
 type (
-	ClientOption func(*resty.Client)
+	Destination string
+
+	ClientOption func(*ClientImpl)
+
+	Client interface {
+		NewRequest(ctx context.Context) *resty.Request
+		With(opts ...ClientOption) Client
+	}
+
+	ClientImpl struct {
+		DestinationName string
+		RESTClient      *resty.Client
+		opts            []ClientOption
+	}
+
+	ClientFactory struct {
+		baseOpts []ClientOption
+	}
 )
 
-type Client interface {
-	NewRequest(ctx context.Context) *resty.Request
-	With(opts ...ClientOption) Client
+func (c ClientImpl) NewRequest(ctx context.Context) *resty.Request {
+	return c.RESTClient.NewRequest().SetContext(ctx)
 }
 
-type client struct {
-	impl *resty.Client
-	opts []ClientOption
-}
-
-func (c client) NewRequest(ctx context.Context) *resty.Request {
-	return c.impl.NewRequest().SetContext(ctx)
-}
-
-func (c client) With(opts ...ClientOption) Client {
+func (c ClientImpl) With(opts ...ClientOption) Client {
 	mergedOpts := make([]ClientOption, 0, len(c.opts)+len(opts))
 	mergedOpts = append(mergedOpts, c.opts...)
 	mergedOpts = append(mergedOpts, opts...)
@@ -38,22 +45,29 @@ func (c client) With(opts ...ClientOption) Client {
 }
 
 func NewClient(opts ...ClientOption) Client {
-	impl := resty.New()
-	for _, opt := range opts {
-		opt(impl)
+	client := ClientImpl{
+		DestinationName: "",
+		RESTClient:      resty.New(),
+		opts:            opts,
 	}
-	return client{impl, opts}
+
+	for _, opt := range opts {
+		opt(&client)
+	}
+
+	return client
 }
 
-func WithClientBaseURL(url string) ClientOption {
-	return func(r *resty.Client) {
-		r.SetBaseURL(url)
+func WithClientDestination(name, url string) ClientOption {
+	return func(c *ClientImpl) {
+		c.DestinationName = name
+		c.RESTClient.SetBaseURL(url)
 	}
 }
 
 func WithRequestObservability(observer observability.Observer, requestIDHeaderName string) ClientOption {
-	return func(r *resty.Client) {
-		r.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
+	return func(c *ClientImpl) {
+		c.RESTClient.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
 			id, ok := observer.RequestID(req.Context())
 			if !ok {
 				return nil
@@ -65,25 +79,32 @@ func WithRequestObservability(observer observability.Observer, requestIDHeaderNa
 	}
 }
 
-func WithRequestLogging(destinationName string, logger log.Logger, infoLevel, errorLevel log.Level) ClientOption {
-	logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
-		"destinationName": destinationName,
-	}))
-
-	return func(r *resty.Client) {
-		r.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
+func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) ClientOption {
+	const destinationNameLogField = "destinationName"
+	return func(c *ClientImpl) {
+		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
 			logger = getRequestResponseFieldsLogger(resp.Request.RawRequest, resp.StatusCode(), logger)
+			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
+				destinationNameLogField: getDestinationNameForLogging(c),
+			}))
+
 			if resp.StatusCode() >= http.StatusInternalServerError {
 				logger.Log(resp.Request.Context(), errorLevel, "http call completed with internal error")
 			} else {
 				logger.Log(resp.Request.Context(), infoLevel, "http call completed")
 			}
+
 			return nil
 		})
-		r.OnError(func(req *resty.Request, err error) {
+
+		c.RESTClient.OnError(func(req *resty.Request, err error) {
 			if req.RawRequest != nil {
 				logger = getRequestFieldsLogger(req.RawRequest, logger)
 			}
+			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
+				destinationNameLogField: getDestinationNameForLogging(c),
+			}))
+
 			logger.
 				WithError(err).
 				Log(req.Context(), errorLevel, "http call completed with error")
@@ -91,9 +112,14 @@ func WithRequestLogging(destinationName string, logger log.Logger, infoLevel, er
 	}
 }
 
-func WithRequestMetrics(destinationName string, metrics metric.Metrics) ClientOption {
-	return func(r *resty.Client) {
-		r.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
+func WithRequestMetrics(metrics metric.Metrics) ClientOption {
+	return func(c *ClientImpl) {
+		destinationName := c.DestinationName
+		if destinationName == "" {
+			destinationName = "none"
+		}
+
+		c.RESTClient.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
 			metrics.With(metric.Labels{
 				"destination": destinationName,
 				"method":      resp.Request.Method,
@@ -103,4 +129,37 @@ func WithRequestMetrics(destinationName string, metrics metric.Metrics) ClientOp
 			return nil
 		})
 	}
+}
+
+func NewClientFactory(opts ...ClientOption) ClientFactory {
+	return ClientFactory{
+		baseOpts: opts,
+	}
+}
+
+func (f *ClientFactory) InitClient(dest Destination, baseURL string, extraOpts ...ClientOption) Client {
+	opts := make([]ClientOption, 0, len(extraOpts)+1)
+	opts = append(opts, WithClientDestination(string(dest), baseURL))
+	opts = append(opts, extraOpts...)
+
+	return f.httpClient(opts...)
+}
+
+func (f *ClientFactory) InitRawClient(extraOpts ...ClientOption) Client {
+	return f.httpClient(extraOpts...)
+}
+
+func (f *ClientFactory) httpClient(extraOpts ...ClientOption) Client {
+	opts := make([]ClientOption, 0, len(f.baseOpts)+len(extraOpts))
+	opts = append(opts, f.baseOpts...)
+	opts = append(opts, extraOpts...)
+
+	return NewClient(opts...)
+}
+
+func getDestinationNameForLogging(c *ClientImpl) string {
+	if c.DestinationName != "" {
+		return c.DestinationName
+	}
+	return "-"
 }

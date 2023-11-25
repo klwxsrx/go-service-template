@@ -155,7 +155,7 @@ func handlerWrapper(handler Handler) Handler {
 			}
 
 			meta := getHandlerMetadata(ctx)
-			meta.Panic = &Panic{
+			meta.Panic = &panicErr{
 				Message:    fmt.Sprintf("%v", panicMsg),
 				Stacktrace: debug.Stack(),
 			}

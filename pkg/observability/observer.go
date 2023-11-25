@@ -68,7 +68,6 @@ func (o observer) WithRequestID(ctx context.Context, id string) context.Context 
 func WithFieldsLogging(logger log.Logger, fields ...LogField) ObserverOption {
 	return func(o *observer) {
 		o.logger = logger
-
 		o.loggingFields = make(map[LogField]struct{}, len(fields))
 		for _, field := range fields {
 			o.loggingFields[field] = struct{}{}

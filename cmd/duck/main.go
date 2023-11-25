@@ -6,10 +6,10 @@ import (
 	sqlduck "github.com/klwxsrx/go-service-template/data/sql/duck"
 	"github.com/klwxsrx/go-service-template/internal/duck"
 	commonhttp "github.com/klwxsrx/go-service-template/internal/pkg/http"
-	commonmessage "github.com/klwxsrx/go-service-template/internal/pkg/message"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 	pkglog "github.com/klwxsrx/go-service-template/pkg/log"
+	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
 	pkgmetricstub "github.com/klwxsrx/go-service-template/pkg/metric/stub"
 	pkgobservability "github.com/klwxsrx/go-service-template/pkg/observability"
 	pkgsig "github.com/klwxsrx/go-service-template/pkg/sig"
@@ -33,12 +33,20 @@ func main() {
 	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
 	defer msgBroker.Close()
 
-	msgBuses := commonmessage.NewBusFactory(observability, metrics, logger)
-
 	msgOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
 	defer msgOutbox.Close()
 
-	httpClients := commonhttp.NewClientFactory(observability, metrics, logger)
+	msgBuses := pkgmessage.NewBusFactory(
+		pkgmessage.WithObservability(observability),
+		pkgmessage.WithMetrics(metrics),
+		pkgmessage.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),
+	)
+
+	httpClients := pkgcmd.InitHTTPClientFactory(
+		pkghttp.WithRequestObservability(observability, commonhttp.RequestIDHeader),
+		pkghttp.WithRequestMetrics(metrics),
+		pkghttp.WithRequestLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),
+	)
 
 	container := duck.MustInitDependencyContainer(sqlDB, msgBuses, httpClients, msgOutbox.Process)
 
@@ -48,7 +56,7 @@ func main() {
 		pkghttp.WithCORSHandler(),
 		pkghttp.WithObservability(
 			observability,
-			pkghttp.NewHTTPHeaderRequestIDExtractor(pkghttp.DefaultRequestIDHeader),
+			pkghttp.NewHTTPHeaderRequestIDExtractor(commonhttp.RequestIDHeader),
 			pkghttp.NewRandomUUIDRequestIDExtractor(),
 		),
 		pkghttp.WithMetrics(metrics),

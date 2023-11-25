@@ -37,11 +37,11 @@ type Logger interface {
 	WithField(name string, value any) Logger
 	WithError(err error) Logger
 	WithContext(ctx context.Context, fields Fields) context.Context
-	Debug(ctx context.Context, str string)
-	Error(ctx context.Context, str string)
-	Warn(ctx context.Context, str string)
-	Info(ctx context.Context, str string)
-	Log(ctx context.Context, level Level, str string)
+	Log(ctx context.Context, lvl Level, msg string)
+	Debug(ctx context.Context, msg string)
+	Info(ctx context.Context, msg string)
+	Warn(ctx context.Context, msg string)
+	Error(ctx context.Context, msg string)
 }
 
 type logger struct {
@@ -96,16 +96,16 @@ func (l logger) Debug(ctx context.Context, str string) {
 	l.loggerWithFields(ctx).Debug(str)
 }
 
-func (l logger) Error(ctx context.Context, str string) {
-	l.loggerWithFields(ctx).Error(str)
+func (l logger) Info(ctx context.Context, str string) {
+	l.loggerWithFields(ctx).Info(str)
 }
 
 func (l logger) Warn(ctx context.Context, str string) {
 	l.loggerWithFields(ctx).Warn(str)
 }
 
-func (l logger) Info(ctx context.Context, str string) {
-	l.loggerWithFields(ctx).Info(str)
+func (l logger) Error(ctx context.Context, str string) {
+	l.loggerWithFields(ctx).Error(str)
 }
 
 func (l logger) Log(ctx context.Context, level Level, str string) {

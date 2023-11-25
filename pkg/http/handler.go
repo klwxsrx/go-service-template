@@ -208,7 +208,7 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 	w.impl.WriteHeader(httpCode)
 }
 
-func (w *responseWriter) WritePanic(ctx context.Context, panic Panic) {
+func (w *responseWriter) WritePanic(ctx context.Context, panic panicErr) {
 	meta := getHandlerMetadata(ctx)
 	meta.Code = http.StatusInternalServerError
 	meta.Panic = &panic
@@ -223,7 +223,7 @@ func httpHandlerWrapper(handler HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		respWriter.WritePanic(r.Context(), Panic{
+		respWriter.WritePanic(r.Context(), panicErr{
 			Message:    fmt.Sprintf("%v", msg),
 			Stacktrace: debug.Stack(),
 		})
