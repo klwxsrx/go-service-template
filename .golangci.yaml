@@ -1,4 +1,5 @@
 run:
+  go: '1.21'
   timeout: 3m
   issues-exit-code: 1
 
@@ -7,18 +8,28 @@ issues:
   max-same-issues: 10
 
 linters:
+  disable-all: true
   enable:
     - bodyclose
+    - errcheck
+    - errorlint
     - gocognit
     - gocritic
     - gocyclo
-    - gofmt
+    - gofumpt
     - goimports
     - gosec
+    - gosimple
+    - govet
     - importas
+    - ineffassign
+    - makezero
     - misspell
     - noctx
     - revive
+    - revive
+    - rowserrcheck
+    - staticcheck
     - unconvert
     - unparam
 
@@ -38,7 +49,7 @@ linters-settings:
         alias: common$1
       - pkg: github.com/klwxsrx/go-service-template/internal/pkg/(\w+)/(\w+)
         alias: common$1$2
-      # domain aliases
+      # domain-specific aliases
       - pkg: github.com/klwxsrx/go-service-template/internal/(duck)/(\w+)
         alias: $1$2
       - pkg: github.com/klwxsrx/go-service-template/internal/(duck)/(\w+)/(\w+)

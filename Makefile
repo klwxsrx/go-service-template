@@ -1,29 +1,31 @@
 export TOOLS_PATH := ${CURDIR}/tools/bin
 
-.PHONY: clean codegen test lint arch tools-clean tools-update tools
+.PHONY: clean codegen lint lint-fix arch test tools-clean
 
-all: clean codegen test lint arch bin/duck bin/duckhandler bin/messageoutbox
+all: clean lint arch test build
 
 clean:
 	rm -rf bin/*
 
+build: bin/duck bin/duckhandler bin/messageoutbox
+
 bin/%:
 	GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -o ./bin/$(notdir $@) ./cmd/$(notdir $@)
 
-codegen: tools
+codegen: tools/bin/mockgen
 	go generate ./...
+
+lint: codegen tools/bin/golangci-lint
+	tools/bin/golangci-lint run ./...
+
+lint-fix: codegen tools/bin/golangci-lint
+	tools/bin/golangci-lint run --fix ./...
+
+arch: tools/bin/go-cleanarch
+	tools/bin/go-cleanarch -interfaces api -application app -domain domain -infrastructure infra
 
 test: codegen
 	go test ./...
-
-lint: tools
-	tools/bin/golangci-lint run ./...
-
-lint-fix: tools
-	tools/bin/golangci-lint run --fix ./...
-
-arch: tools
-	tools/bin/go-cleanarch -interfaces api -application app -domain domain -infrastructure infra
 
 tools: tools/bin/mockgen tools/bin/golangci-lint tools/bin/go-cleanarch
 
@@ -38,5 +40,3 @@ tools/bin/go-cleanarch:
 
 tools-clean:
 	rm -rf tools/bin/*
-
-tools-update: tools-clean tools
