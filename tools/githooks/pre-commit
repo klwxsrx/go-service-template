@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# Run make pre-commit
+RESULT="$(make git-pre-commit)"
+if [[ $? != 0 ]]; then
+    echo "${RESULT}"
+    exit 1
+fi

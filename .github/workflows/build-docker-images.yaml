@@ -38,7 +38,7 @@ jobs:
         run: make test
 
   go-arch:
-    name: Validate backend architecture
+    name: Validate Go architecture
     needs: go-prepare-env
     runs-on: ubuntu-latest
     steps:
