@@ -11,7 +11,7 @@ import (
 type instanceID string
 
 type txData struct {
-	tx         ClientTx
+	ClientTx
 	instanceID instanceID
 }
 
@@ -27,7 +27,7 @@ func (t *transaction) Execute(
 	lockNames ...string,
 ) error {
 	var err error
-	storedTx, ok := ctx.Value(databaseTransactionContextKey).(txData)
+	storedTx, ok := ctx.Value(dbTransactionContextKey).(txData)
 	hasParentTx := ok && storedTx.instanceID == t.id
 	if !hasParentTx {
 		var tx ClientTx
@@ -42,12 +42,12 @@ func (t *transaction) Execute(
 		}()
 
 		storedTx.instanceID = t.id
-		storedTx.tx = tx
-		ctx = context.WithValue(ctx, databaseTransactionContextKey, storedTx)
+		storedTx.ClientTx = tx
+		ctx = context.WithValue(ctx, dbTransactionContextKey, storedTx)
 	}
 
 	for _, lockName := range lockNames {
-		err = lockDatabase(ctx, storedTx.tx, "SELECT pg_advisory_xact_lock($1)", lockName)
+		err = lockDatabase(ctx, storedTx.ClientTx, "SELECT pg_advisory_xact_lock($1)", lockName)
 		if err != nil {
 			return err
 		}
@@ -62,7 +62,7 @@ func (t *transaction) Execute(
 		return nil
 	}
 
-	err = storedTx.tx.Commit()
+	err = storedTx.ClientTx.Commit()
 	if err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
@@ -73,40 +73,40 @@ func (t *transaction) Execute(
 	return nil
 }
 
-func NewTransaction(client TxClient, instanceName string, onCommit func()) (Client, persistence.Transaction) {
-	return &txUnwrapperClient{client: client}, &transaction{id: instanceID(instanceName), client: client, onCommit: onCommit}
+func NewTransaction(client TxClient, instanceName string, onCommit func()) persistence.Transaction {
+	return &transaction{id: instanceID(instanceName), client: client, onCommit: onCommit}
 }
 
-type txUnwrapperClient struct {
+type transactionalClient struct {
 	client Client
 }
 
-func (c *txUnwrapperClient) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	tx, ok := ctx.Value(databaseTransactionContextKey).(ClientTx)
+func (c *transactionalClient) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	tx, ok := ctx.Value(dbTransactionContextKey).(Client)
 	if ok {
 		return tx.ExecContext(ctx, query, args...)
 	}
 	return c.client.ExecContext(ctx, query, args...)
 }
 
-func (c *txUnwrapperClient) NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error) {
-	tx, ok := ctx.Value(databaseTransactionContextKey).(ClientTx)
+func (c *transactionalClient) NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error) {
+	tx, ok := ctx.Value(dbTransactionContextKey).(Client)
 	if ok {
 		return tx.NamedExecContext(ctx, query, arg)
 	}
 	return c.client.NamedExecContext(ctx, query, arg)
 }
 
-func (c *txUnwrapperClient) GetContext(ctx context.Context, dest any, query string, args ...any) error {
-	tx, ok := ctx.Value(databaseTransactionContextKey).(ClientTx)
+func (c *transactionalClient) GetContext(ctx context.Context, dest any, query string, args ...any) error {
+	tx, ok := ctx.Value(dbTransactionContextKey).(Client)
 	if ok {
 		return tx.GetContext(ctx, dest, query, args...)
 	}
 	return c.client.GetContext(ctx, dest, query, args...)
 }
 
-func (c *txUnwrapperClient) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
-	tx, ok := ctx.Value(databaseTransactionContextKey).(ClientTx)
+func (c *transactionalClient) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
+	tx, ok := ctx.Value(dbTransactionContextKey).(Client)
 	if ok {
 		return tx.SelectContext(ctx, dest, query, args...)
 	}

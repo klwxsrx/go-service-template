@@ -37,7 +37,8 @@ func main() {
 	msgOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
 	defer msgOutbox.Close()
 
-	msgBuses := pkgmessage.NewBusFactory(
+	msgBuses := pkgcmd.InitSQLMessageBusFactory(
+		sqlDB,
 		pkgmessage.WithObservability(observability),
 		pkgmessage.WithMetrics(metrics),
 		pkgmessage.WithLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),

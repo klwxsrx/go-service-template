@@ -214,21 +214,24 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusOption {
 }
 
 type BusFactory struct {
-	opts []BusOption
+	storage OutboxStorage
+	opts    []BusOption
 }
 
-func (f BusFactory) New(domainName string, storage OutboxStorage) Bus {
+func (f BusFactory) New(domainName string) Bus {
 	return NewBus(
 		domainName,
-		storage,
+		f.storage,
 		f.opts...,
 	)
 }
 
 func NewBusFactory(
+	storage OutboxStorage,
 	opts ...BusOption,
 ) BusFactory {
 	return BusFactory{
-		opts: opts,
+		storage: storage,
+		opts:    opts,
 	}
 }

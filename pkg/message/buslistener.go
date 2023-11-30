@@ -67,12 +67,13 @@ func (b *busListener) RegisterHandlers(subscriberDomain string, handler Register
 }
 
 func (b *busListener) ListenerProcesses() []worker.NamedProcess {
+	workerPool := worker.NewPool(worker.MaxWorkersCountUnlimited)
 	listeners := make([]worker.NamedProcess, 0, len(b.consumersData))
 	for _, data := range b.consumersData {
 		listeners = append(listeners,
 			NewListener(
 				data.Consumer,
-				NewCompositeHandler(data.MessageHandlers, nil),
+				NewCompositeHandler(data.MessageHandlers, workerPool),
 				b.middlewares...,
 			),
 		)

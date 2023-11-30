@@ -39,7 +39,7 @@ type HandlerRegistry interface {
 
 type Server interface {
 	Listen(ctx context.Context, termSignalsChan <-chan os.Signal) error
-	NewListener(ctx context.Context) worker.NamedProcess
+	Listener(ctx context.Context) worker.NamedProcess
 	HandlerRegistry
 }
 
@@ -63,7 +63,7 @@ func (p serverProcess) Process() worker.Process {
 	}
 }
 
-func (s server) NewListener(ctx context.Context) worker.NamedProcess {
+func (s server) Listener(ctx context.Context) worker.NamedProcess {
 	return serverProcess{ctx, s.srv}
 }
 

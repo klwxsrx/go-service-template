@@ -91,14 +91,24 @@ func MustInitSQLMessageOutbox(
 	messageProducer message.Producer,
 	logger log.Logger,
 ) message.Outbox {
-	wrappedSQLClient, tx := sql.NewTransaction(sqlClient, "messageOutbox", func() {})
-	messageStorage := sql.NewMessageOutboxStorage(wrappedSQLClient)
+	messageStorage := sql.NewMessageOutboxStorage(sqlClient)
+	transaction := sql.NewTransaction(sqlClient, "messageOutbox", func() {})
 
 	return message.NewOutbox(
 		messageStorage,
 		messageProducer,
-		tx,
+		transaction,
 		logger,
+	)
+}
+
+func InitSQLMessageBusFactory(
+	sqlClient sql.Client,
+	opts ...message.BusOption,
+) message.BusFactory {
+	return message.NewBusFactory(
+		sql.NewMessageOutboxStorage(sqlClient),
+		opts...,
 	)
 }
 

@@ -57,12 +57,13 @@ type Database interface {
 }
 
 type database struct {
-	*sqlx.DB
+	transactionalClient
+	db     *sqlx.DB
 	logger log.Logger
 }
 
 func (c *database) Begin(ctx context.Context) (ClientTx, error) {
-	tx, err := c.BeginTxx(ctx, nil)
+	tx, err := c.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +71,7 @@ func (c *database) Begin(ctx context.Context) (ClientTx, error) {
 }
 
 func (c *database) Close(ctx context.Context) {
-	err := c.DB.Close()
+	err := c.db.Close()
 	if err != nil {
 		c.logger.WithError(err).Error(ctx, "failed to close sql database")
 	}
@@ -88,8 +89,9 @@ func NewDatabase(config *Config, logger log.Logger) (Database, error) {
 
 	enablePostgreSQLSquirrelPlaceholderFormat()
 	return &database{
-		DB:     db,
-		logger: logger,
+		db:                  db,
+		transactionalClient: transactionalClient{db},
+		logger:              logger,
 	}, nil
 }
 

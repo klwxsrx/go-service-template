@@ -1,8 +1,0 @@
-#!/bin/sh
-
-# Run make post-checkout
-RESULT="$(make git-post-checkout)"
-if [[ $? != 0 ]]; then
-    echo "${RESULT}"
-    exit 1
-fi

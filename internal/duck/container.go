@@ -31,22 +31,19 @@ func MustInitDependencyContainer(
 	httpClients pkgcmd.HTTPClientFactory,
 	onCommit func(),
 ) *DependencyContainer {
-	wrappedSQLClient, transaction := pkgsql.NewTransaction(
+	transaction := pkgsql.NewTransaction(
 		sqlClient,
 		domainName,
 		onCommit,
 	)
 
-	msgBus := msgBuses.New(
-		domainName,
-		pkgsql.NewMessageOutboxStorage(wrappedSQLClient),
-	)
-
 	gooseServiceHTTPClient := httpClients.MustInitClient(commonhttp.DestinationGooseService)
 	gooseService := goose.NewService(gooseServiceHTTPClient)
 
+	msgBus := msgBuses.New(domainName)
 	eventDispatcher := mustInitEventDispatcher(msgBus)
-	duckRepo := sql.NewDuckRepo(wrappedSQLClient, eventDispatcher)
+
+	duckRepo := sql.NewDuckRepo(sqlClient, eventDispatcher)
 
 	return &DependencyContainer{
 		duckService: service.NewDuckService(gooseService, transaction, duckRepo),
