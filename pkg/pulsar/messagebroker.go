@@ -25,32 +25,6 @@ type MessageBroker struct {
 	producers       map[string]pulsar.Producer
 }
 
-func (b *MessageBroker) Close() {
-	for _, producer := range b.producers {
-		producer.Close()
-	}
-	b.client.Close()
-}
-
-func (b *MessageBroker) testCreateProducer(connTimeout time.Duration) error {
-	eb := backoff.NewExponentialBackOff()
-	eb.InitialInterval = time.Second
-	eb.RandomizationFactor = 0
-	eb.Multiplier = 2
-	eb.MaxInterval = connTimeout / 4
-	eb.MaxElapsedTime = connTimeout
-
-	return backoff.Retry(func() error {
-		p, err := b.client.CreateProducer(pulsar.ProducerOptions{
-			Topic: "non-persistent://public/default/test-topic",
-		})
-		if err == nil {
-			p.Close()
-		}
-		return err
-	}, eb)
-}
-
 func NewMessageBroker(config *Config, logger log.Logger) (*MessageBroker, error) {
 	c, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL:    fmt.Sprintf("pulsar://%s", config.Address),
@@ -76,4 +50,30 @@ func NewMessageBroker(config *Config, logger log.Logger) (*MessageBroker, error)
 	}
 
 	return conn, nil
+}
+
+func (b *MessageBroker) Close() {
+	for _, producer := range b.producers {
+		producer.Close()
+	}
+	b.client.Close()
+}
+
+func (b *MessageBroker) testCreateProducer(connTimeout time.Duration) error {
+	eb := backoff.NewExponentialBackOff()
+	eb.InitialInterval = time.Second
+	eb.RandomizationFactor = 0
+	eb.Multiplier = 2
+	eb.MaxInterval = connTimeout / 4
+	eb.MaxElapsedTime = connTimeout
+
+	return backoff.Retry(func() error {
+		p, err := b.client.CreateProducer(pulsar.ProducerOptions{
+			Topic: "non-persistent://public/default/test-topic",
+		})
+		if err == nil {
+			p.Close()
+		}
+		return err
+	}, eb)
 }

@@ -26,6 +26,10 @@ func NewEventDispatcher(
 }
 
 func (d eventDispatcher) Dispatch(ctx context.Context, events ...event.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+
 	msgs := make([]StructuredMessage, 0, len(events))
 	for _, evt := range events {
 		msgs = append(msgs, StructuredMessage(evt))

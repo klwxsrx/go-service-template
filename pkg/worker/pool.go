@@ -25,6 +25,18 @@ type pool struct {
 	maxWorkers      int
 }
 
+func NewPool(maxWorkers int) Pool {
+	if maxWorkers <= MaxWorkersCountNumCPU {
+		maxWorkers = runtime.NumCPU()
+	}
+	return &pool{
+		jobCompleted:    &sync.WaitGroup{},
+		workerAvailable: sync.NewCond(&sync.Mutex{}),
+		currentWorkers:  0,
+		maxWorkers:      maxWorkers,
+	}
+}
+
 func (p *pool) Do(job SimpleJob) {
 	p.jobCompleted.Add(1)
 
@@ -52,16 +64,4 @@ func (p *pool) Do(job SimpleJob) {
 
 func (p *pool) Wait() {
 	p.jobCompleted.Wait()
-}
-
-func NewPool(maxWorkers int) Pool {
-	if maxWorkers <= MaxWorkersCountNumCPU {
-		maxWorkers = runtime.NumCPU()
-	}
-	return &pool{
-		jobCompleted:    &sync.WaitGroup{},
-		workerAvailable: sync.NewCond(&sync.Mutex{}),
-		currentWorkers:  0,
-		maxWorkers:      maxWorkers,
-	}
 }

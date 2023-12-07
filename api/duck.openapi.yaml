@@ -1,0 +1,83 @@
+openapi: 3.0.3
+info:
+  version: 1.0.0
+  title: Duck
+  description: |-
+    An example of a service
+tags:
+  - name: duck
+    description: "An example of a domain entity"
+paths:
+  /duck:
+    post:
+      operationId: createDuck
+      summary: "Create a new duck"
+      parameters:
+        - name: utm
+          in: path
+          schema:
+            type: string
+          required: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDuckIn"
+      responses:
+        200:
+          description: "Duck created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateDuckOut"
+        400:
+          description: "Invalid request data"
+        500:
+          description: "Internal server error"
+      tags:
+        - duck
+  /duck/{duckID}/setActive/{isActive}:
+    post:
+      operationId: setDuckActive
+      summary: "Set the duck's active status"
+      parameters:
+        - name: duckID
+          required: true
+          in: path
+          schema:
+            type: string
+            format: uuid
+        - name: isActive
+          required: true
+          in: path
+          schema:
+            type: boolean
+      responses:
+        200:
+          description: "Duck active status changed"
+        400:
+          description: "Invalid request data"
+        404:
+          description: "Duck not found"
+        500:
+          description: "Internal server error"
+      tags:
+        - duck
+components:
+  schemas:
+    CreateDuckIn:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+    CreateDuckOut:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+      required:
+        - id

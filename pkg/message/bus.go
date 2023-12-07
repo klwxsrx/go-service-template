@@ -74,6 +74,10 @@ func NewBus(
 }
 
 func (b bus) Produce(ctx context.Context, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
 	return b.producerImpl(
 		ctx,
 		b.domainName,
@@ -218,14 +222,6 @@ type BusFactory struct {
 	opts    []BusOption
 }
 
-func (f BusFactory) New(domainName string) Bus {
-	return NewBus(
-		domainName,
-		f.storage,
-		f.opts...,
-	)
-}
-
 func NewBusFactory(
 	storage OutboxStorage,
 	opts ...BusOption,
@@ -234,4 +230,12 @@ func NewBusFactory(
 		storage: storage,
 		opts:    opts,
 	}
+}
+
+func (f BusFactory) New(domainName string) Bus {
+	return NewBus(
+		domainName,
+		f.storage,
+		f.opts...,
+	)
 }

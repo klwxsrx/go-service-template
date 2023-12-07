@@ -14,6 +14,10 @@ type loggerAdapter struct {
 	logger log.Logger
 }
 
+func newLoggerAdapter(logger log.Logger) pulsarlog.Logger {
+	return loggerAdapter{context.Background(), logger}
+}
+
 func (l loggerAdapter) SubLogger(fields pulsarlog.Fields) pulsarlog.Logger {
 	return &loggerAdapter{l.ctx, l.logger.With(log.Fields(fields))}
 }
@@ -60,8 +64,4 @@ func (l loggerAdapter) Warnf(format string, args ...any) {
 
 func (l loggerAdapter) Errorf(format string, args ...any) {
 	l.logger.Error(l.ctx, fmt.Sprintf(format, args...))
-}
-
-func newLoggerAdapter(logger log.Logger) pulsarlog.Logger {
-	return loggerAdapter{context.Background(), logger}
 }

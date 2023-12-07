@@ -53,7 +53,7 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 func getRequestFieldsLogger(r *http.Request, logger log.Logger) log.Logger {
 	return logger.With(wrapFieldsWithRequestLogEntry(
 		log.Fields{
-			"routeName": getRouteName(r.Method, r.URL.Path),
+			"routeName": getRouteName(r.Method, r.URL.Path), // TODO: fix concrete values in route name POST_duck_26151e63_5539_40d1_9053_4c2d0c8cbddv_setActive_false
 			"method":    r.Method,
 			"scheme":    r.URL.Scheme,
 			"host":      r.URL.Host,

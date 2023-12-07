@@ -42,6 +42,15 @@ type messageConsumer struct {
 	messages chan *message.ConsumerMessage
 }
 
+func newMessageConsumer(pulsarConsumer pulsar.Consumer, subscribedTopic string) message.Consumer {
+	return &messageConsumer{
+		name:     fmt.Sprintf("%s/%s", pulsarConsumer.Subscription(), subscribedTopic),
+		pulsar:   pulsarConsumer,
+		onceDoer: &sync.Once{},
+		messages: make(chan *message.ConsumerMessage),
+	}
+}
+
 func (c *messageConsumer) Name() string {
 	return c.name
 }
@@ -104,13 +113,4 @@ func (c *messageConsumer) Nack(msg *message.ConsumerMessage) {
 
 func (c *messageConsumer) Close() {
 	c.pulsar.Close()
-}
-
-func newMessageConsumer(pulsarConsumer pulsar.Consumer, subscribedTopic string) message.Consumer {
-	return &messageConsumer{
-		name:     fmt.Sprintf("%s/%s", pulsarConsumer.Subscription(), subscribedTopic),
-		pulsar:   pulsarConsumer,
-		onceDoer: &sync.Once{},
-		messages: make(chan *message.ConsumerMessage),
-	}
 }

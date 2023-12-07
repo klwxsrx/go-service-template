@@ -30,6 +30,23 @@ type dispatcher struct {
 	handlers map[string]Handler
 }
 
+func NewDispatcher(handlers ...RegisterHandlerFunc) (Dispatcher, error) {
+	handlersMap := make(map[string]Handler, len(handlers))
+	for _, registerFunc := range handlers {
+		eventType, handler, err := registerFunc()
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := handlersMap[eventType]; ok {
+			return nil, fmt.Errorf("event handler for %s already exists", eventType)
+		}
+
+		handlersMap[eventType] = handler
+	}
+
+	return dispatcher{handlers: handlersMap}, nil
+}
+
 func (d dispatcher) Dispatch(ctx context.Context, events ...Event) error {
 	for _, evt := range events {
 		handler, ok := d.handlers[evt.Type()]
@@ -61,21 +78,4 @@ func RegisterHandler[T Event](handler TypedHandler[T]) RegisterHandlerFunc {
 			return handler(ctx, concreteEvent)
 		}, nil
 	}
-}
-
-func NewDispatcher(handlers ...RegisterHandlerFunc) (Dispatcher, error) {
-	handlersMap := make(map[string]Handler, len(handlers))
-	for _, registerFunc := range handlers {
-		eventType, handler, err := registerFunc()
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := handlersMap[eventType]; ok {
-			return nil, fmt.Errorf("event handler for %s already exists", eventType)
-		}
-
-		handlersMap[eventType] = handler
-	}
-
-	return dispatcher{handlers: handlersMap}, nil
 }

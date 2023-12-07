@@ -67,7 +67,7 @@ func PathParameter[T any](param string) RequestDataProvider[T] {
 			var result T
 			return result, fmt.Errorf("%w: path parameter %s not found", ErrParsingError, param)
 		}
-		return pkgstrings.ParseTypedValue[T](paramValue)
+		return pkgstrings.ParseTypedValue[T](paramValue) // TODO: wrap with parsing error
 	}
 }
 
@@ -205,7 +205,7 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 	meta.Code = httpCode
 	meta.Error = err
 
-	w.impl.WriteHeader(httpCode)
+	w.impl.WriteHeader(httpCode) // TODO: superfluous call after WriteHeader(http.StatusInternalServerError)
 }
 
 func (w *responseWriter) WritePanic(ctx context.Context, panic panicErr) {

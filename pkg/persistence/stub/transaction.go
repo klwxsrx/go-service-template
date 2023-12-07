@@ -8,10 +8,14 @@ import (
 
 type transaction struct{}
 
-func (s transaction) Execute(ctx context.Context, fn func(ctx context.Context) error, _ ...string) error {
+func NewTransaction() persistence.Transaction {
+	return &transaction{}
+}
+
+func (s transaction) WithinContext(ctx context.Context, fn func(ctx context.Context) error, _ ...string) error {
 	return fn(ctx)
 }
 
-func NewTransaction() persistence.Transaction {
-	return &transaction{}
+func (s transaction) WithLock(ctx context.Context) context.Context {
+	return ctx
 }

@@ -104,7 +104,7 @@ func (o *outbox) processSend() {
 		var err error
 
 		for {
-			err = o.transaction.Execute(ctx, func(ctx context.Context) error {
+			err = o.transaction.WithinContext(ctx, func(ctx context.Context) error {
 				atLeastOneProcessed, err = o.processSendBatch(ctx) // TODO: long tx here
 				return err
 			}, processMessageOutboxLockName)
@@ -133,9 +133,9 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 	}
 
 	for _, msg := range msgs {
-		v := msg
+		msg := msg
 
-		err = o.out.Produce(ctx, &v) // TODO: WithLogging, WithMetrics
+		err = o.out.Produce(ctx, &msg) // TODO: WithLogging, WithMetrics
 		if err != nil {
 			return false, fmt.Errorf("send message: %w", err)
 		}
@@ -145,12 +145,23 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 			return false, fmt.Errorf("delete sent messages: %w", err)
 		}
 	}
+
 	return true, nil
 }
 
 type outboxProcessor struct {
 	ticker *time.Ticker
 	outbox Outbox
+}
+
+func NewOutboxProcessor(
+	processingInterval time.Duration,
+	outbox Outbox,
+) worker.NamedProcess {
+	return outboxProcessor{
+		ticker: time.NewTicker(processingInterval),
+		outbox: outbox,
+	}
 }
 
 func (o outboxProcessor) Name() string {
@@ -168,15 +179,5 @@ func (o outboxProcessor) Process() worker.Process {
 				o.outbox.Close()
 			}
 		}
-	}
-}
-
-func NewOutboxProcessor(
-	processingInterval time.Duration,
-	outbox Outbox,
-) worker.NamedProcess {
-	return outboxProcessor{
-		ticker: time.NewTicker(processingInterval),
-		outbox: outbox,
 	}
 }

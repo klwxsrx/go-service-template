@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 
+	"github.com/klwxsrx/go-service-template/internal/duck/api"
 	"github.com/klwxsrx/go-service-template/internal/duck/app/external"
 	"github.com/klwxsrx/go-service-template/internal/duck/domain"
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
@@ -14,14 +16,59 @@ import (
 
 type DuckService struct {
 	gooseService external.GooseService
-	tx           persistence.Transaction
+	transaction  persistence.Transaction
 	duckRepo     domain.DuckRepo
 }
 
-func (s *DuckService) Create(ctx context.Context, name string) error {
-	return s.tx.Execute(ctx, func(ctx context.Context) error {
-		duck := domain.NewDuck(uuid.New(), strings.TrimSpace(name))
+func NewDuckService(
+	gooseService external.GooseService,
+	transaction persistence.Transaction,
+	duckRepo domain.DuckRepo,
+) *DuckService {
+	return &DuckService{
+		gooseService: gooseService,
+		transaction:  transaction,
+		duckRepo:     duckRepo,
+	}
+}
+
+func (s *DuckService) Create(ctx context.Context, name string) (uuid.UUID, error) {
+	duckID := uuid.New()
+	err := s.transaction.WithinContext(ctx, func(ctx context.Context) error {
+		duck := domain.NewDuck(duckID, strings.TrimSpace(name))
 		err := s.duckRepo.Store(ctx, duck)
+		if err != nil {
+			return fmt.Errorf("store duck: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
+	return duckID, nil
+}
+
+func (s *DuckService) SetActive(ctx context.Context, id uuid.UUID, isActive bool) error {
+	return s.transaction.WithinContext(ctx, func(ctx context.Context) error {
+		duck, err := s.duckRepo.FindOne(
+			s.transaction.WithLock(ctx),
+			domain.DuckSpec{ID: &id},
+		)
+		if errors.Is(err, domain.ErrDuckNotFound) {
+			return api.ErrDuckNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("get duck by id: %w", err)
+		}
+
+		if duck.IsActive == isActive {
+			return nil
+		}
+
+		duck.IsActive = isActive
+		err = s.duckRepo.Store(ctx, duck)
 		if err != nil {
 			return fmt.Errorf("store duck: %w", err)
 		}
@@ -41,16 +88,4 @@ func (s *DuckService) HandleDuckCreated(_ context.Context, _ domain.EventDuckCre
 
 func (s *DuckService) HandleGooseQuacked(_ context.Context, _ external.EventGooseQuacked) error {
 	return nil
-}
-
-func NewDuckService(
-	gooseService external.GooseService,
-	tx persistence.Transaction,
-	duckRepo domain.DuckRepo,
-) *DuckService {
-	return &DuckService{
-		gooseService: gooseService,
-		tx:           tx,
-		duckRepo:     duckRepo,
-	}
 }

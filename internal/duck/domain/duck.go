@@ -3,20 +3,31 @@ package domain
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
 	"github.com/klwxsrx/go-service-template/pkg/event"
 )
 
-type DuckRepo interface {
-	Store(ctx context.Context, duck *Duck) error
-}
+var ErrDuckNotFound = errors.New("duck not found")
+
+type (
+	DuckSpec struct {
+		ID *uuid.UUID
+	}
+
+	DuckRepo interface {
+		FindOne(ctx context.Context, spec DuckSpec) (*Duck, error)
+		Store(ctx context.Context, duck *Duck) error
+	}
+)
 
 type Duck struct {
-	ID      uuid.UUID
-	Name    string
-	Changes []event.Event
+	ID       uuid.UUID
+	Name     string
+	IsActive bool
+	Changes  []event.Event
 }
 
 func NewDuck(
@@ -24,8 +35,9 @@ func NewDuck(
 	name string,
 ) *Duck {
 	return &Duck{
-		ID:   id,
-		Name: name,
+		ID:       id,
+		Name:     name,
+		IsActive: true,
 		Changes: []event.Event{EventDuckCreated{
 			EventID: uuid.New(),
 			DuckID:  id,

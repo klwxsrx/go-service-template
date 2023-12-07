@@ -21,7 +21,11 @@ type transaction struct {
 	onCommit func()
 }
 
-func (t *transaction) Execute(
+func NewTransaction(client TxClient, instanceName string, onCommit func()) persistence.Transaction {
+	return &transaction{id: instanceID(instanceName), client: client, onCommit: onCommit}
+}
+
+func (t *transaction) WithinContext(
 	ctx context.Context,
 	fn func(ctx context.Context) error,
 	lockNames ...string,
@@ -47,7 +51,7 @@ func (t *transaction) Execute(
 	}
 
 	for _, lockName := range lockNames {
-		err = lockDatabase(ctx, storedTx.ClientTx, "SELECT pg_advisory_xact_lock($1)", lockName)
+		err = lockDatabase(ctx, storedTx.ClientTx, "select pg_advisory_xact_lock($1)", lockName)
 		if err != nil {
 			return err
 		}
@@ -73,8 +77,23 @@ func (t *transaction) Execute(
 	return nil
 }
 
-func NewTransaction(client TxClient, instanceName string, onCommit func()) persistence.Transaction {
-	return &transaction{id: instanceID(instanceName), client: client, onCommit: onCommit}
+func (t *transaction) WithLock(ctx context.Context) context.Context {
+	_, ok := ctx.Value(dbTransactionContextKey).(txData)
+	if !ok {
+		return ctx
+	}
+
+	_, ok = ctx.Value(dbTransactionLockContextKey).(txData)
+	if ok {
+		return ctx
+	}
+
+	return context.WithValue(ctx, dbTransactionLockContextKey, struct{}{})
+}
+
+func IsLockRequested(ctx context.Context) bool {
+	_, ok := ctx.Value(dbTransactionContextKey).(txData)
+	return ok
 }
 
 type transactionalClient struct {

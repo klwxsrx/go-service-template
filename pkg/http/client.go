@@ -27,22 +27,7 @@ type (
 		RESTClient      *resty.Client
 		opts            []ClientOption
 	}
-
-	ClientFactory struct {
-		baseOpts []ClientOption
-	}
 )
-
-func (c ClientImpl) NewRequest(ctx context.Context) *resty.Request {
-	return c.RESTClient.NewRequest().SetContext(ctx)
-}
-
-func (c ClientImpl) With(opts ...ClientOption) Client {
-	mergedOpts := make([]ClientOption, 0, len(c.opts)+len(opts))
-	mergedOpts = append(mergedOpts, c.opts...)
-	mergedOpts = append(mergedOpts, opts...)
-	return NewClient(mergedOpts...)
-}
 
 func NewClient(opts ...ClientOption) Client {
 	client := ClientImpl{
@@ -56,6 +41,17 @@ func NewClient(opts ...ClientOption) Client {
 	}
 
 	return client
+}
+
+func (c ClientImpl) NewRequest(ctx context.Context) *resty.Request {
+	return c.RESTClient.NewRequest().SetContext(ctx)
+}
+
+func (c ClientImpl) With(opts ...ClientOption) Client {
+	mergedOpts := make([]ClientOption, 0, len(c.opts)+len(opts))
+	mergedOpts = append(mergedOpts, c.opts...)
+	mergedOpts = append(mergedOpts, opts...)
+	return NewClient(mergedOpts...)
 }
 
 func WithClientDestination(name, url string) ClientOption {
@@ -129,6 +125,10 @@ func WithRequestMetrics(metrics metric.Metrics) ClientOption {
 			return nil
 		})
 	}
+}
+
+type ClientFactory struct {
+	baseOpts []ClientOption
 }
 
 func NewClientFactory(opts ...ClientOption) ClientFactory {

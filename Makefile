@@ -22,7 +22,7 @@ lint-fix: codegen tools
 	tools/bin/golangci-lint --color=always run --fix ./...
 
 arch: tools
-	tools/bin/go-cleanarch -interfaces api -application app -domain domain -infrastructure infra
+	tools/bin/go-cleanarch -application app -domain domain -infrastructure infra
 
 test: codegen
 	go test ./...

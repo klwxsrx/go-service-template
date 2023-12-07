@@ -52,6 +52,7 @@ func MustInitDependencyContainer(
 
 func (c *DependencyContainer) MustRegisterHTTPHandlers(registry pkghttp.HandlerRegistry) {
 	registry.Register(http.NewCreateDuckHandler(c.duckService))
+	registry.Register(http.NewSetDuckActiveHandler(c.duckService))
 }
 
 func (c *DependencyContainer) MustRegisterMessageHandlers(registry pkgmessage.HandlerRegistry) {

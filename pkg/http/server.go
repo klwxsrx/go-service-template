@@ -48,23 +48,26 @@ type server struct {
 	router *mux.Router
 }
 
-type serverProcess struct {
-	ctx context.Context
-	srv *http.Server
-}
-
-func (p serverProcess) Name() string {
-	return fmt.Sprintf("http server %s", p.srv.Addr)
-}
-
-func (p serverProcess) Process() worker.Process {
-	return func(stopChan <-chan struct{}) error {
-		return listenAndServe(p.ctx, p.srv, stopChan)
+func NewServer(
+	address string,
+	opts ...ServerOption,
+) Server {
+	router := withHandlerMetadata(mux.NewRouter())
+	for _, opt := range opts {
+		opt(router)
 	}
-}
 
-func (s server) Listener(ctx context.Context) worker.NamedProcess {
-	return serverProcess{ctx, s.srv}
+	srv := &http.Server{
+		Addr:              address,
+		Handler:           router,
+		ReadTimeout:       defaultReadTimeout,
+		ReadHeaderTimeout: defaultReadHeaderTimeout,
+	}
+
+	return server{
+		srv:    srv,
+		router: router,
+	}
 }
 
 func (s server) Listen(ctx context.Context, termSignalsChan <-chan os.Signal) error {
@@ -86,6 +89,25 @@ func (s server) Register(handler Handler, opts ...ServerOption) {
 		Methods(handler.Method()).
 		Path(handler.Path()).
 		Handler(httpHandler)
+}
+
+type serverProcess struct {
+	ctx context.Context
+	srv *http.Server
+}
+
+func (p serverProcess) Name() string {
+	return fmt.Sprintf("http server %s", p.srv.Addr)
+}
+
+func (p serverProcess) Process() worker.Process {
+	return func(stopChan <-chan struct{}) error {
+		return listenAndServe(p.ctx, p.srv, stopChan)
+	}
+}
+
+func (s server) Listener(ctx context.Context) worker.NamedProcess {
+	return serverProcess{ctx, s.srv}
 }
 
 func listenAndServe[signal any](ctx context.Context, srv *http.Server, termSignal <-chan signal) error {
@@ -123,29 +145,12 @@ func getRouteName(method, path string) string {
 		if unicode.Is(unicode.Latin, r) || unicode.IsDigit(r) {
 			return r
 		}
+
+		if r == '{' || r == '}' {
+			return -1
+		}
+
 		return '_'
 	}, strings.Trim(path, "/"))
-	return strings.ToLower(fmt.Sprintf("%s_%s", method, path))
-}
-
-func NewServer(
-	address string,
-	opts ...ServerOption,
-) Server {
-	router := withHandlerMetadata(mux.NewRouter())
-	for _, opt := range opts {
-		opt(router)
-	}
-
-	srv := &http.Server{
-		Addr:              address,
-		Handler:           router,
-		ReadTimeout:       defaultReadTimeout,
-		ReadHeaderTimeout: defaultReadHeaderTimeout,
-	}
-
-	return server{
-		srv:    srv,
-		router: router,
-	}
+	return fmt.Sprintf("%s_%s", strings.ToUpper(method), path)
 }

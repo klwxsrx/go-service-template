@@ -12,17 +12,17 @@ type lock struct {
 	client Client
 }
 
+func newLock(ctx context.Context, name string, client Client) *lock {
+	return &lock{ctx, name, client}
+}
+
 func (l *lock) Get() error {
-	return lockDatabase(l.ctx, l.client, "SELECT pg_advisory_lock($1)", l.name)
+	return lockDatabase(l.ctx, l.client, "select pg_advisory_lock($1)", l.name)
 }
 
 func (l *lock) Release() {
 	lockID, _ := getLockIDByName(l.name)
-	_, _ = l.client.ExecContext(l.ctx, "SELECT pg_advisory_unlock($1)", lockID)
-}
-
-func newLock(ctx context.Context, name string, client Client) *lock {
-	return &lock{ctx, name, client}
+	_, _ = l.client.ExecContext(l.ctx, "select pg_advisory_unlock($1)", lockID)
 }
 
 func getLockIDByName(name string) (int64, error) {

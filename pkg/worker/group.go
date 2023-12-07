@@ -26,43 +26,6 @@ type group struct {
 	onceCloser  *sync.Once
 }
 
-func (g *group) Do(job Job) {
-	handleErr := func(err error) {
-		if err == nil {
-			return
-		}
-
-		select {
-		case g.errChan <- err:
-			if g.cancelCtxAfterError {
-				g.ctxCancel()
-			}
-		default:
-		}
-	}
-
-	g.pool.Do(func() {
-		handleErr(job(g.ctx))
-	})
-}
-
-func (g *group) Close() error {
-	g.pool.Wait()
-
-	g.closerMutex.Lock()
-	g.onceCloser.Do(func() {
-		g.ctxCancel()
-
-		select {
-		case g.errResult = <-g.errChan:
-		default:
-		}
-	})
-	g.closerMutex.Unlock()
-
-	return g.errResult
-}
-
 func WithinFailFastGroup(ctx context.Context, pool Pool) Group {
 	var ctxCancel context.CancelFunc
 	ctx, ctxCancel = context.WithCancel(ctx)
@@ -105,4 +68,41 @@ func NewFailSafeGroup(ctx context.Context) Group {
 		ctx,
 		NewPool(MaxWorkersCountUnlimited),
 	)
+}
+
+func (g *group) Do(job Job) {
+	handleErr := func(err error) {
+		if err == nil {
+			return
+		}
+
+		select {
+		case g.errChan <- err:
+			if g.cancelCtxAfterError {
+				g.ctxCancel()
+			}
+		default:
+		}
+	}
+
+	g.pool.Do(func() {
+		handleErr(job(g.ctx))
+	})
+}
+
+func (g *group) Close() error {
+	g.pool.Wait()
+
+	g.closerMutex.Lock()
+	g.onceCloser.Do(func() {
+		g.ctxCancel()
+
+		select {
+		case g.errResult = <-g.errChan:
+		default:
+		}
+	})
+	g.closerMutex.Unlock()
+
+	return g.errResult
 }

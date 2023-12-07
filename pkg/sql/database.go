@@ -62,21 +62,6 @@ type database struct {
 	logger log.Logger
 }
 
-func (c *database) Begin(ctx context.Context) (ClientTx, error) {
-	tx, err := c.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	return tx, nil
-}
-
-func (c *database) Close(ctx context.Context) {
-	err := c.db.Close()
-	if err != nil {
-		c.logger.WithError(err).Error(ctx, "failed to close sql database")
-	}
-}
-
 func NewDatabase(config *Config, logger log.Logger) (Database, error) {
 	if config.ConnectionTimeout <= 0 {
 		config.ConnectionTimeout = defaultConnectionTimeout
@@ -93,6 +78,21 @@ func NewDatabase(config *Config, logger log.Logger) (Database, error) {
 		transactionalClient: transactionalClient{db},
 		logger:              logger,
 	}, nil
+}
+
+func (c *database) Begin(ctx context.Context) (ClientTx, error) {
+	tx, err := c.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
+func (c *database) Close(ctx context.Context) {
+	err := c.db.Close()
+	if err != nil {
+		c.logger.WithError(err).Error(ctx, "failed to close sql database")
+	}
 }
 
 func openConnection(config *Config) (*sqlx.DB, error) {

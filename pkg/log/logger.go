@@ -49,6 +49,19 @@ type logger struct {
 	fields Fields
 }
 
+func New(level Level) Logger {
+	if level == LevelDisabled {
+		return stub{}
+	}
+
+	return logger{
+		impl: slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slogLevelMap[level],
+		})),
+		fields: make(Fields),
+	}
+}
+
 func (l logger) With(fields Fields) Logger {
 	if len(fields) == 0 {
 		return l
@@ -132,19 +145,6 @@ func (l logger) loggerWithFields(ctx context.Context) *slog.Logger {
 		impl = impl.With(name, value)
 	}
 	return impl
-}
-
-func New(level Level) Logger {
-	if level == LevelDisabled {
-		return stub{}
-	}
-
-	return logger{
-		impl: slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slogLevelMap[level],
-		})),
-		fields: make(Fields),
-	}
 }
 
 func mergeFields(fields, additional Fields) {

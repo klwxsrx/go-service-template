@@ -24,6 +24,10 @@ func NewTaskScheduler(bus Bus) task.Scheduler {
 }
 
 func (s taskScheduler) Schedule(ctx context.Context, at time.Time, tasks ...task.Task) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+
 	msgs := make([]StructuredMessage, 0, len(tasks))
 	for _, tsk := range tasks {
 		msgs = append(msgs, StructuredMessage(tsk))

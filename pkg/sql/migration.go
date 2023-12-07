@@ -215,8 +215,8 @@ func migrationTableDDL() ([]Migration, error) {
 		{
 			ID: "0000-00-00-000-create-migration-table",
 			SQL: `
-				CREATE TABLE IF NOT EXISTS migration (
-					id text PRIMARY KEY
+				create table if not exists migration (
+					id text primary key
 				)
 			`,
 		},

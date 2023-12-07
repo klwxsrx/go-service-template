@@ -4,5 +4,6 @@ package persistence
 import "context"
 
 type Transaction interface {
-	Execute(ctx context.Context, fn func(ctx context.Context) error, lockNames ...string) error
+	WithinContext(ctx context.Context, fn func(ctx context.Context) error, namedLocks ...string) error
+	WithLock(ctx context.Context) context.Context
 }

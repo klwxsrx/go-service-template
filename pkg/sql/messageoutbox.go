@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	batchLimit = 500
+	batchLimit = 100
 )
 
 type messageOutboxStorage struct {
@@ -54,6 +54,10 @@ func (s messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore time
 }
 
 func (s messageOutboxStorage) Store(ctx context.Context, msgs []message.Message, scheduledAt time.Time) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
 	qb := sq.Insert("message_outbox").Columns("id", "topic", "key", "payload", "scheduled_at")
 	for _, msg := range msgs {
 		qb = qb.Values(msg.ID, msg.Topic, msg.Key, msg.Payload, scheduledAt)
@@ -72,6 +76,10 @@ func (s messageOutboxStorage) Store(ctx context.Context, msgs []message.Message,
 }
 
 func (s messageOutboxStorage) Delete(ctx context.Context, ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
 	query, args, err := sq.
 		Delete("message_outbox").
 		Where(sq.Eq{"id": ids}).
@@ -93,15 +101,15 @@ func MessageOutboxMigrations() ([]Migration, error) {
 		{
 			ID: "0000-00-00-001-create-message-outbox-table",
 			SQL: `
-				CREATE TABLE IF NOT EXISTS message_outbox (
-					id           uuid PRIMARY KEY,
-					topic        text        NOT NULL,
-					key          text        NOT NULL,
-					payload      bytea       NOT NULL,
-					scheduled_at timestamptz NOT NULL
+				create table if not exists message_outbox (
+					id           uuid primary key,
+					topic        text        not null,
+					key          text        not null,
+					payload      bytea       not null,
+					scheduled_at timestamptz not null
 				);
 
-				CREATE INDEX IF NOT EXISTS message_outbox_scheduled_at ON message_outbox(scheduled_at)
+				create index if not exists message_outbox_scheduled_at on message_outbox(scheduled_at)
 			`,
 		},
 	}, nil

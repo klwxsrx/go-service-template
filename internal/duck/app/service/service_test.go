@@ -7,26 +7,30 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/klwxsrx/go-service-template/internal/duck/api"
 	"github.com/klwxsrx/go-service-template/internal/duck/app/external"
 	duckappexternalmock "github.com/klwxsrx/go-service-template/internal/duck/app/external/mock"
 	"github.com/klwxsrx/go-service-template/internal/duck/app/service"
 	"github.com/klwxsrx/go-service-template/internal/duck/domain"
 	duckdomainmock "github.com/klwxsrx/go-service-template/internal/duck/domain/mock"
+	"github.com/klwxsrx/go-service-template/pkg/persistence"
 	pkgpersistencemock "github.com/klwxsrx/go-service-template/pkg/persistence/mock"
+	pkgpersistencestub "github.com/klwxsrx/go-service-template/pkg/persistence/stub"
 )
 
 func TestDuckService_Create_Returns(t *testing.T) {
 	tests := []struct {
 		name        string
-		transaction func(ctrl *gomock.Controller) *pkgpersistencemock.Transaction
-		duckRepo    func(ctrl *gomock.Controller) *duckdomainmock.DuckRepo
+		transaction func(ctrl *gomock.Controller) persistence.Transaction
+		duckRepo    func(ctrl *gomock.Controller) domain.DuckRepo
 		expect      func(t *testing.T, err error)
 	}{
 		{
 			name: "success",
-			duckRepo: func(ctrl *gomock.Controller) *duckdomainmock.DuckRepo {
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
 				mock := duckdomainmock.NewDuckRepo(ctrl)
 				mock.EXPECT().Store(gomock.Any(), gomock.Any()).
 					Do(func(ctx context.Context, duck *domain.Duck) {
@@ -41,33 +45,15 @@ func TestDuckService_Create_Returns(t *testing.T) {
 					Return(nil)
 				return mock
 			},
-			transaction: func(ctrl *gomock.Controller) *pkgpersistencemock.Transaction {
-				testFunc := func(ctx context.Context, fn func(context.Context) error, _ ...string) error {
-					return fn(ctx)
-				}
-
-				mock := pkgpersistencemock.NewTransaction(ctrl)
-				mock.EXPECT().Execute(gomock.Any(), gomock.Any(), []string{}).DoAndReturn(testFunc)
-				return mock
-			},
 			expect: func(t *testing.T, err error) {
 				assert.NoError(t, err)
 			},
 		},
 		{
 			name: "error_when_repo_returns_error",
-			duckRepo: func(ctrl *gomock.Controller) *duckdomainmock.DuckRepo {
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
 				mock := duckdomainmock.NewDuckRepo(ctrl)
 				mock.EXPECT().Store(gomock.Any(), gomock.Any()).Return(errors.New("unexpected"))
-				return mock
-			},
-			transaction: func(ctrl *gomock.Controller) *pkgpersistencemock.Transaction {
-				testFunc := func(ctx context.Context, fn func(context.Context) error, _ ...string) error {
-					return fn(ctx)
-				}
-
-				mock := pkgpersistencemock.NewTransaction(ctrl)
-				mock.EXPECT().Execute(gomock.Any(), gomock.Any(), []string{}).DoAndReturn(testFunc)
 				return mock
 			},
 			expect: func(t *testing.T, err error) {
@@ -76,19 +62,16 @@ func TestDuckService_Create_Returns(t *testing.T) {
 		},
 		{
 			name: "error_when_transaction_returns_error",
-			duckRepo: func(ctrl *gomock.Controller) *duckdomainmock.DuckRepo {
-				mock := duckdomainmock.NewDuckRepo(ctrl)
-				mock.EXPECT().Store(gomock.Any(), gomock.Any()).Return(nil)
-				return mock
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
+				return duckdomainmock.NewDuckRepo(ctrl)
 			},
-			transaction: func(ctrl *gomock.Controller) *pkgpersistencemock.Transaction {
+			transaction: func(ctrl *gomock.Controller) persistence.Transaction {
 				testFunc := func(ctx context.Context, fn func(context.Context) error, _ ...string) error {
-					_ = fn(ctx)
 					return errors.New("unexpected")
 				}
 
 				mock := pkgpersistencemock.NewTransaction(ctrl)
-				mock.EXPECT().Execute(gomock.Any(), gomock.Any(), []string{}).DoAndReturn(testFunc)
+				mock.EXPECT().WithinContext(gomock.Any(), gomock.Any(), []string{}).DoAndReturn(testFunc)
 				return mock
 			},
 			expect: func(t *testing.T, err error) {
@@ -104,14 +87,207 @@ func TestDuckService_Create_Returns(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
+			transactionMock := pkgpersistencestub.NewTransaction()
+			if tc.transaction != nil {
+				transactionMock = tc.transaction(ctrl)
+			}
+
 			srv := service.NewDuckService(
 				duckappexternalmock.NewGooseService(ctrl),
-				tc.transaction(ctrl),
+				transactionMock,
 				tc.duckRepo(ctrl),
 			)
 
 			duckName := "SomeDuckName"
-			err := srv.Create(context.Background(), duckName)
+			_, err := srv.Create(context.Background(), duckName)
+			tc.expect(t, err)
+		})
+	}
+}
+
+func TestDuckService_SetActive_Returns(t *testing.T) {
+	duckID := uuid.New()
+	duckName := "SomeDuckName"
+
+	tests := []struct {
+		name        string
+		setIsActive bool
+		transaction func(ctrl *gomock.Controller) persistence.Transaction
+		duckRepo    func(ctrl *gomock.Controller) domain.DuckRepo
+		expect      func(t *testing.T, err error)
+	}{
+		{
+			name:        "success_when_deactivated",
+			setIsActive: false,
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
+				duck := domain.Duck{
+					ID:       duckID,
+					Name:     duckName,
+					IsActive: true,
+					Changes:  nil,
+				}
+
+				mock := duckdomainmock.NewDuckRepo(ctrl)
+				mock.EXPECT().FindOne(gomock.Any(), domain.DuckSpec{ID: &duckID}).Return(&duck, nil)
+
+				storedDuck := duck
+				storedDuck.IsActive = false
+				mock.EXPECT().Store(gomock.Any(), &storedDuck).Return(nil)
+
+				return mock
+			},
+			expect: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:        "success_when_activated",
+			setIsActive: true,
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
+				duck := domain.Duck{
+					ID:       duckID,
+					Name:     duckName,
+					IsActive: false,
+					Changes:  nil,
+				}
+
+				mock := duckdomainmock.NewDuckRepo(ctrl)
+				mock.EXPECT().FindOne(gomock.Any(), domain.DuckSpec{ID: &duckID}).Return(&duck, nil)
+
+				storedDuck := duck
+				storedDuck.IsActive = true
+				mock.EXPECT().Store(gomock.Any(), &storedDuck).Return(nil)
+
+				return mock
+			},
+			expect: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:        "success_when_repeatedly_deactivated",
+			setIsActive: false,
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
+				duck := domain.Duck{
+					ID:       duckID,
+					Name:     duckName,
+					IsActive: false,
+					Changes:  nil,
+				}
+
+				mock := duckdomainmock.NewDuckRepo(ctrl)
+				mock.EXPECT().FindOne(gomock.Any(), domain.DuckSpec{ID: &duckID}).Return(&duck, nil)
+
+				return mock
+			},
+			expect: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:        "success_when_repeatedly_activated",
+			setIsActive: true,
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
+				duck := domain.Duck{
+					ID:       duckID,
+					Name:     duckName,
+					IsActive: true,
+					Changes:  nil,
+				}
+
+				mock := duckdomainmock.NewDuckRepo(ctrl)
+				mock.EXPECT().FindOne(gomock.Any(), domain.DuckSpec{ID: &duckID}).Return(&duck, nil)
+
+				return mock
+			},
+			expect: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:        "error_when_repository_store_returns_error",
+			setIsActive: false,
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
+				duck := domain.Duck{
+					ID:       duckID,
+					Name:     duckName,
+					IsActive: true,
+					Changes:  nil,
+				}
+
+				mock := duckdomainmock.NewDuckRepo(ctrl)
+				mock.EXPECT().FindOne(gomock.Any(), domain.DuckSpec{ID: &duckID}).Return(&duck, nil)
+				mock.EXPECT().Store(gomock.Any(), gomock.Any()).Return(errors.New("unexpected"))
+
+				return mock
+			},
+			expect: func(t *testing.T, err error) {
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "error_when_repository_find_returns_error",
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
+				mock := duckdomainmock.NewDuckRepo(ctrl)
+				mock.EXPECT().FindOne(gomock.Any(), domain.DuckSpec{ID: &duckID}).Return(nil, errors.New("unexpected"))
+
+				return mock
+			},
+			expect: func(t *testing.T, err error) {
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "error_when_duck_not_found",
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
+				mock := duckdomainmock.NewDuckRepo(ctrl)
+				mock.EXPECT().FindOne(gomock.Any(), domain.DuckSpec{ID: &duckID}).Return(nil, domain.ErrDuckNotFound)
+
+				return mock
+			},
+			expect: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, api.ErrDuckNotFound)
+			},
+		},
+		{
+			name: "error_when_transaction_returns_error",
+			transaction: func(ctrl *gomock.Controller) persistence.Transaction {
+				testFunc := func(ctx context.Context, fn func(context.Context) error, _ ...string) error {
+					return errors.New("unexpected")
+				}
+
+				mock := pkgpersistencemock.NewTransaction(ctrl)
+				mock.EXPECT().WithinContext(gomock.Any(), gomock.Any(), []string{}).DoAndReturn(testFunc)
+				return mock
+			},
+			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
+				return duckdomainmock.NewDuckRepo(ctrl)
+			},
+			expect: func(t *testing.T, err error) {
+				require.Error(t, err)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		tc := test
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			transactionMock := pkgpersistencestub.NewTransaction()
+			if tc.transaction != nil {
+				transactionMock = tc.transaction(ctrl)
+			}
+
+			srv := service.NewDuckService(
+				duckappexternalmock.NewGooseService(ctrl),
+				transactionMock,
+				tc.duckRepo(ctrl),
+			)
+
+			err := srv.SetActive(context.Background(), duckID, tc.setIsActive)
 			tc.expect(t, err)
 		})
 	}
@@ -129,6 +305,20 @@ func TestDuckService_HandleDuckCreated_Success(t *testing.T) {
 
 	err := srv.HandleDuckCreated(context.Background(), domain.EventDuckCreated{})
 	assert.NoError(t, err)
+}
+
+func TestDuckService_HandleDuckCreated_ErrorWhenGooseServiceReturnsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockGooseService := duckappexternalmock.NewGooseService(ctrl)
+	mockGooseService.EXPECT().DoSome().Return(errors.New("unexpected"))
+	mockTransaction := pkgpersistencemock.NewTransaction(ctrl)
+	mockDuckRepo := duckdomainmock.NewDuckRepo(ctrl)
+	srv := service.NewDuckService(mockGooseService, mockTransaction, mockDuckRepo)
+
+	err := srv.HandleDuckCreated(context.Background(), domain.EventDuckCreated{})
+	assert.Error(t, err)
 }
 
 func TestDuckService_HandleGooseQuacked_Success(t *testing.T) {
