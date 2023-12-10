@@ -67,7 +67,7 @@ func PathParameter[T any](param string) RequestDataProvider[T] {
 			var result T
 			return result, fmt.Errorf("%w: path parameter %s not found", ErrParsingError, param)
 		}
-		return pkgstrings.ParseTypedValue[T](paramValue) // TODO: wrap with parsing error
+		return parseTypedValueImpl[T](paramValue)
 	}
 }
 
@@ -78,7 +78,7 @@ func QueryParameter[T any](param string) RequestDataProvider[T] {
 			var result T
 			return result, fmt.Errorf("%w: query parameter %s not found", ErrParsingError, param)
 		}
-		return pkgstrings.ParseTypedValue[T](value)
+		return parseTypedValueImpl[T](value)
 	}
 }
 
@@ -90,7 +90,7 @@ func QueryParameters[T any](param string) RequestDataProvider[[]T] {
 		}
 		result := make([]T, 0, len(values))
 		for _, value := range values {
-			concreteValue, err := pkgstrings.ParseTypedValue[T](value)
+			concreteValue, err := parseTypedValueImpl[T](value)
 			if err != nil {
 				return nil, err
 			}
@@ -107,7 +107,7 @@ func Header[T any](key string) RequestDataProvider[T] {
 			var result T
 			return result, fmt.Errorf("%w: header with key %s not found", ErrParsingError, key)
 		}
-		return pkgstrings.ParseTypedValue[T](header)
+		return parseTypedValueImpl[T](header)
 	}
 }
 
@@ -128,7 +128,7 @@ func CookieValue[T any](name string) RequestDataProvider[T] {
 			var result T
 			return result, fmt.Errorf("%w: cookie with name %s not found", ErrParsingError, name)
 		}
-		return pkgstrings.ParseTypedValue[T](cookie.Value)
+		return parseTypedValueImpl[T](cookie.Value)
 	}
 }
 
@@ -141,6 +141,14 @@ func JSONBody[T any]() RequestDataProvider[T] {
 		}
 		return body, nil
 	}
+}
+
+func parseTypedValueImpl[T any](value string) (T, error) {
+	v, err := pkgstrings.ParseTypedValue[T](value)
+	if err == nil {
+		return v, nil
+	}
+	return v, fmt.Errorf("%w: %w", ErrParsingError, err)
 }
 
 type responseWriter struct {
@@ -205,7 +213,7 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 	meta.Code = httpCode
 	meta.Error = err
 
-	w.impl.WriteHeader(httpCode) // TODO: superfluous call after WriteHeader(http.StatusInternalServerError)
+	w.impl.WriteHeader(httpCode)
 }
 
 func (w *responseWriter) WritePanic(ctx context.Context, panic panicErr) {
