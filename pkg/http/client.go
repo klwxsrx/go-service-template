@@ -44,7 +44,7 @@ func NewClient(opts ...ClientOption) Client {
 }
 
 func (c ClientImpl) NewRequest(ctx context.Context) *resty.Request {
-	return c.RESTClient.NewRequest().SetContext(ctx)
+	return c.RESTClient.NewRequest().SetContext(ctx) // TODO: requests with fixed routes support
 }
 
 func (c ClientImpl) With(opts ...ClientOption) Client {
@@ -79,7 +79,7 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 	const destinationNameLogField = "destinationName"
 	return func(c *ClientImpl) {
 		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
-			logger = getRequestResponseFieldsLogger(resp.Request.RawRequest, resp.StatusCode(), logger)
+			logger = getRequestResponseFieldsLogger("", resp.Request.RawRequest, resp.StatusCode(), logger)
 			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
 				destinationNameLogField: getDestinationNameForLogging(c),
 			}))
@@ -95,7 +95,7 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 
 		c.RESTClient.OnError(func(req *resty.Request, err error) {
 			if req.RawRequest != nil {
-				logger = getRequestFieldsLogger(req.RawRequest, logger)
+				logger = getRequestFieldsLogger("", req.RawRequest, logger)
 			}
 			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
 				destinationNameLogField: getDestinationNameForLogging(c),

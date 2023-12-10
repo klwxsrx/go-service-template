@@ -3,6 +3,8 @@ package http
 import (
 	"net/http"
 
+	"github.com/gorilla/mux"
+
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
@@ -30,7 +32,8 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 			handler.ServeHTTP(w, r)
 			result := getHandlerMetadata(r.Context())
 
-			loggerWithFields := getRequestResponseFieldsLogger(r, result.Code, logger)
+			routeName := mux.CurrentRoute(r).GetName()
+			loggerWithFields := getRequestResponseFieldsLogger(routeName, r, result.Code, logger)
 			switch {
 			case result.Panic != nil:
 				loggerWithFields.WithField("panic", log.Fields{
@@ -50,21 +53,23 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 	})
 }
 
-func getRequestFieldsLogger(r *http.Request, logger log.Logger) log.Logger {
-	return logger.With(wrapFieldsWithRequestLogEntry(
-		log.Fields{
-			"routeName": getRouteName(r.Method, r.URL.Path), // TODO: fix concrete values in route name POST_duck_26151e63_5539_40d1_9053_4c2d0c8cbddv_setActive_false
-			"method":    r.Method,
-			"scheme":    r.URL.Scheme,
-			"host":      r.URL.Host,
-			"path":      r.URL.Path,
-			"rawQuery":  r.URL.RawQuery,
-		},
-	))
+func getRequestFieldsLogger(routeName string, r *http.Request, logger log.Logger) log.Logger {
+	fields := log.Fields{
+		"method":   r.Method,
+		"scheme":   r.URL.Scheme,
+		"host":     r.URL.Host,
+		"path":     r.URL.Path,
+		"rawQuery": r.URL.RawQuery,
+	}
+	if routeName != "" {
+		fields["routeName"] = routeName
+	}
+
+	return logger.With(wrapFieldsWithRequestLogEntry(fields))
 }
 
-func getRequestResponseFieldsLogger(r *http.Request, responseCode int, logger log.Logger) log.Logger {
-	return getRequestFieldsLogger(r, logger).With(wrapFieldsWithRequestLogEntry(
+func getRequestResponseFieldsLogger(routeName string, r *http.Request, responseCode int, logger log.Logger) log.Logger {
+	return getRequestFieldsLogger(routeName, r, logger).With(wrapFieldsWithRequestLogEntry(
 		log.Fields{
 			"responseCode": responseCode,
 		},
