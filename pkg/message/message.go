@@ -52,11 +52,6 @@ func NewCompositeHandler(handlers []Handler, optionalPool worker.Pool) Handler {
 				return handlerImpl(ctx, msg)
 			})
 		}
-
-		err := group.Close()
-		if err != nil {
-			return err
-		}
-		return nil
+		return group.Wait()
 	}
 }

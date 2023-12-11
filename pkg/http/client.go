@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/go-resty/resty/v2"
@@ -15,11 +16,33 @@ import (
 type (
 	Destination string
 
+	Route struct {
+		Method string
+		// URL should be passed as a common URL with path param placeholders, for example /duck/{id}/status
+		URL string
+	}
+
+	Request interface {
+		SetPathParam(param, value string) Request
+		SetPathParams(params map[string]string) Request
+		SetQueryParam(param, value string) Request
+		SetQueryParams(params map[string]string) Request
+		SetHeader(header, value string) Request
+		SetHeaders(headers map[string]string) Request
+		SetHeaderMultiValues(headers map[string][]string) Request
+		SetCookie(cookie *http.Cookie) Request
+		SetCookies(cookies []http.Cookie) Request
+		SetJSONBody(body any) Request
+		SetFormData(data map[string]string) Request
+		SetMultipartField(param, fileName, contentType string, reader io.Reader) Request
+		Send() (*http.Response, error)
+	}
+
 	ClientOption func(*ClientImpl)
 
 	Client interface {
-		NewRequest(ctx context.Context) *resty.Request
-		With(opts ...ClientOption) Client
+		NewRequest(context.Context, Route) Request
+		With(...ClientOption) Client
 	}
 
 	ClientImpl struct {
@@ -43,8 +66,11 @@ func NewClient(opts ...ClientOption) Client {
 	return client
 }
 
-func (c ClientImpl) NewRequest(ctx context.Context) *resty.Request {
-	return c.RESTClient.NewRequest().SetContext(ctx) // TODO: requests with fixed routes support
+func (c ClientImpl) NewRequest(ctx context.Context, route Route) Request {
+	r := c.RESTClient.NewRequest().SetContext(ctx)
+	r.Method = route.Method
+	r.URL = route.URL
+	return restyRequestWrapper{r}
 }
 
 func (c ClientImpl) With(opts ...ClientOption) Client {
@@ -79,7 +105,8 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 	const destinationNameLogField = "destinationName"
 	return func(c *ClientImpl) {
 		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
-			logger = getRequestResponseFieldsLogger("", resp.Request.RawRequest, resp.StatusCode(), logger)
+			routeName := getRouteName(resp.Request.Method, resp.Request.URL)
+			logger = getRequestResponseFieldsLogger(routeName, resp.Request.RawRequest, resp.StatusCode(), logger)
 			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
 				destinationNameLogField: getDestinationNameForLogging(c),
 			}))
@@ -95,7 +122,8 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 
 		c.RESTClient.OnError(func(req *resty.Request, err error) {
 			if req.RawRequest != nil {
-				logger = getRequestFieldsLogger("", req.RawRequest, logger)
+				routeName := getRouteName(req.Method, req.URL)
+				logger = getRequestFieldsLogger(routeName, req.RawRequest, logger)
 			}
 			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
 				destinationNameLogField: getDestinationNameForLogging(c),
@@ -162,4 +190,76 @@ func getDestinationNameForLogging(c *ClientImpl) string {
 		return c.DestinationName
 	}
 	return "-"
+}
+
+type restyRequestWrapper struct {
+	*resty.Request
+}
+
+func (r restyRequestWrapper) SetPathParam(param, value string) Request {
+	r.Request.SetPathParam(param, value)
+	return r
+}
+
+func (r restyRequestWrapper) SetPathParams(params map[string]string) Request {
+	r.Request.SetPathParams(params)
+	return r
+}
+
+func (r restyRequestWrapper) SetQueryParam(param, value string) Request {
+	r.Request.SetQueryParam(param, value)
+	return r
+}
+
+func (r restyRequestWrapper) SetQueryParams(params map[string]string) Request {
+	r.Request.SetQueryParams(params)
+	return r
+}
+
+func (r restyRequestWrapper) SetHeader(header, value string) Request {
+	r.Request.SetHeader(header, value)
+	return r
+}
+
+func (r restyRequestWrapper) SetHeaders(headers map[string]string) Request {
+	r.Request.SetHeaders(headers)
+	return r
+}
+
+func (r restyRequestWrapper) SetHeaderMultiValues(headers map[string][]string) Request {
+	r.Request.SetHeaderMultiValues(headers)
+	return r
+}
+
+func (r restyRequestWrapper) SetCookie(cookie *http.Cookie) Request {
+	r.Request.SetCookie(cookie)
+	return r
+}
+
+func (r restyRequestWrapper) SetCookies(cookies []http.Cookie) Request {
+	for _, cookie := range cookies {
+		cookie := cookie
+		r.Request.SetCookie(&cookie)
+	}
+	return r
+}
+
+func (r restyRequestWrapper) SetJSONBody(body any) Request {
+	r.Request.SetHeader("Content-Type", "application/json").SetBody(body)
+	return r
+}
+
+func (r restyRequestWrapper) SetFormData(data map[string]string) Request {
+	r.Request.SetFormData(data)
+	return r
+}
+
+func (r restyRequestWrapper) SetMultipartField(param, fileName, contentType string, reader io.Reader) Request {
+	r.Request.SetMultipartField(param, fileName, contentType, reader)
+	return r
+}
+
+func (r restyRequestWrapper) Send() (*http.Response, error) {
+	resp, err := r.Request.Send()
+	return resp.RawResponse, err
 }

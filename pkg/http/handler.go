@@ -38,12 +38,7 @@ func Parse[T any](from *http.Request, data RequestDataProvider[T], lastErr error
 		return result, lastErr
 	}
 
-	result, err := data(from)
-	if err != nil {
-		return result, err
-	}
-
-	return result, nil
+	return data(from)
 }
 
 func ParseOptional[T any](from *http.Request, data RequestDataProvider[T], lastErr error) *T {

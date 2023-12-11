@@ -10,7 +10,7 @@ type Job func(context.Context) error
 
 type Group interface {
 	Do(Job)
-	Close() error
+	Wait() error
 }
 
 type group struct {
@@ -90,7 +90,7 @@ func (g *group) Do(job Job) {
 	})
 }
 
-func (g *group) Close() error {
+func (g *group) Wait() error {
 	g.pool.Wait()
 
 	g.closerMutex.Lock()

@@ -151,12 +151,7 @@ func (m *Migrator) performMigrationImpl(ctx context.Context, client Client, migr
 		}
 	}
 
-	err = m.createMigrationRecord(ctx, client, migration.ID)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return m.createMigrationRecord(ctx, client, migration.ID)
 }
 
 func (m *Migrator) splitIntoQueries(sql string) []string {

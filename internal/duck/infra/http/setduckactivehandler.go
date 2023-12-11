@@ -39,10 +39,6 @@ func (h setDuckActiveHandler) HTTPHandler() pkghttp.HandlerFunc {
 			w.SetStatusCode(http.StatusNotFound)
 			return nil
 		}
-		if err != nil {
-			return err
-		}
-
-		return nil
+		return err
 	}
 }

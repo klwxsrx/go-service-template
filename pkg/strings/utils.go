@@ -89,5 +89,5 @@ func wrapWithPointer[T any](v T, err error) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &v, err
+	return &v, nil
 }
