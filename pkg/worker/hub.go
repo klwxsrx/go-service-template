@@ -2,105 +2,39 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
-	"sync"
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
-func Must(err error) {
+func MustRunHub(ctx context.Context, logger log.Logger, process Process, processes ...Process) {
+	err := RunHub(ctx, logger, process, processes...)
 	if err != nil {
-		panic(fmt.Errorf("worker completed with error: %w", err))
+		panic(fmt.Errorf("process completed with error: %w", err))
 	}
 }
 
-type (
-	Process func(stopChan <-chan struct{}) error
-
-	NamedProcess interface {
-		Name() string
-		Process() Process
-	}
-
-	Hub interface {
-		Wait(context.Context, <-chan os.Signal, log.Logger) error
-	}
-)
-
-type hub struct {
-	pool       Pool
-	stopChan   chan<- struct{}
-	errChan    <-chan errProcessFailed
-	onceCloser *sync.Once
-	result     error
-}
-
-func (h *hub) Wait(ctx context.Context, termSignalChan <-chan os.Signal, logger log.Logger) error {
-	h.onceCloser.Do(func() {
-		select {
-		case <-ctx.Done():
-		case <-termSignalChan:
-		case err := <-h.errChan:
-			logger.WithField("processName", err.name).
-				WithError(err.err).
-				Error(ctx, "process unexpectedly completed with error")
-			h.result = fmt.Errorf("process %s unexpectedly completed with error: %w", err.name, err.err)
-		}
-
-	stop:
-		for {
-			select {
-			case h.stopChan <- struct{}{}:
-			default:
-				break stop
+func RunHub(ctx context.Context, logger log.Logger, process Process, processes ...Process) error {
+	loggingWrapper := func(process Process, logger log.Logger) Process {
+		return func(ctx context.Context) error {
+			err := process(ctx)
+			if errors.Is(err, context.Canceled) {
+				return nil
 			}
-		}
-
-		for {
-			select {
-			case err := <-h.errChan:
-				logger.WithField("processName", err.name).
-					WithError(err.err).
-					Error(ctx, "process completed after stop with error")
-			default:
-				return
-			}
-		}
-	})
-
-	h.pool.Wait()
-	return h.result
-}
-
-func Run(ps ...NamedProcess) Hub {
-	stopChan := make(chan struct{})
-	errChan := make(chan errProcessFailed)
-
-	pool := NewPool(MaxWorkersCountUnlimited)
-	for _, p := range ps {
-		proc := p
-		pool.Do(func() {
-			err := proc.Process()(stopChan)
 			if err != nil {
-				errChan <- errProcessFailed{
-					name: proc.Name(),
-					err:  err,
-				}
+				logger.WithError(err).Error(ctx, "running process completed with error")
 			}
-		})
+
+			return err
+		}
 	}
 
-	return &hub{
-		pool:       pool,
-		stopChan:   stopChan,
-		errChan:    errChan,
-		onceCloser: &sync.Once{},
-		result:     nil,
+	processGroup := NewFailFastGroup(ctx)
+	processGroup.Do(process)
+	for _, process := range processes {
+		processGroup.Do(loggingWrapper(process, logger))
 	}
-}
 
-type errProcessFailed struct {
-	name string
-	err  error
+	return processGroup.Wait()
 }

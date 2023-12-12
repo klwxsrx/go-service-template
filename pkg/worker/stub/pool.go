@@ -8,7 +8,7 @@ func NewPool() worker.Pool {
 	return pool{}
 }
 
-func (p pool) Do(j worker.SimpleJob) {
+func (p pool) Do(j worker.Job) {
 	j()
 }
 

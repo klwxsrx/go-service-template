@@ -23,11 +23,12 @@ func main() {
 	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
 	defer msgBroker.Close()
 
-	msgOutboxProcessor := pkgmessage.NewOutboxProcessor(
-		pkgmessage.DefaultOutboxProcessingInterval,
-		pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger),
-	)
+	msgOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
+	defer msgOutbox.Close()
 
 	logger.Info(ctx, "app is ready")
-	pkgworker.Must(pkgworker.Run(msgOutboxProcessor).Wait(ctx, pkgsig.TermSignals(), logger))
+	pkgworker.MustRunHub(ctx, logger,
+		pkgsig.TermSignalAwaiter,
+		pkgmessage.NewOutboxProcessor(msgOutbox, pkgmessage.DefaultOutboxProcessingInterval),
+	)
 }

@@ -27,52 +27,75 @@ func NewListener(
 	consumer Consumer,
 	handler Handler,
 	mws ...HandlerMiddleware,
-) worker.NamedProcess {
+) worker.Process {
 	l := &listener{
 		consumer:          consumer,
 		handler:           handler,
 		metadataExtractor: newMetadataExtractor(),
 	}
 
-	l.handler = handlerWrapper(l.handler)
+	l.handler = l.wrapWithPanicHandler(l.handler)
 	for i := len(mws) - 1; i >= 0; i-- {
 		l.handler = mws[i](l.handler)
 	}
 
-	return l
+	return l.workerImpl
 }
 
-func (l *listener) Name() string {
-	return fmt.Sprintf("message listener %s", l.consumer.Name())
-}
+func (l *listener) wrapWithPanicHandler(handler Handler) Handler {
+	return func(ctx context.Context, msg *Message) (err error) {
+		recoverPanic := func(ctx context.Context) {
+			panicMsg := recover()
+			if panicMsg == nil {
+				return
+			}
 
-func (l *listener) Process() worker.Process {
-	processMessage := func(msg *ConsumerMessage) {
-		ctx := l.enrichWithHandlerMetadata(msg.Context, &msg.Message)
+			meta := getHandlerMetadata(ctx)
+			meta.Panic = &panicErr{
+				Message:    fmt.Sprintf("%v", panicMsg),
+				Stacktrace: debug.Stack(),
+			}
 
-		err := l.handler(ctx, &msg.Message)
-		if err != nil {
-			l.consumer.Nack(msg)
-			return
+			err = fmt.Errorf("message handled with panic: %v", panicMsg)
 		}
 
-		l.consumer.Ack(msg)
+		defer recoverPanic(ctx)
+		return handler(ctx, msg)
 	}
+}
 
-	return func(stopChan <-chan struct{}) error {
+func (l *listener) workerImpl(ctx context.Context) error {
+	err := func(ctx context.Context) error {
 		for {
 			select {
 			case msg, ok := <-l.consumer.Messages():
 				if !ok {
 					return errors.New("consumer closed messages channel")
 				}
-				processMessage(msg)
-			case <-stopChan:
+				l.processMessage(msg)
+			case <-ctx.Done():
 				l.consumer.Close()
 				return nil
 			}
 		}
+	}(ctx)
+	if err != nil {
+		return fmt.Errorf("message listener %s: %w", l.consumer.Name(), err)
 	}
+
+	return nil
+}
+
+func (l *listener) processMessage(msg *ConsumerMessage) {
+	ctx := l.enrichWithHandlerMetadata(msg.Context, &msg.Message)
+
+	err := l.handler(ctx, &msg.Message)
+	if err != nil {
+		l.consumer.Nack(msg)
+		return
+	}
+
+	l.consumer.Ack(msg)
 }
 
 func (l *listener) enrichWithHandlerMetadata(ctx context.Context, msg *Message) context.Context {
@@ -143,28 +166,6 @@ func WithHandlerObservability(observer observability.Observer) HandlerMiddleware
 			ctx = observer.WithRequestID(ctx, *requestID)
 			return handler(ctx, msg)
 		}
-	}
-}
-
-func handlerWrapper(handler Handler) Handler {
-	return func(ctx context.Context, msg *Message) (err error) {
-		recoverPanic := func(ctx context.Context) {
-			panicMsg := recover()
-			if panicMsg == nil {
-				return
-			}
-
-			meta := getHandlerMetadata(ctx)
-			meta.Panic = &panicErr{
-				Message:    fmt.Sprintf("%v", panicMsg),
-				Stacktrace: debug.Stack(),
-			}
-
-			err = fmt.Errorf("message handled with panic: %v", panicMsg)
-		}
-
-		defer recoverPanic(ctx)
-		return handler(ctx, msg)
 	}
 }
 

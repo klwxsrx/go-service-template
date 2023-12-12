@@ -26,7 +26,7 @@ type (
 
 	BusListener interface {
 		HandlerRegistry
-		ListenerProcesses() []worker.NamedProcess
+		Workers() []worker.Process
 	}
 )
 
@@ -66,9 +66,9 @@ func (b *busListener) RegisterHandlers(subscriberDomain string, handler Register
 	return nil
 }
 
-func (b *busListener) ListenerProcesses() []worker.NamedProcess {
+func (b *busListener) Workers() []worker.Process {
 	workerPool := worker.NewPool(worker.MaxWorkersCountUnlimited)
-	listeners := make([]worker.NamedProcess, 0, len(b.consumersData))
+	listeners := make([]worker.Process, 0, len(b.consumersData))
 	for _, data := range b.consumersData {
 		listeners = append(listeners,
 			NewListener(

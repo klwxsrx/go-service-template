@@ -14,6 +14,7 @@ import (
 	pkgobservability "github.com/klwxsrx/go-service-template/pkg/observability"
 	pkgsig "github.com/klwxsrx/go-service-template/pkg/sig"
 	pkgsql "github.com/klwxsrx/go-service-template/pkg/sql"
+	pkgworker "github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 func main() {
@@ -66,5 +67,8 @@ func main() {
 	container.MustRegisterHTTPHandlers(httpServer)
 
 	logger.Info(ctx, "app is ready")
-	pkghttp.Must(httpServer.Listen(ctx, pkgsig.TermSignals()))
+	pkgworker.MustRunHub(ctx, logger,
+		pkgsig.TermSignalAwaiter,
+		httpServer.Listener,
+	)
 }

@@ -11,10 +11,10 @@ const (
 	MaxWorkersCountUnlimited = 0
 )
 
-type SimpleJob func()
+type Job func()
 
 type Pool interface {
-	Do(SimpleJob)
+	Do(Job)
 	Wait()
 }
 
@@ -37,7 +37,7 @@ func NewPool(maxWorkers int) Pool {
 	}
 }
 
-func (p *pool) Do(job SimpleJob) {
+func (p *pool) Do(job Job) {
 	p.jobCompleted.Add(1)
 
 	if p.maxWorkers > 0 {

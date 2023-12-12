@@ -149,34 +149,19 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 	return true, nil
 }
 
-type outboxProcessor struct {
-	ticker *time.Ticker
-	outbox Outbox
-}
-
 func NewOutboxProcessor(
-	processingInterval time.Duration,
 	outbox Outbox,
-) worker.NamedProcess {
-	return outboxProcessor{
-		ticker: time.NewTicker(processingInterval),
-		outbox: outbox,
-	}
-}
-
-func (o outboxProcessor) Name() string {
-	return "message outbox processor"
-}
-
-func (o outboxProcessor) Process() worker.Process {
-	return func(stopChan <-chan struct{}) error {
+	processingInterval time.Duration,
+) worker.Process {
+	ticker := time.NewTicker(processingInterval)
+	return func(ctx context.Context) error {
 		for {
 			select {
-			case <-o.ticker.C:
-				o.outbox.Process()
-			case <-stopChan:
-				o.ticker.Stop()
-				o.outbox.Close()
+			case <-ticker.C:
+				outbox.Process()
+			case <-ctx.Done():
+				ticker.Stop()
+				outbox.Close()
 			}
 		}
 	}

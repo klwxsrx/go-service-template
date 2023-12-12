@@ -61,5 +61,8 @@ func main() {
 	container.MustRegisterMessageHandlers(msgBusListener)
 
 	logger.Info(ctx, "app is ready")
-	pkgworker.Must(pkgworker.Run(msgBusListener.ListenerProcesses()...).Wait(ctx, pkgsig.TermSignals(), logger))
+	pkgworker.MustRunHub(ctx, logger,
+		pkgsig.TermSignalAwaiter,
+		msgBusListener.Workers()...,
+	)
 }

@@ -92,7 +92,7 @@ func MustInitSQLMessageOutbox(
 	logger log.Logger,
 ) message.Outbox {
 	messageStorage := sql.NewMessageOutboxStorage(sqlClient)
-	transaction := sql.NewTransaction(sqlClient, "messageOutbox", func() {})
+	transaction := sql.NewTransaction(sqlClient, "pkgMessageOutbox", func() {})
 
 	return message.NewOutbox(
 		messageStorage,

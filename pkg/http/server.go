@@ -5,14 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/gorilla/mux"
-
-	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 const (
@@ -27,19 +24,12 @@ type (
 	ServerMiddleware func(http.Handler) http.Handler
 )
 
-func Must(err error) {
-	if err != nil {
-		panic(fmt.Errorf("listen the server: %w", err))
-	}
-}
-
 type HandlerRegistry interface {
 	Register(handler Handler, opts ...ServerOption)
 }
 
 type Server interface {
-	Listen(ctx context.Context, termSignalsChan <-chan os.Signal) error
-	Listener(ctx context.Context) worker.NamedProcess
+	Listener(context.Context) error
 	HandlerRegistry
 }
 
@@ -70,8 +60,38 @@ func NewServer(
 	}
 }
 
-func (s server) Listen(ctx context.Context, termSignalsChan <-chan os.Signal) error {
-	return listenAndServe(ctx, s.srv, termSignalsChan)
+func (s server) Listener(ctx context.Context) error {
+	shutdown := func() error {
+		err := s.srv.Shutdown(context.Background())
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("shutdown: %w", err)
+		}
+		return nil
+	}
+
+	serverDoneChan := make(chan error, 1)
+	go func() {
+		err := s.srv.ListenAndServe()
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		serverDoneChan <- err
+	}()
+
+	var err error
+	select {
+	case err = <-serverDoneChan:
+	case <-ctx.Done():
+		err = shutdown()
+	}
+	if err != nil {
+		return fmt.Errorf("http listener %s: %w", s.srv.Addr, err)
+	}
+
+	return nil
 }
 
 func (s server) Register(handler Handler, opts ...ServerOption) {
@@ -89,55 +109,6 @@ func (s server) Register(handler Handler, opts ...ServerOption) {
 		Methods(handler.Method()).
 		Path(handler.Path()).
 		Handler(httpHandler)
-}
-
-type serverProcess struct {
-	ctx context.Context
-	srv *http.Server
-}
-
-func (p serverProcess) Name() string {
-	return fmt.Sprintf("http server %s", p.srv.Addr)
-}
-
-func (p serverProcess) Process() worker.Process {
-	return func(stopChan <-chan struct{}) error {
-		return listenAndServe(p.ctx, p.srv, stopChan)
-	}
-}
-
-func (s server) Listener(ctx context.Context) worker.NamedProcess {
-	return serverProcess{ctx, s.srv}
-}
-
-func listenAndServe[signal any](ctx context.Context, srv *http.Server, termSignal <-chan signal) error {
-	serverDoneChan := make(chan error, 1)
-	go func() {
-		err := srv.ListenAndServe()
-		if errors.Is(err, http.ErrServerClosed) {
-			err = nil
-		}
-		serverDoneChan <- err
-	}()
-
-	var err error
-	select {
-	case err = <-serverDoneChan:
-	case <-termSignal:
-		err = shutdown(ctx, srv)
-	}
-	return err
-}
-
-func shutdown(ctx context.Context, srv *http.Server) error {
-	err := srv.Shutdown(ctx)
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("shutdown http server: %w", err)
-	}
-	return nil
 }
 
 func getRouteName(method, path string) string {
