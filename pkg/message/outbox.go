@@ -17,11 +17,12 @@ import (
 const (
 	DefaultOutboxProcessingInterval = time.Second
 
-	processMessageOutboxLockName = "process_message_outbox"
+	messagesBatchSize = 100
 )
 
 type OutboxStorage interface {
-	GetBatch(ctx context.Context, scheduledBefore time.Time) ([]Message, error)
+	Lock(ctx context.Context) (release func() error, err error)
+	GetBatch(ctx context.Context, scheduledBefore time.Time, batchSize int) ([]Message, error)
 	Store(ctx context.Context, msgs []Message, scheduledAt time.Time) error
 	Delete(ctx context.Context, ids []uuid.UUID) error
 }
@@ -100,18 +101,16 @@ func (o *outbox) processSend() {
 	ctx := context.Background()
 
 	process := func() error {
-		var atLeastOneProcessed bool
 		var err error
-
-		for {
-			err = o.transaction.WithinContext(ctx, func(ctx context.Context) error {
-				atLeastOneProcessed, err = o.processSendBatch(ctx) // TODO: long tx here
-				return err
-			}, processMessageOutboxLockName)
-			if !atLeastOneProcessed || err != nil {
+		var allProcessed bool
+		for !allProcessed {
+			allProcessed, err = o.processSendBatch(ctx)
+			if err != nil {
 				return err
 			}
 		}
+
+		return nil
 	}
 
 	_ = backoff.Retry(func() error {
@@ -123,8 +122,19 @@ func (o *outbox) processSend() {
 	}, o.retry)
 }
 
-func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool, err error) {
-	msgs, err := o.storage.GetBatch(ctx, time.Now())
+func (o *outbox) processSendBatch(ctx context.Context) (allProcessed bool, err error) {
+	releaseLock, err := o.storage.Lock(ctx)
+	if err != nil {
+		return false, fmt.Errorf("get storage lock: %w", err)
+	}
+	defer func() {
+		err := releaseLock()
+		if err != nil {
+			o.logger.WithError(err).Error(ctx, "failed to release message outbox storage lock")
+		}
+	}()
+
+	msgs, err := o.storage.GetBatch(ctx, time.Now(), messagesBatchSize)
 	if err != nil {
 		return false, fmt.Errorf("get messages for send: %w", err)
 	}
@@ -146,7 +156,7 @@ func (o *outbox) processSendBatch(ctx context.Context) (atLeastOneProcessed bool
 		}
 	}
 
-	return true, nil
+	return len(msgs) < messagesBatchSize, nil
 }
 
 func NewOutboxProcessor(

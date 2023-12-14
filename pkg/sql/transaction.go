@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
@@ -50,10 +51,17 @@ func (t *transaction) WithinContext(
 		ctx = context.WithValue(ctx, dbTransactionContextKey, storedTx)
 	}
 
+	slices.Sort(lockNames)
 	for _, lockName := range lockNames {
-		err = lockDatabase(ctx, storedTx.ClientTx, "select pg_advisory_xact_lock($1)", lockName)
+		var lockID int64
+		lockID, err = getLockIDByName(lockName)
 		if err != nil {
-			return err
+			return fmt.Errorf("get lock id for %s: %w", lockName, err)
+		}
+
+		_, err = storedTx.ClientTx.ExecContext(ctx, "select pg_advisory_xact_lock($1)", lockID)
+		if err != nil {
+			return fmt.Errorf("get lock %s: %w", lockName, err)
 		}
 	}
 
@@ -78,22 +86,23 @@ func (t *transaction) WithinContext(
 }
 
 func (t *transaction) WithLock(ctx context.Context) context.Context {
-	_, ok := ctx.Value(dbTransactionContextKey).(txData)
-	if !ok {
+	if !HasTransaction(ctx) {
 		return ctx
 	}
 
-	_, ok = ctx.Value(dbTransactionLockContextKey).(txData)
-	if ok {
+	if IsLockRequested(ctx) {
 		return ctx
 	}
 
 	return context.WithValue(ctx, dbTransactionLockContextKey, struct{}{})
 }
 
+func HasTransaction(ctx context.Context) bool {
+	return ctx.Value(dbTransactionContextKey) != nil
+}
+
 func IsLockRequested(ctx context.Context) bool {
-	_, ok := ctx.Value(dbTransactionContextKey).(txData)
-	return ok
+	return ctx.Value(dbTransactionLockContextKey) != nil
 }
 
 type transactionalClient struct {

@@ -62,7 +62,7 @@ type database struct {
 	logger log.Logger
 }
 
-func NewDatabase(config *Config, logger log.Logger) (Database, error) {
+func NewDatabase(config *Config, logger log.Logger) (Database, error) { // TODO: MaxConnections, MaxIdleConnections Options
 	if config.ConnectionTimeout <= 0 {
 		config.ConnectionTimeout = defaultConnectionTimeout
 	}

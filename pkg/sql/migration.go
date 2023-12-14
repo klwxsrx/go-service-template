@@ -61,13 +61,16 @@ func (m *Migrator) Execute(ctx context.Context, migrationSources ...MigrationSou
 		return migrations[i].ID < migrations[j].ID
 	})
 
-	lock := newLock(ctx, migrationLockName, m.txClient)
-
-	err := lock.Get()
+	releaseLock, err := withSessionLevelLock(ctx, migrationLockName, m.txClient)
 	if err != nil {
 		return fmt.Errorf("get migration lock: %w", err)
 	}
-	defer lock.Release()
+	defer func() {
+		err := releaseLock()
+		if err != nil {
+			m.logger.WithError(err).Error(ctx, "failed to release migration lock")
+		}
+	}()
 
 	return m.performMigrations(ctx, migrations)
 }

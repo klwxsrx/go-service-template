@@ -6,23 +6,25 @@ import (
 	"hash/fnv"
 )
 
-type lock struct {
-	ctx    context.Context
-	name   string
-	client Client
-}
+func withSessionLevelLock(ctx context.Context, name string, client Client) (release func() error, err error) {
+	lockID, err := getLockIDByName(name)
+	if err != nil {
+		return nil, err
+	}
 
-func newLock(ctx context.Context, name string, client Client) *lock {
-	return &lock{ctx, name, client}
-}
+	_, err = client.ExecContext(ctx, "select pg_advisory_lock($1)", lockID)
+	if err != nil {
+		return nil, fmt.Errorf("get lock: %w", err)
+	}
 
-func (l *lock) Get() error {
-	return lockDatabase(l.ctx, l.client, "select pg_advisory_lock($1)", l.name)
-}
+	return func() error {
+		_, err := client.ExecContext(ctx, "select pg_advisory_unlock($1)", lockID)
+		if err != nil {
+			return fmt.Errorf("release lock: %w", err)
+		}
 
-func (l *lock) Release() {
-	lockID, _ := getLockIDByName(l.name)
-	_, _ = l.client.ExecContext(l.ctx, "select pg_advisory_unlock($1)", lockID)
+		return nil
+	}, nil
 }
 
 func getLockIDByName(name string) (int64, error) {
@@ -32,17 +34,4 @@ func getLockIDByName(name string) (int64, error) {
 		return 0, fmt.Errorf("create name hash for lock: %w", err)
 	}
 	return int64(hash.Sum64()), nil
-}
-
-func lockDatabase(ctx context.Context, client Client, query, lockName string) error {
-	lockID, err := getLockIDByName(lockName)
-	if err != nil {
-		return err
-	}
-
-	_, err = client.ExecContext(ctx, query, lockID)
-	if err != nil {
-		return fmt.Errorf("get lock %s: %w", lockName, err)
-	}
-	return nil
 }

@@ -11,9 +11,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
-const (
-	batchLimit = 100
-)
+const messageOutboxLockName = "message_outbox"
 
 type messageOutboxStorage struct {
 	db Client
@@ -23,13 +21,17 @@ func NewMessageOutboxStorage(db Client) message.OutboxStorage {
 	return messageOutboxStorage{db: db}
 }
 
-func (s messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore time.Time) ([]message.Message, error) {
+func (s messageOutboxStorage) Lock(ctx context.Context) (release func() error, err error) {
+	return withSessionLevelLock(ctx, messageOutboxLockName, s.db)
+}
+
+func (s messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore time.Time, batchSize int) ([]message.Message, error) {
 	query, args, err := sq.
 		Select("id", "topic", "key", "payload").
 		From("message_outbox").
 		Where(sq.LtOrEq{"scheduled_at": scheduledBefore}).
 		OrderBy("scheduled_at").
-		Limit(batchLimit).
+		Limit(uint64(batchSize)).
 		ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build sql: %w", err)
