@@ -67,9 +67,12 @@ func NewClient(opts ...ClientOption) Client {
 }
 
 func (c ClientImpl) NewRequest(ctx context.Context, route Route) Request {
+	ctx = context.WithValue(ctx, clientRouteName, getRouteName(route.Method, route.URL))
+
 	r := c.RESTClient.NewRequest().SetContext(ctx)
 	r.Method = route.Method
 	r.URL = route.URL
+
 	return restyRequestWrapper{r}
 }
 
@@ -105,7 +108,7 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 	const destinationNameLogField = "destinationName"
 	return func(c *ClientImpl) {
 		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
-			routeName := getRouteName(resp.Request.Method, resp.Request.URL)
+			routeName, _ := resp.Request.Context().Value(clientRouteName).(string)
 			logger = getRequestResponseFieldsLogger(routeName, resp.Request.RawRequest, resp.StatusCode(), logger)
 			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
 				destinationNameLogField: getDestinationNameForLogging(c),
@@ -122,7 +125,7 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 
 		c.RESTClient.OnError(func(req *resty.Request, err error) {
 			if req.RawRequest != nil {
-				routeName := getRouteName(req.Method, req.URL)
+				routeName, _ := req.Context().Value(clientRouteName).(string)
 				logger = getRequestFieldsLogger(routeName, req.RawRequest, logger)
 			}
 			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{

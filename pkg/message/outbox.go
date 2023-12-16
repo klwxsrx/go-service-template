@@ -139,7 +139,7 @@ func (o *outbox) processSendBatch(ctx context.Context) (allProcessed bool, err e
 		return false, fmt.Errorf("get messages for send: %w", err)
 	}
 	if len(msgs) == 0 {
-		return false, nil
+		return true, nil
 	}
 
 	for _, msg := range msgs {
@@ -172,6 +172,7 @@ func NewOutboxProcessor(
 			case <-ctx.Done():
 				ticker.Stop()
 				outbox.Close()
+				return nil
 			}
 		}
 	}

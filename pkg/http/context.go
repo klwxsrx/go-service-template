@@ -11,6 +11,7 @@ type contextKey int
 
 const (
 	handlerMetaContextKey contextKey = iota
+	clientRouteName
 )
 
 type panicErr struct {

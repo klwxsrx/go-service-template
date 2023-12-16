@@ -63,22 +63,16 @@ func NewServer(
 func (s server) Listener(ctx context.Context) error {
 	shutdown := func() error {
 		err := s.srv.Shutdown(context.Background())
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
-		if err != nil {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("shutdown: %w", err)
 		}
-		return nil
+
+		return err
 	}
 
 	serverDoneChan := make(chan error, 1)
 	go func() {
-		err := s.srv.ListenAndServe()
-		if errors.Is(err, http.ErrServerClosed) {
-			err = nil
-		}
-		serverDoneChan <- err
+		serverDoneChan <- s.srv.ListenAndServe()
 	}()
 
 	var err error
@@ -87,11 +81,11 @@ func (s server) Listener(ctx context.Context) error {
 	case <-ctx.Done():
 		err = shutdown()
 	}
-	if err != nil {
-		return fmt.Errorf("http listener %s: %w", s.srv.Addr, err)
+	if errors.Is(err, http.ErrServerClosed) || err == nil {
+		return nil
 	}
 
-	return nil
+	return fmt.Errorf("http listener %s: %w", s.srv.Addr, err)
 }
 
 func (s server) Register(handler Handler, opts ...ServerOption) {
