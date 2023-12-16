@@ -93,13 +93,9 @@ func MustInitSQLMessageOutbox(
 	messageProducer message.Producer,
 	logger log.Logger,
 ) message.Outbox {
-	messageStorage := sql.NewMessageOutboxStorage(sqlClient)
-	transaction := sql.NewTransaction(sqlClient, "pkgMessageOutbox", func() {})
-
 	return message.NewOutbox(
-		messageStorage,
+		sql.NewMessageOutboxStorage(sqlClient),
 		messageProducer,
-		transaction,
 		logger,
 	)
 }

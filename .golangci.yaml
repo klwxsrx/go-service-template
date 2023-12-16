@@ -32,6 +32,7 @@ linters:
     - staticcheck
     - unconvert
     - unparam
+    - unused
 
 linters-settings:
   goimports:
@@ -56,3 +57,5 @@ linters-settings:
         alias: $1$2$3
       - pkg: github.com/klwxsrx/go-service-template/internal/(duck)/(\w+)/(\w+)/(\w+)
         alias: $1$2$3$4
+  unused:
+    field-writes-are-uses: false

@@ -6,7 +6,7 @@ import (
 )
 
 type service struct {
-	httpClient pkghttp.Client
+	httpClient pkghttp.Client //nolint:unused
 }
 
 func NewService(httpClient pkghttp.Client) external.GooseService {

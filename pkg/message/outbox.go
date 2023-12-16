@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
-	"github.com/klwxsrx/go-service-template/pkg/persistence"
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
@@ -33,11 +32,10 @@ type Outbox interface {
 }
 
 type outbox struct {
-	storage     OutboxStorage
-	out         Producer
-	transaction persistence.Transaction
-	retry       *backoff.ExponentialBackOff
-	logger      log.Logger
+	storage OutboxStorage
+	out     Producer
+	retry   *backoff.ExponentialBackOff
+	logger  log.Logger
 
 	processChan chan struct{}
 	stopChan    chan struct{}
@@ -47,7 +45,6 @@ type outbox struct {
 func NewOutbox(
 	storage OutboxStorage,
 	out Producer,
-	transaction persistence.Transaction,
 	logger log.Logger,
 ) Outbox {
 	retry := backoff.NewExponentialBackOff()
@@ -60,7 +57,6 @@ func NewOutbox(
 	mo := &outbox{
 		storage:     storage,
 		out:         out,
-		transaction: transaction,
 		retry:       retry,
 		logger:      logger,
 		processChan: make(chan struct{}, 1),
