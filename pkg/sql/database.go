@@ -15,11 +15,13 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
-const defaultConnectionTimeout = 20 * time.Second
+const defaultConnectionTimeout = 10 * time.Second
 
 type Config struct {
-	DSN               DSN
-	ConnectionTimeout time.Duration
+	DSN                DSN
+	MaxOpenConnections int
+	MaxIdleConnections int
+	ConnectionTimeout  time.Duration
 }
 
 type DSN struct {
@@ -62,7 +64,7 @@ type database struct {
 	logger log.Logger
 }
 
-func NewDatabase(config *Config, logger log.Logger) (Database, error) { // TODO: MaxConnections, MaxIdleConnections Options
+func NewDatabase(config *Config, logger log.Logger) (Database, error) {
 	if config.ConnectionTimeout <= 0 {
 		config.ConnectionTimeout = defaultConnectionTimeout
 	}
@@ -71,6 +73,8 @@ func NewDatabase(config *Config, logger log.Logger) (Database, error) { // TODO:
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(config.MaxOpenConnections)
+	db.SetMaxIdleConns(config.MaxIdleConnections)
 
 	enablePostgreSQLSquirrelPlaceholderFormat()
 	return &database{

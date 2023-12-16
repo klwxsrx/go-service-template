@@ -64,6 +64,8 @@ func MustInitSQL(ctx context.Context, logger log.Logger, migrations ...sql.Migra
 			Address:  env.Must(env.ParseString("SQL_ADDRESS")),
 			Database: env.Must(env.ParseString("SQL_DATABASE")),
 		},
+		MaxOpenConnections: env.Must(env.ParseInt("SQL_MAX_OPEN_CONNECTIONS")),
+		MaxIdleConnections: env.Must(env.ParseInt("SQL_MAX_IDLE_CONNECTIONS")),
 	}
 	sqlConnTimeout, err := env.ParseDuration("SQL_CONNECTION_TIMEOUT")
 	if err == nil {
