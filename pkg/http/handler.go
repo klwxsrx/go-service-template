@@ -149,8 +149,8 @@ func parseTypedValueImpl[T any](value string) (T, error) {
 type responseWriter struct {
 	impl http.ResponseWriter
 
-	writeBodyFunc func() error
-	httpCode      int
+	encodeBodyFunc func(http.Header) ([]byte, error)
+	httpCode       int
 }
 
 func (w *responseWriter) SetHeader(key, value string) ResponseWriter {
@@ -169,19 +169,14 @@ func (w *responseWriter) SetCookie(cookie *http.Cookie) ResponseWriter {
 }
 
 func (w *responseWriter) SetJSONBody(data any) ResponseWriter {
-	w.writeBodyFunc = func() error {
+	w.encodeBodyFunc = func(header http.Header) ([]byte, error) {
 		bodyEncoded, err := json.Marshal(data)
 		if err != nil {
-			return fmt.Errorf("encode body: %w", err)
+			return nil, fmt.Errorf("encode body: %w", err)
 		}
 
-		_, err = w.impl.Write(bodyEncoded)
-		if err != nil {
-			return fmt.Errorf("write body: %w", err)
-		}
-
-		w.impl.Header().Set("Content-Type", "application/json")
-		return nil
+		header.Set("Content-Type", "application/json")
+		return bodyEncoded, nil
 	}
 	return w
 }
@@ -193,22 +188,36 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 		httpCode = http.StatusBadRequest
 	case err != nil:
 		httpCode = http.StatusInternalServerError
-	case w.writeBodyFunc != nil:
-		err = w.writeBodyFunc()
-		if err != nil {
-			httpCode = http.StatusInternalServerError
-			break
-		}
-		fallthrough
 	default:
 		httpCode = w.httpCode
+	}
+
+	var bodyEncoded []byte
+	if w.encodeBodyFunc != nil {
+		var encodingErr error
+		bodyEncoded, encodingErr = w.encodeBodyFunc(w.impl.Header())
+		if encodingErr != nil {
+			httpCode = http.StatusInternalServerError
+			if err == nil {
+				err = encodingErr
+			}
+		}
+	}
+	w.impl.WriteHeader(httpCode)
+
+	if len(bodyEncoded) > 0 {
+		_, writeBodyErr := w.impl.Write(bodyEncoded)
+		if writeBodyErr != nil {
+			httpCode = http.StatusInternalServerError
+		}
+		if err == nil {
+			err = writeBodyErr
+		}
 	}
 
 	meta := getHandlerMetadata(ctx)
 	meta.Code = httpCode
 	meta.Error = err
-
-	w.impl.WriteHeader(httpCode)
 }
 
 func (w *responseWriter) WritePanic(ctx context.Context, panic panicErr) {
@@ -234,9 +243,9 @@ func httpHandlerWrapper(handler HandlerFunc) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		respWriter := &responseWriter{
-			impl:          w,
-			writeBodyFunc: nil,
-			httpCode:      http.StatusOK,
+			impl:           w,
+			encodeBodyFunc: nil,
+			httpCode:       http.StatusOK,
 		}
 
 		defer recoverPanic(r, respWriter)

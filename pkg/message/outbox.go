@@ -18,9 +18,9 @@ import (
 const (
 	DefaultOutboxProcessingInterval = time.Second
 
-	messagesBatchSize                       = 100
-	metricNameMessageSendAttemptsTotal      = "msg_outbox_send_attempts_total"
-	metricNameMessageDeleteSentAttemptTotal = "msg_outbox_delete_sent_attempts_total"
+	messagesBatchSize                        = 100
+	metricNameMessageSendAttemptsTotal       = "msg_outbox_send_attempts_total"
+	metricNameMessageDeleteSentAttemptsTotal = "msg_outbox_delete_sent_attempts_total"
 )
 
 type (
@@ -172,10 +172,10 @@ func (o *outbox) processSendBatch(ctx context.Context) (allProcessed bool, err e
 
 		err = o.storage.Delete(ctx, []uuid.UUID{msg.ID})
 		if err != nil {
-			metrics.WithLabel("success", false).Increment(metricNameMessageDeleteSentAttemptTotal)
+			metrics.WithLabel("success", false).Increment(metricNameMessageDeleteSentAttemptsTotal)
 			return false, fmt.Errorf("delete sent messages: %w", err)
 		}
-		metrics.WithLabel("success", true).Increment(metricNameMessageDeleteSentAttemptTotal)
+		metrics.WithLabel("success", true).Increment(metricNameMessageDeleteSentAttemptsTotal)
 
 		sentMessages = append(sentMessages, msg.ID)
 	}

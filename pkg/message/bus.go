@@ -203,9 +203,9 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusOption {
 
 			err := impl(ctx, domainName, msgClass, msgs, scheduleAt)
 			if err != nil {
-				loggerWithFields.WithError(err).Log(ctx, errorLevel, "messages didn't stored due error")
+				loggerWithFields.WithError(err).Log(ctx, errorLevel, "messages didn't stored to outbox due error")
 			} else {
-				loggerWithFields.Log(ctx, infoLevel, "messages stored")
+				loggerWithFields.Log(ctx, infoLevel, "messages stored to outbox")
 			}
 
 			return err
