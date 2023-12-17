@@ -10,32 +10,43 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
+	"github.com/klwxsrx/go-service-template/pkg/metric"
+	pkgmetricstub "github.com/klwxsrx/go-service-template/pkg/metric/stub"
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 const (
 	DefaultOutboxProcessingInterval = time.Second
 
-	messagesBatchSize = 100
+	messagesBatchSize                       = 100
+	metricNameMessageSendAttemptsTotal      = "msg_outbox_send_attempts_total"
+	metricNameMessageDeleteSentAttemptTotal = "msg_outbox_delete_sent_attempts_total"
 )
 
-type OutboxStorage interface {
-	Lock(ctx context.Context) (release func() error, err error)
-	GetBatch(ctx context.Context, scheduledBefore time.Time, batchSize int) ([]Message, error)
-	Store(ctx context.Context, msgs []Message, scheduledAt time.Time) error
-	Delete(ctx context.Context, ids []uuid.UUID) error
-}
+type (
+	OutboxStorage interface {
+		Lock(ctx context.Context) (release func() error, err error)
+		GetBatch(ctx context.Context, scheduledBefore time.Time, batchSize int) ([]Message, error)
+		Store(ctx context.Context, msgs []Message, scheduledAt time.Time) error
+		Delete(ctx context.Context, ids []uuid.UUID) error
+	}
 
-type Outbox interface {
-	Process()
-	Close()
-}
+	Outbox interface {
+		Process()
+		Close()
+	}
+
+	OutboxOption func(*outbox)
+)
 
 type outbox struct {
-	storage OutboxStorage
-	out     Producer
-	retry   *backoff.ExponentialBackOff
-	logger  log.Logger
+	storage          OutboxStorage
+	out              Producer
+	retry            *backoff.ExponentialBackOff
+	metrics          metric.Metrics
+	logger           log.Logger
+	loggerInfoLevel  log.Level
+	loggerErrorLevel log.Level
 
 	processChan chan struct{}
 	stopChan    chan struct{}
@@ -45,7 +56,7 @@ type outbox struct {
 func NewOutbox(
 	storage OutboxStorage,
 	out Producer,
-	logger log.Logger,
+	opts ...OutboxOption,
 ) Outbox {
 	retry := backoff.NewExponentialBackOff()
 	retry.InitialInterval = time.Second
@@ -58,10 +69,15 @@ func NewOutbox(
 		storage:     storage,
 		out:         out,
 		retry:       retry,
-		logger:      logger,
+		metrics:     pkgmetricstub.NewMetrics(),
+		logger:      log.New(log.LevelDisabled),
 		processChan: make(chan struct{}, 1),
 		stopChan:    make(chan struct{}),
 		onceCloser:  &sync.Once{},
+	}
+
+	for _, opt := range opts {
+		opt(mo)
 	}
 
 	go mo.run()
@@ -112,7 +128,7 @@ func (o *outbox) processSend() {
 	_ = backoff.Retry(func() error {
 		err := process()
 		if err != nil {
-			o.logger.WithError(err).Error(ctx, "failed to get process messages")
+			o.logger.WithError(err).Log(ctx, o.loggerErrorLevel, "failed to get process messages")
 		}
 		return err
 	}, o.retry)
@@ -126,7 +142,7 @@ func (o *outbox) processSendBatch(ctx context.Context) (allProcessed bool, err e
 	defer func() {
 		err := releaseLock()
 		if err != nil {
-			o.logger.WithError(err).Error(ctx, "failed to release message outbox storage lock")
+			o.logger.WithError(err).Log(ctx, o.loggerErrorLevel, "failed to release message outbox storage lock")
 		}
 	}()
 
@@ -138,21 +154,47 @@ func (o *outbox) processSendBatch(ctx context.Context) (allProcessed bool, err e
 		return true, nil
 	}
 
+	sentMessages := make([]uuid.UUID, 0, len(msgs))
+	defer func() {
+		o.logger.WithField("messageIDs", sentMessages).Log(ctx, o.loggerInfoLevel, "outbox messages successfully sent")
+	}()
+
 	for _, msg := range msgs {
 		msg := msg
+		metrics := o.metrics.WithLabel("topic", msg.Topic)
 
-		err = o.out.Produce(ctx, &msg) // TODO: WithLogging, WithMetrics
+		err = o.out.Produce(ctx, &msg)
 		if err != nil {
+			metrics.WithLabel("success", false).Increment(metricNameMessageSendAttemptsTotal)
 			return false, fmt.Errorf("send message: %w", err)
 		}
+		metrics.WithLabel("success", true).Increment(metricNameMessageSendAttemptsTotal)
 
 		err = o.storage.Delete(ctx, []uuid.UUID{msg.ID})
 		if err != nil {
+			metrics.WithLabel("success", false).Increment(metricNameMessageDeleteSentAttemptTotal)
 			return false, fmt.Errorf("delete sent messages: %w", err)
 		}
+		metrics.WithLabel("success", true).Increment(metricNameMessageDeleteSentAttemptTotal)
+
+		sentMessages = append(sentMessages, msg.ID)
 	}
 
 	return len(msgs) < messagesBatchSize, nil
+}
+
+func WithOutboxLogging(logger log.Logger, infoLevel log.Level, errorLevel log.Level) OutboxOption {
+	return func(outbox *outbox) {
+		outbox.logger = logger
+		outbox.loggerInfoLevel = infoLevel
+		outbox.loggerErrorLevel = errorLevel
+	}
+}
+
+func WithOutboxMetrics(metrics metric.Metrics) OutboxOption {
+	return func(o *outbox) {
+		o.metrics = metrics
+	}
 }
 
 func NewOutboxProcessor(

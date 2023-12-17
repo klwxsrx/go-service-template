@@ -29,12 +29,11 @@ func MustInitDependencyContainer(
 	sqlClient pkgsql.TxClient,
 	msgBuses pkgmessage.BusFactory,
 	httpClients pkgcmd.HTTPClientFactory,
-	onCommit func(),
 ) *DependencyContainer {
 	transaction := pkgsql.NewTransaction(
 		sqlClient,
 		domainName,
-		onCommit,
+		nil,
 	)
 
 	gooseServiceHTTPClient := httpClients.MustInitClient(commonhttp.DestinationGooseService)

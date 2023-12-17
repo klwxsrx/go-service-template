@@ -34,9 +34,6 @@ func main() {
 	msgBroker := pkgcmd.MustInitPulsarMessageBroker(nil)
 	defer msgBroker.Close()
 
-	msgOutbox := pkgcmd.MustInitSQLMessageOutbox(sqlDB, msgBroker, logger)
-	defer msgOutbox.Close()
-
 	msgBuses := pkgcmd.InitSQLMessageBusFactory(
 		sqlDB,
 		pkgmessage.WithObservability(observability),
@@ -50,7 +47,7 @@ func main() {
 		pkghttp.WithRequestLogging(logger, pkglog.LevelInfo, pkglog.LevelWarn),
 	)
 
-	container := duck.MustInitDependencyContainer(sqlDB, msgBuses, httpClients, msgOutbox.Process)
+	container := duck.MustInitDependencyContainer(sqlDB, msgBuses, httpClients)
 
 	msgBusListener := pkgmessage.NewBusListener(
 		msgBroker,

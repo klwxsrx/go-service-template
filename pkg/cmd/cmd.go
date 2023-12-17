@@ -91,12 +91,12 @@ func MustInitSQL(ctx context.Context, logger log.Logger, migrations ...sql.Migra
 func MustInitSQLMessageOutbox(
 	sqlClient sql.TxClient,
 	messageProducer message.Producer,
-	logger log.Logger,
+	opts ...message.OutboxOption,
 ) message.Outbox {
 	return message.NewOutbox(
 		sql.NewMessageOutboxStorage(sqlClient),
 		messageProducer,
-		logger,
+		opts...,
 	)
 }
 
