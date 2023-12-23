@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"time"
 
 	"github.com/klwxsrx/go-service-template/pkg/env"
 	"github.com/klwxsrx/go-service-template/pkg/http"
@@ -36,7 +37,7 @@ func HandleAppPanic(ctx context.Context, logger log.Logger) {
 }
 
 func InitLogger() log.Logger {
-	logLevelStr, err := env.ParseString("LOG_LEVEL")
+	logLevelStr, err := env.Parse[string]("LOG_LEVEL")
 	if err != nil {
 		return log.New(log.LevelInfo)
 	}
@@ -45,6 +46,7 @@ func InitLogger() log.Logger {
 	if !ok {
 		logLevel = log.LevelInfo
 	}
+
 	return log.New(logLevel)
 }
 
@@ -59,17 +61,17 @@ func InitHTTPClientFactory(
 func MustInitSQL(ctx context.Context, logger log.Logger, migrations ...sql.MigrationSource) sql.Database {
 	sqlConfig := &sql.Config{
 		DSN: sql.DSN{
-			User:     env.Must(env.ParseString("SQL_USER")),
-			Password: env.Must(env.ParseString("SQL_PASSWORD")),
-			Address:  env.Must(env.ParseString("SQL_ADDRESS")),
-			Database: env.Must(env.ParseString("SQL_DATABASE")),
+			User:     env.Must(env.Parse[string]("SQL_USER")),
+			Password: env.Must(env.Parse[string]("SQL_PASSWORD")),
+			Address:  env.Must(env.Parse[string]("SQL_ADDRESS")),
+			Database: env.Must(env.Parse[string]("SQL_DATABASE")),
 		},
-		MaxOpenConnections: env.Must(env.ParseInt("SQL_MAX_OPEN_CONNECTIONS")),
-		MaxIdleConnections: env.Must(env.ParseInt("SQL_MAX_IDLE_CONNECTIONS")),
+		MaxOpenConnections: env.Must(env.Parse[int]("SQL_MAX_OPEN_CONNECTIONS")),
+		MaxIdleConnections: env.Must(env.Parse[int]("SQL_MAX_IDLE_CONNECTIONS")),
 	}
-	sqlConnTimeout, err := env.ParseDuration("SQL_CONNECTION_TIMEOUT")
-	if err == nil {
-		sqlConfig.ConnectionTimeout = sqlConnTimeout
+	sqlConnTimeout := env.Must(env.ParseOptional[*time.Duration]("SQL_CONNECTION_TIMEOUT"))
+	if sqlConnTimeout != nil {
+		sqlConfig.ConnectionTimeout = *sqlConnTimeout
 	}
 
 	db, err := sql.NewDatabase(sqlConfig, logger)
@@ -112,11 +114,11 @@ func InitSQLMessageBusFactory(
 
 func MustInitPulsarMessageBroker(optionalLogger log.Logger) *pulsar.MessageBroker {
 	config := &pulsar.Config{
-		Address: env.Must(env.ParseString("PULSAR_ADDRESS")),
+		Address: env.Must(env.Parse[string]("PULSAR_ADDRESS")),
 	}
-	connTimeout, err := env.ParseDuration("PULSAR_CONNECTION_TIMEOUT")
-	if err == nil {
-		config.ConnectionTimeout = connTimeout
+	connTimeout := env.Must(env.ParseOptional[*time.Duration]("PULSAR_CONNECTION_TIMEOUT"))
+	if connTimeout != nil {
+		config.ConnectionTimeout = *connTimeout
 	}
 
 	if optionalLogger == nil {
@@ -127,5 +129,6 @@ func MustInitPulsarMessageBroker(optionalLogger log.Logger) *pulsar.MessageBroke
 	if err != nil {
 		panic(fmt.Errorf("open pulsar connection: %w", err))
 	}
+
 	return messageBroker
 }

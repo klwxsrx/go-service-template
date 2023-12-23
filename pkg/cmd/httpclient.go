@@ -19,7 +19,7 @@ func (f *HTTPClientFactory) InitRawClient(extraOpts ...http.ClientOption) http.C
 
 func (f *HTTPClientFactory) MustInitClient(dest http.Destination, extraOpts ...http.ClientOption) http.Client {
 	hostEnv := fmt.Sprintf("%s_SERVICE_URL", strcase.ToScreamingSnake(string(dest)))
-	host := env.Must(env.ParseString(hostEnv))
+	host := env.Must(env.Parse[string](hostEnv))
 
 	return f.impl.InitClient(dest, host, extraOpts...)
 }

@@ -9,7 +9,17 @@ import (
 	"github.com/google/uuid"
 )
 
-func ParseTypedValue[T any](value string) (T, error) {
+type (
+	SupportedValueParsingTypes interface {
+		bool | int | uint | float64 | string | time.Time | time.Duration | uuid.UUID
+	}
+
+	SupportedPointerParsingTypes interface {
+		*bool | *int | *uint | *float64 | *string | *time.Time | *time.Duration | *uuid.UUID
+	}
+)
+
+func ParseTypedValue[T SupportedValueParsingTypes | SupportedPointerParsingTypes](value string) (T, error) {
 	var v any
 	var err error
 	var blank T

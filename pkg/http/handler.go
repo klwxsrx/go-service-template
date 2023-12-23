@@ -10,25 +10,31 @@ import (
 
 	"github.com/gorilla/mux"
 
-	pkgstrings "github.com/klwxsrx/go-service-template/pkg/strings"
+	"github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
-type HandlerFunc func(w ResponseWriter, r *http.Request) (err error)
+type (
+	HandlerFunc func(w ResponseWriter, r *http.Request) (err error)
 
-type Handler interface {
-	Method() string
-	Path() string
-	HTTPHandler() HandlerFunc
-}
+	Handler interface {
+		Method() string
+		Path() string
+		HTTPHandler() HandlerFunc
+	}
 
-type ResponseWriter interface {
-	SetHeader(key, value string) ResponseWriter
-	SetStatusCode(httpCode int) ResponseWriter
-	SetCookie(cookie *http.Cookie) ResponseWriter
-	SetJSONBody(data any) ResponseWriter
-}
+	ResponseWriter interface {
+		SetHeader(key, value string) ResponseWriter
+		SetStatusCode(httpCode int) ResponseWriter
+		SetCookie(cookie *http.Cookie) ResponseWriter
+		SetJSONBody(data any) ResponseWriter
+	}
 
-type RequestDataProvider[T any] func(*http.Request) (T, error)
+	RequestDataProvider[T any] func(*http.Request) (T, error)
+
+	supportedParsingTypes interface {
+		strings.SupportedValueParsingTypes | strings.SupportedPointerParsingTypes
+	}
+)
 
 var ErrParsingError = errors.New("invalid request data")
 
@@ -54,7 +60,7 @@ func ParseOptional[T any](from *http.Request, data RequestDataProvider[T], lastE
 	return &result
 }
 
-func PathParameter[T any](param string) RequestDataProvider[T] {
+func PathParameter[T supportedParsingTypes](param string) RequestDataProvider[T] {
 	return func(r *http.Request) (T, error) {
 		params := mux.Vars(r)
 		paramValue, ok := params[param]
@@ -66,7 +72,7 @@ func PathParameter[T any](param string) RequestDataProvider[T] {
 	}
 }
 
-func QueryParameter[T any](param string) RequestDataProvider[T] {
+func QueryParameter[T supportedParsingTypes](param string) RequestDataProvider[T] {
 	return func(r *http.Request) (T, error) {
 		value := r.URL.Query().Get(param)
 		if value == "" {
@@ -77,7 +83,7 @@ func QueryParameter[T any](param string) RequestDataProvider[T] {
 	}
 }
 
-func QueryParameters[T any](param string) RequestDataProvider[[]T] {
+func QueryParameters[T supportedParsingTypes](param string) RequestDataProvider[[]T] {
 	return func(r *http.Request) ([]T, error) {
 		values, ok := r.URL.Query()[param]
 		if !ok {
@@ -95,7 +101,7 @@ func QueryParameters[T any](param string) RequestDataProvider[[]T] {
 	}
 }
 
-func Header[T any](key string) RequestDataProvider[T] {
+func Header[T supportedParsingTypes](key string) RequestDataProvider[T] {
 	return func(r *http.Request) (T, error) {
 		header := r.Header.Get(key)
 		if header == "" {
@@ -116,7 +122,7 @@ func Cookie(name string) RequestDataProvider[*http.Cookie] {
 	}
 }
 
-func CookieValue[T any](name string) RequestDataProvider[T] {
+func CookieValue[T supportedParsingTypes](name string) RequestDataProvider[T] {
 	return func(r *http.Request) (T, error) {
 		cookie, err := r.Cookie(name)
 		if err != nil {
@@ -138,8 +144,8 @@ func JSONBody[T any]() RequestDataProvider[T] {
 	}
 }
 
-func parseTypedValueImpl[T any](value string) (T, error) {
-	v, err := pkgstrings.ParseTypedValue[T](value)
+func parseTypedValueImpl[T supportedParsingTypes](value string) (T, error) {
+	v, err := strings.ParseTypedValue[T](value)
 	if err == nil {
 		return v, nil
 	}

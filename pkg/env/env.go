@@ -4,120 +4,53 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
-
-	"github.com/google/uuid"
 
 	pkgstrings "github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
-type availableTypes interface {
-	bool | int | float64 | string | time.Time | time.Duration | uuid.UUID
-}
+type (
+	supportedTypes interface {
+		pkgstrings.SupportedValueParsingTypes
+	}
 
-func Must[T any](val T, err error) T {
+	supportedOptionalTypes interface {
+		pkgstrings.SupportedPointerParsingTypes
+	}
+)
+
+func Parse[T supportedTypes](key string) (result T, err error) {
+	str, ok := os.LookupEnv(key)
+	if !ok {
+		return result, notFoundError(key, result)
+	}
+
+	result, err = pkgstrings.ParseTypedValue[T](str)
 	if err != nil {
-		panic(fmt.Errorf("parse environment: %w", err))
+		return result, invalidValueError(key, result, err)
 	}
-	return val
+
+	return result, nil
 }
 
-func ParseBool(key string) (bool, error) {
+func ParseOptional[T supportedOptionalTypes](key string) (result T, err error) {
 	str, ok := os.LookupEnv(key)
 	if !ok {
-		return false, notFoundError(key, "boolean")
+		return nil, nil
 	}
-	b, err := pkgstrings.ParseTypedValue[bool](str)
+
+	result, err = pkgstrings.ParseTypedValue[T](str)
 	if err != nil {
-		return false, fmt.Errorf("%w, true\\felse or 1\\0 expected", invalidValueError(key, "boolean"))
+		return result, invalidValueError(key, result, err)
 	}
-	return b, nil
+
+	return result, nil
 }
 
-func ParseInt(key string) (int, error) {
+func ParseList[T supportedTypes](key string, delimiter string) ([]T, error) {
 	str, ok := os.LookupEnv(key)
 	if !ok {
-		return 0, notFoundError(key, "integer")
-	}
-	i, err := pkgstrings.ParseTypedValue[int](str)
-	if err != nil {
-		return 0, invalidValueError(key, "integer")
-	}
-	return i, nil
-}
-
-func ParseUint(key string) (uint, error) {
-	str, ok := os.LookupEnv(key)
-	if !ok {
-		return 0, notFoundError(key, "unsigned integer")
-	}
-	i, err := pkgstrings.ParseTypedValue[uint](str)
-	if err != nil {
-		return 0, invalidValueError(key, "unsigned integer")
-	}
-	return i, nil
-}
-
-func ParseFloat(key string) (float64, error) {
-	str, ok := os.LookupEnv(key)
-	if !ok {
-		return 0, notFoundError(key, "float")
-	}
-	f, err := pkgstrings.ParseTypedValue[float64](str)
-	if err != nil {
-		return 0, invalidValueError(key, "float")
-	}
-	return f, nil
-}
-
-func ParseString(key string) (string, error) {
-	str, ok := os.LookupEnv(key)
-	if !ok {
-		return "", notFoundError(key, "string")
-	}
-	return str, nil
-}
-
-func ParseTime(key string) (time.Time, error) {
-	str, ok := os.LookupEnv(key)
-	if !ok {
-		return time.Time{}, notFoundError(key, "time")
-	}
-	t, err := pkgstrings.ParseTypedValue[time.Time](str)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("%w, RFC3339, RFC3339Nano or Unix time expected", invalidValueError(key, "time"))
-	}
-	return t, nil
-}
-
-func ParseDuration(key string) (time.Duration, error) {
-	str, ok := os.LookupEnv(key)
-	if !ok {
-		return 0, notFoundError(key, "duration")
-	}
-	d, err := pkgstrings.ParseTypedValue[time.Duration](str)
-	if err != nil {
-		return 0, invalidValueError(key, "duration")
-	}
-	return d, nil
-}
-
-func ParseUUID(key string) (uuid.UUID, error) {
-	str, ok := os.LookupEnv(key)
-	if !ok {
-		return uuid.UUID{}, notFoundError(key, "uuid")
-	}
-	id, err := pkgstrings.ParseTypedValue[uuid.UUID](str)
-	if err != nil {
-		return uuid.UUID{}, invalidValueError(key, "uuid")
-	}
-	return id, nil
-}
-
-func ParseList[T availableTypes](key string, delimiter string) ([]T, error) {
-	str, ok := os.LookupEnv(key)
-	if !ok {
-		return nil, notFoundError(key, "list")
+		var empty T
+		return nil, notFoundError(key, empty)
 	}
 
 	strList := strings.Split(str, delimiter)
@@ -127,20 +60,30 @@ func ParseList[T availableTypes](key string, delimiter string) ([]T, error) {
 		if str == "" {
 			continue
 		}
+
 		t, err := pkgstrings.ParseTypedValue[T](str)
 		if err != nil {
-			return nil, invalidValueError(key, "list")
+			var empty T
+			return nil, invalidValueError(key, empty, err)
 		}
+
 		resultList = append(resultList, t)
 	}
 
 	return resultList, nil
 }
 
-func notFoundError(key, varType string) error {
-	return fmt.Errorf("env %s with type %s not found", key, varType)
+func Must[T any](val T, err error) T {
+	if err != nil {
+		panic(fmt.Errorf("parse environment: %w", err))
+	}
+	return val
 }
 
-func invalidValueError(key, varType string) error {
-	return fmt.Errorf("env %s with type %s has invalid value", key, varType)
+func notFoundError(key string, varType any) error {
+	return fmt.Errorf("env %s with type %T not found", strings.ToUpper(key), varType)
+}
+
+func invalidValueError(key string, varType any, err error) error {
+	return fmt.Errorf("env %s with type %T is invalid: %w", strings.ToUpper(key), varType, err)
 }
