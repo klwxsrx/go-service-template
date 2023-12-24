@@ -22,8 +22,7 @@ type group struct {
 	errResult error
 	pool      Pool
 
-	closerMutex *sync.Mutex
-	onceCloser  *sync.Once
+	onceCloser *sync.Once
 }
 
 func WithinFailFastGroup(ctx context.Context, pool Pool) Group {
@@ -36,7 +35,6 @@ func WithinFailFastGroup(ctx context.Context, pool Pool) Group {
 		errChan:             make(chan error, 1),
 		errResult:           nil,
 		pool:                pool,
-		closerMutex:         &sync.Mutex{},
 		onceCloser:          &sync.Once{},
 	}
 }
@@ -51,7 +49,6 @@ func WithinFailSafeGroup(ctx context.Context, pool Pool) Group {
 		errChan:             make(chan error, 1),
 		errResult:           nil,
 		pool:                pool,
-		closerMutex:         &sync.Mutex{},
 		onceCloser:          &sync.Once{},
 	}
 }
@@ -92,8 +89,6 @@ func (g *group) Do(process Process) {
 
 func (g *group) Wait() error {
 	g.pool.Wait()
-
-	g.closerMutex.Lock()
 	g.onceCloser.Do(func() {
 		g.ctxCancel()
 
@@ -102,7 +97,6 @@ func (g *group) Wait() error {
 		default:
 		}
 	})
-	g.closerMutex.Unlock()
 
 	return g.errResult
 }

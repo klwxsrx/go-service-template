@@ -25,9 +25,9 @@ type (
 		domainName string,
 	) (messageClass, messageType string, topicBuilder TopicBuilderFunc, keyBuilder KeyBuilderFunc, err error)
 
-	Bus interface {
-		Produce(ctx context.Context, messageClass string, msgs []StructuredMessage, scheduleAt time.Time) error
-		RegisterMessages(msg RegisterStructuredMessageFunc, msgs ...RegisterStructuredMessageFunc) error
+	BusProducer interface {
+		Produce(ctx context.Context, domainName, messageClass string, msgs []StructuredMessage, scheduleAt time.Time) error
+		RegisterMessages(domainName string, msg RegisterStructuredMessageFunc, msgs ...RegisterStructuredMessageFunc) error
 	}
 
 	BusOption           func() (BusProducerMW, MetadataBuilderFunc)
@@ -37,17 +37,15 @@ type (
 	Metadata            map[string]any
 )
 
-type bus struct {
-	domainName   string
+type busProducer struct {
 	serializer   *jsonSerializer
 	producerImpl BusProducerFunc
 }
 
-func NewBus(
-	domainName string,
+func NewBusProducer(
 	storage OutboxStorage,
 	opts ...BusOption,
-) Bus {
+) BusProducer {
 	producerMWs := make([]BusProducerMW, 0, len(opts))
 	metadataBuilders := make([]MetadataBuilderFunc, 0)
 	for _, opt := range opts {
@@ -61,43 +59,42 @@ func NewBus(
 	}
 
 	serializer := newJSONSerializer()
-	producerImpl := newBusProducerImpl(domainName, serializer, storage, metadataBuilders)
+	producerImpl := newBusProducerImpl(serializer, storage, metadataBuilders)
 	for i := len(producerMWs) - 1; i >= 0; i-- {
 		producerImpl = producerMWs[i](producerImpl)
 	}
 
-	return bus{
-		domainName:   domainName,
+	return busProducer{
 		serializer:   serializer,
 		producerImpl: producerImpl,
 	}
 }
 
-func (b bus) Produce(ctx context.Context, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
+func (b busProducer) Produce(ctx context.Context, domainName, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
 	if len(msgs) == 0 {
 		return nil
 	}
 
 	return b.producerImpl(
 		ctx,
-		b.domainName,
+		domainName,
 		msgClass,
 		msgs,
 		scheduleAt,
 	)
 }
 
-func (b bus) RegisterMessages(message RegisterStructuredMessageFunc, messages ...RegisterStructuredMessageFunc) error {
+func (b busProducer) RegisterMessages(domainName string, message RegisterStructuredMessageFunc, messages ...RegisterStructuredMessageFunc) error {
 	messages = append([]RegisterStructuredMessageFunc{message}, messages...)
 	for _, registerFunc := range messages {
-		messageClass, messageType, topicBuilder, keyBuilder, err := registerFunc(b.domainName)
+		messageClass, messageType, topicBuilder, keyBuilder, err := registerFunc(domainName)
 		if err != nil {
-			return fmt.Errorf("register message for domain %s: %w", b.domainName, err)
+			return fmt.Errorf("register message for domain %s: %w", domainName, err)
 		}
 
-		err = b.serializer.RegisterSerializer(b.domainName, messageClass, messageType, topicBuilder, keyBuilder)
+		err = b.serializer.RegisterSerializer(domainName, messageClass, messageType, topicBuilder, keyBuilder)
 		if err != nil {
-			return fmt.Errorf("register message serializer for message class %s type %s, domain %s: %w", messageClass, messageType, b.domainName, err)
+			return fmt.Errorf("register message serializer for message class %s type %s, domain %s: %w", messageClass, messageType, domainName, err)
 		}
 	}
 
@@ -105,12 +102,11 @@ func (b bus) RegisterMessages(message RegisterStructuredMessageFunc, messages ..
 }
 
 func newBusProducerImpl(
-	domainName string,
 	serializer *jsonSerializer,
 	storage OutboxStorage,
 	metadataBuilders []MetadataBuilderFunc,
 ) BusProducerFunc {
-	serializeImpl := func(ctx context.Context, msgClass string, msg StructuredMessage) (*Message, error) {
+	serializeImpl := func(ctx context.Context, domainName, msgClass string, msg StructuredMessage) (*Message, error) {
 		meta := make(Metadata, len(metadataBuilders))
 		for _, metaBuilder := range metadataBuilders {
 			tmpMeta, err := metaBuilder(ctx)
@@ -130,10 +126,10 @@ func newBusProducerImpl(
 		return serializedMsg, nil
 	}
 
-	return func(ctx context.Context, _ string, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
+	return func(ctx context.Context, domainName, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
 		serializedMsgs := make([]Message, 0, len(msgs))
 		for _, msg := range msgs {
-			serializedMsg, err := serializeImpl(ctx, msgClass, msg)
+			serializedMsg, err := serializeImpl(ctx, domainName, msgClass, msg)
 			if err != nil {
 				return err
 			}
@@ -215,27 +211,4 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusOption {
 	return func() (BusProducerMW, MetadataBuilderFunc) {
 		return loggingMW, nil
 	}
-}
-
-type BusFactory struct {
-	storage OutboxStorage
-	opts    []BusOption
-}
-
-func NewBusFactory(
-	storage OutboxStorage,
-	opts ...BusOption,
-) BusFactory {
-	return BusFactory{
-		storage: storage,
-		opts:    opts,
-	}
-}
-
-func (f BusFactory) New(domainName string) Bus {
-	return NewBus(
-		domainName,
-		f.storage,
-		f.opts...,
-	)
 }

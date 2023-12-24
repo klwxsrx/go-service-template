@@ -14,14 +14,17 @@ import (
 const messageClassEvent = "domainEvent"
 
 type eventDispatcher struct {
-	bus Bus
+	domainName string
+	bus        BusProducer
 }
 
 func NewEventDispatcher(
-	bus Bus,
+	domainName string,
+	bus BusProducer,
 ) event.Dispatcher {
 	return eventDispatcher{
-		bus: bus,
+		domainName: domainName,
+		bus:        bus,
 	}
 }
 
@@ -35,7 +38,7 @@ func (d eventDispatcher) Dispatch(ctx context.Context, events ...event.Event) er
 		msgs = append(msgs, StructuredMessage(evt))
 	}
 
-	err := d.bus.Produce(ctx, messageClassEvent, msgs, time.Now())
+	err := d.bus.Produce(ctx, d.domainName, messageClassEvent, msgs, time.Now())
 	if err != nil {
 		return fmt.Errorf("dispatch event: %w", err)
 	}

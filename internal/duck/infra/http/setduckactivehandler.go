@@ -10,23 +10,23 @@ import (
 	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
 )
 
-type setDuckActiveHandler struct {
+type SetDuckActiveHandler struct {
 	duckService api.DuckService
 }
 
-func NewSetDuckActiveHandler(duckService api.DuckService) pkghttp.Handler {
-	return setDuckActiveHandler{duckService: duckService}
+func NewSetDuckActiveHandler(duckService api.DuckService) SetDuckActiveHandler {
+	return SetDuckActiveHandler{duckService: duckService}
 }
 
-func (h setDuckActiveHandler) Method() string {
+func (h SetDuckActiveHandler) Method() string {
 	return http.MethodPost
 }
 
-func (h setDuckActiveHandler) Path() string {
+func (h SetDuckActiveHandler) Path() string {
 	return "/duck/{duckID}/setActive/{isActive}"
 }
 
-func (h setDuckActiveHandler) HTTPHandler() pkghttp.HandlerFunc {
+func (h SetDuckActiveHandler) HTTPHandler() pkghttp.HandlerFunc {
 	return func(w pkghttp.ResponseWriter, r *http.Request) (err error) {
 		duckID, err := pkghttp.Parse(r, pkghttp.PathParameter[uuid.UUID]("duckID"), nil)
 		isActive, err := pkghttp.Parse(r, pkghttp.PathParameter[bool]("isActive"), err)

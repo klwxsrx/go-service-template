@@ -64,12 +64,12 @@ type database struct {
 	logger log.Logger
 }
 
-func NewDatabase(config *Config, logger log.Logger) (Database, error) {
+func NewDatabase(ctx context.Context, config *Config, logger log.Logger) (Database, error) {
 	if config.ConnectionTimeout <= 0 {
 		config.ConnectionTimeout = defaultConnectionTimeout
 	}
 
-	db, err := openConnection(config)
+	db, err := openConnection(ctx, config)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (c *database) Close(ctx context.Context) {
 	}
 }
 
-func openConnection(config *Config) (*sqlx.DB, error) {
+func openConnection(ctx context.Context, config *Config) (*sqlx.DB, error) {
 	db, err := sqlx.Open("postgres", config.DSN.String())
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func openConnection(config *Config) (*sqlx.DB, error) {
 	eb.MaxElapsedTime = config.ConnectionTimeout
 
 	err = backoff.Retry(func() error {
-		return db.Ping()
+		return db.PingContext(ctx)
 	}, eb)
 	if err != nil {
 		_ = db.Close()

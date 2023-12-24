@@ -14,12 +14,17 @@ import (
 const messageClassTask = "task"
 
 type taskScheduler struct {
-	bus Bus
+	domainName string
+	bus        BusProducer
 }
 
-func NewTaskScheduler(bus Bus) task.Scheduler {
+func NewTaskScheduler(
+	domainName string,
+	bus BusProducer,
+) task.Scheduler {
 	return taskScheduler{
-		bus: bus,
+		domainName: domainName,
+		bus:        bus,
 	}
 }
 
@@ -33,7 +38,7 @@ func (s taskScheduler) Schedule(ctx context.Context, at time.Time, tasks ...task
 		msgs = append(msgs, StructuredMessage(tsk))
 	}
 
-	err := s.bus.Produce(ctx, messageClassTask, msgs, at)
+	err := s.bus.Produce(ctx, s.domainName, messageClassTask, msgs, at)
 	if err != nil {
 		return fmt.Errorf("publish task: %w", err)
 	}
