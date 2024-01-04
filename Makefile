@@ -33,7 +33,7 @@ tools-invalidate:
 	shasum -c ./tools/bin/.go-mod.checksum 2> /dev/null || make tools-clean
 
 tools-clean:
-	rm -rf ./tools/bin/*
+	rm -rf ./tools/bin/* && rm -f ./tools/bin/.go-mod.checksum
 
 tools/bin/mockgen:
 	go build -modfile ./tools/go.mod -o ./tools/bin/mockgen go.uber.org/mock/mockgen
