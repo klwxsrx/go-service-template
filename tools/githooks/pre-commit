@@ -1,8 +1,14 @@
 #!/bin/sh
 
-# Run make pre-commit
+# Check make rule exist
+make git-pre-commit --recon > /dev/null
+if [[ $? != 0 ]]; then
+  exit 0
+fi
+
+# Run make rule
 RESULT="$(make git-pre-commit)"
 if [[ $? != 0 ]]; then
-    echo "${RESULT}"
-    exit 1
+  echo "${RESULT}"
+  exit 1
 fi
