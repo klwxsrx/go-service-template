@@ -27,6 +27,7 @@ type (
 		SetPathParams(params map[string]string) Request
 		SetQueryParam(param, value string) Request
 		SetQueryParams(params map[string]string) Request
+		SetQueryString(query string) Request
 		SetHeader(header, value string) Request
 		SetHeaders(headers map[string]string) Request
 		SetHeaderMultiValues(headers map[string][]string) Request
@@ -34,8 +35,17 @@ type (
 		SetCookies(cookies []http.Cookie) Request
 		SetJSONBody(body any) Request
 		SetFormData(data map[string]string) Request
+		SetMultipartFormData(data map[string]string) Request
 		SetMultipartField(param, fileName, contentType string, reader io.Reader) Request
-		Send() (*http.Response, error)
+		Send() (Response, error)
+	}
+
+	Response interface {
+		StatusCode() int
+		Header() http.Header
+		Cookies() []http.Cookie
+		Body() []byte
+		ContentLength() int64
 	}
 
 	ClientOption func(*ClientImpl)
@@ -139,6 +149,12 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 	}
 }
 
+func WithRequestHeader(header, value string) ClientOption {
+	return func(c *ClientImpl) {
+		c.RESTClient.SetHeader(header, value)
+	}
+}
+
 func WithRequestMetrics(metrics metric.Metrics) ClientOption {
 	return func(c *ClientImpl) {
 		destinationName := c.DestinationName
@@ -195,9 +211,15 @@ func getDestinationNameForLogging(c *ClientImpl) string {
 	return "-"
 }
 
-type restyRequestWrapper struct {
-	*resty.Request
-}
+type (
+	restyRequestWrapper struct {
+		*resty.Request
+	}
+
+	restyResponseWrapper struct {
+		*resty.Response
+	}
+)
 
 func (r restyRequestWrapper) SetPathParam(param, value string) Request {
 	r.Request.SetPathParam(param, value)
@@ -216,6 +238,11 @@ func (r restyRequestWrapper) SetQueryParam(param, value string) Request {
 
 func (r restyRequestWrapper) SetQueryParams(params map[string]string) Request {
 	r.Request.SetQueryParams(params)
+	return r
+}
+
+func (r restyRequestWrapper) SetQueryString(query string) Request {
+	r.Request.SetQueryString(query)
 	return r
 }
 
@@ -257,12 +284,33 @@ func (r restyRequestWrapper) SetFormData(data map[string]string) Request {
 	return r
 }
 
+func (r restyRequestWrapper) SetMultipartFormData(data map[string]string) Request {
+	r.Request.SetMultipartFormData(data)
+	return r
+}
+
 func (r restyRequestWrapper) SetMultipartField(param, fileName, contentType string, reader io.Reader) Request {
 	r.Request.SetMultipartField(param, fileName, contentType, reader)
 	return r
 }
 
-func (r restyRequestWrapper) Send() (*http.Response, error) {
+func (r restyRequestWrapper) Send() (Response, error) {
 	resp, err := r.Request.Send()
-	return resp.RawResponse, err
+	if err != nil {
+		return nil, err
+	}
+	return restyResponseWrapper{resp}, err
+}
+
+func (r restyResponseWrapper) Cookies() []http.Cookie {
+	restyCookies := r.Response.Cookies()
+	result := make([]http.Cookie, 0, len(restyCookies))
+	for _, cookie := range restyCookies {
+		result = append(result, *cookie)
+	}
+	return result
+}
+
+func (r restyResponseWrapper) ContentLength() int64 {
+	return r.RawResponse.ContentLength
 }
