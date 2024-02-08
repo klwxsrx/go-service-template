@@ -3,10 +3,11 @@ package duck
 import (
 	"fmt"
 
-	"github.com/klwxsrx/go-service-template/internal/duck/app/external"
+	"github.com/klwxsrx/go-service-template/internal/duck/app/goose"
 	"github.com/klwxsrx/go-service-template/internal/duck/app/service"
 	"github.com/klwxsrx/go-service-template/internal/duck/domain"
-	"github.com/klwxsrx/go-service-template/internal/duck/infra/goose"
+	duckinfragoose "github.com/klwxsrx/go-service-template/internal/duck/infra/goose"
+	duckinfragoosehttp "github.com/klwxsrx/go-service-template/internal/duck/infra/goose/http"
 	"github.com/klwxsrx/go-service-template/internal/duck/infra/http"
 	"github.com/klwxsrx/go-service-template/internal/duck/infra/sql"
 	commoncmd "github.com/klwxsrx/go-service-template/internal/pkg/cmd"
@@ -68,7 +69,7 @@ func (c *DependencyContainer) MustRegisterMessageHandlers(registry pkgmessage.Ha
 	err := registry.RegisterHandlers(
 		domainName,
 		pkgmessage.RegisterEventHandler[domain.EventDuckCreated](domainName, c.DuckService.MustLoad().HandleDuckCreated),
-		pkgmessage.RegisterEventHandler[external.EventGooseQuacked](goose.DomainName, c.DuckService.MustLoad().HandleGooseQuacked),
+		pkgmessage.RegisterEventHandler[goose.EventGooseQuacked](duckinfragoose.DomainName, c.DuckService.MustLoad().HandleGooseQuacked),
 	)
 	if err != nil {
 		panic(fmt.Errorf("register %s message handlers: %w", domainName, err))
@@ -105,16 +106,16 @@ func transactionProvider(
 
 func gooseServiceProvider(
 	httpClients pkglazy.Loader[commoncmd.HTTPClientFactory],
-) pkglazy.Loader[external.GooseService] {
-	return pkglazy.New(func() (external.GooseService, error) {
-		return goose.NewService(
+) pkglazy.Loader[goose.Service] {
+	return pkglazy.New(func() (goose.Service, error) {
+		return duckinfragoosehttp.NewService(
 			httpClients.MustLoad().MustInitClient(commonhttp.DestinationGooseService),
 		), nil
 	})
 }
 
 func duckServiceProvider(
-	gooseService pkglazy.Loader[external.GooseService],
+	gooseService pkglazy.Loader[goose.Service],
 	transaction pkglazy.Loader[pkgpersistence.Transaction],
 	sqlContainer pkglazy.Loader[*sql.DependencyContainer],
 ) pkglazy.Loader[*service.DuckService] {

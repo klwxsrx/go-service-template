@@ -9,19 +9,19 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/klwxsrx/go-service-template/internal/duck/api"
-	"github.com/klwxsrx/go-service-template/internal/duck/app/external"
+	"github.com/klwxsrx/go-service-template/internal/duck/app/goose"
 	"github.com/klwxsrx/go-service-template/internal/duck/domain"
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
 
 type DuckService struct {
-	gooseService external.GooseService
+	gooseService goose.Service
 	transaction  persistence.Transaction
 	duckRepo     domain.DuckRepo
 }
 
 func NewDuckService(
-	gooseService external.GooseService,
+	gooseService goose.Service,
 	transaction persistence.Transaction,
 	duckRepo domain.DuckRepo,
 ) *DuckService {
@@ -86,6 +86,6 @@ func (s *DuckService) HandleDuckCreated(_ context.Context, _ domain.EventDuckCre
 	return nil
 }
 
-func (s *DuckService) HandleGooseQuacked(_ context.Context, _ external.EventGooseQuacked) error {
+func (s *DuckService) HandleGooseQuacked(_ context.Context, _ goose.EventGooseQuacked) error {
 	return nil
 }

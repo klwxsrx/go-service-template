@@ -30,7 +30,7 @@ type (
 	}
 )
 
-type busListener struct {
+type busListener struct { // TODO: add option to use listener with outbox
 	consumers     Consumers
 	middlewares   []HandlerMiddleware
 	deserializer  Deserializer

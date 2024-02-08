@@ -46,10 +46,14 @@ linters-settings:
         alias: pkg$1
       - pkg: github.com/klwxsrx/go-service-template/pkg/(\w+)/(\w+)
         alias: pkg$1$2
+      - pkg: github.com/klwxsrx/go-service-template/pkg/(\w+)/(\w+)/(\w+)
+        alias: pkg$1$2$3
       - pkg: github.com/klwxsrx/go-service-template/internal/pkg/(\w+)
         alias: common$1
       - pkg: github.com/klwxsrx/go-service-template/internal/pkg/(\w+)/(\w+)
         alias: common$1$2
+      - pkg: github.com/klwxsrx/go-service-template/internal/pkg/(\w+)/(\w+)/(\w+)
+        alias: common$1$2$3
       # domain-specific aliases
       - pkg: github.com/klwxsrx/go-service-template/internal/(duck)/(\w+)
         alias: $1$2
@@ -57,5 +61,7 @@ linters-settings:
         alias: $1$2$3
       - pkg: github.com/klwxsrx/go-service-template/internal/(duck)/(\w+)/(\w+)/(\w+)
         alias: $1$2$3$4
+      - pkg: github.com/klwxsrx/go-service-template/internal/(duck)/(\w+)/(\w+)/(\w+)/(\w+)
+        alias: $1$2$3$4$5
   unused:
     field-writes-are-uses: false
