@@ -1,19 +1,22 @@
 export TOOLS_PATH := ${CURDIR}/tools/bin
 
-.PHONY: clean codegen lint lint-fix arch test tools tools-invalidate tools-clean git-pre-commit
+.PHONY: build-clean codegen codegen-clean lint lint-fix arch test tools tools-invalidate tools-clean git-pre-commit
 
-all: lint arch test clean build
-
-clean:
-	rm -rf bin/*
+all: lint arch test build-clean build
 
 build: bin/duck bin/duckhandler bin/messageoutbox
+
+build-clean:
+	rm -rf bin/*
 
 bin/%:
 	GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -o ./bin/$(notdir $@) ./cmd/$(notdir $@)
 
-codegen: tools
+codegen: tools codegen-clean
 	go generate ./...
+
+codegen-clean:
+	find . -type f -path "*/mock/*" -exec rm -f "{}" \;
 
 lint: codegen tools
 	tools/bin/golangci-lint --color=always run ./...
@@ -47,9 +50,9 @@ tools/bin/go-cleanarch:
 tools/bin/.go-mod.checksum:
 	shasum ./tools/go.mod ./tools/go.sum > ./tools/bin/.go-mod.checksum
 
-git-hooks: .git/hooks/pre-commit
+git-hooks: .git/hooks/pre-commit # ignore while rebasing
 
-git-pre-commit: lint arch test clean build
+git-pre-commit: lint arch test build-clean build
 
 .git/hooks/%:
 	cp  ./tools/githooks/$(notdir $@) ./.git/hooks/$(notdir $@) && \
