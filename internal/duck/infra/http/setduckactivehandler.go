@@ -11,11 +11,11 @@ import (
 )
 
 type SetDuckActiveHandler struct {
-	duckService api.DuckService
+	api api.API
 }
 
-func NewSetDuckActiveHandler(duckService api.DuckService) SetDuckActiveHandler {
-	return SetDuckActiveHandler{duckService: duckService}
+func NewSetDuckActiveHandler(api api.API) SetDuckActiveHandler {
+	return SetDuckActiveHandler{api: api}
 }
 
 func (h SetDuckActiveHandler) Method() string {
@@ -34,7 +34,7 @@ func (h SetDuckActiveHandler) HTTPHandler() pkghttp.HandlerFunc {
 			return err
 		}
 
-		err = h.duckService.SetActive(r.Context(), duckID, isActive)
+		err = h.api.SetActive(r.Context(), duckID, isActive)
 		if errors.Is(err, api.ErrDuckNotFound) {
 			w.SetStatusCode(http.StatusNotFound)
 			return nil

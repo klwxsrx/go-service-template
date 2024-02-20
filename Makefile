@@ -50,7 +50,7 @@ tools/bin/go-cleanarch:
 tools/bin/.go-mod.checksum:
 	shasum ./tools/go.mod ./tools/go.sum > ./tools/bin/.go-mod.checksum
 
-git-hooks: .git/hooks/pre-commit # ignore while rebasing
+git-hooks: .git/hooks/pre-commit
 
 git-pre-commit: lint arch test build-clean build
 

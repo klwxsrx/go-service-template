@@ -84,35 +84,34 @@ func RegisterEvent[T event.Event]() RegisterStructuredMessageFunc {
 }
 
 func RegisterEventHandler[T event.Event](publisherDomain string, handler event.TypedHandler[T]) RegisterHandlerFunc {
-	return func(_ string, deserializer Deserializer) (string, ConsumptionType, Handler, error) {
+	return func(_ string, deserializer Deserializer) (Handler, []ConsumerSubscription, error) {
 		var blank T
 		aggregateName := blank.AggregateName()
 		if aggregateName == "" {
-			return "",
-				"",
+			return nil,
 				nil,
 				fmt.Errorf("get aggregate name for %T: blank event must return const value", blank)
 		}
 
 		eventType := blank.Type()
 		if eventType == "" {
-			return "",
-				"",
+			return nil,
 				nil,
 				fmt.Errorf("get event type for %T: blank event must return const value", blank)
 		}
 
 		err := deserializer.RegisterDeserializer(publisherDomain, messageClassEvent, eventType, TypedDeserializer[T]())
 		if err != nil {
-			return "",
-				"",
+			return nil,
 				nil,
 				fmt.Errorf("register event %T deserializer: %w", blank, err)
 		}
 
-		return buildEventTopic(publisherDomain, aggregateName),
-			ConsumptionTypeSingle,
-			eventHandlerImpl[T](publisherDomain, handler, deserializer),
+		return eventHandlerImpl[T](publisherDomain, handler, deserializer),
+			[]ConsumerSubscription{{
+				Topic:           buildEventTopic(publisherDomain, aggregateName),
+				ConsumptionType: ConsumptionTypeSingle,
+			}},
 			nil
 	}
 }

@@ -71,27 +71,27 @@ func RegisterTask[T task.Task]() RegisterStructuredMessageFunc {
 }
 
 func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHandlerFunc {
-	return func(subscriberDomain string, deserializer Deserializer) (string, ConsumptionType, Handler, error) {
+	return func(subscriberDomain string, deserializer Deserializer) (Handler, []ConsumerSubscription, error) {
 		var blank T
 		taskType := blank.Type()
 		if taskType == "" {
-			return "",
-				"",
+			return nil,
 				nil,
 				fmt.Errorf("get task type for %T: blank task must return const value", blank)
 		}
 
 		err := deserializer.RegisterDeserializer(subscriberDomain, messageClassTask, taskType, TypedDeserializer[T]())
 		if err != nil {
-			return "",
-				"",
+			return nil,
 				nil,
 				fmt.Errorf("register task %T deserializer: %w", blank, err)
 		}
 
-		return buildTaskTopic(subscriberDomain, taskType),
-			ConsumptionTypeShared,
-			taskHandlerImpl[T](subscriberDomain, handler, deserializer),
+		return taskHandlerImpl[T](subscriberDomain, handler, deserializer),
+			[]ConsumerSubscription{{
+				Topic:           buildTaskTopic(subscriberDomain, taskType),
+				ConsumptionType: ConsumptionTypeShared,
+			}},
 			nil
 	}
 }

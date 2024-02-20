@@ -1,4 +1,4 @@
-//go:generate ${TOOLS_PATH}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "DuckService=DuckService"
+//go:generate ${TOOLS_PATH}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "API=API"
 package api
 
 import (
@@ -10,7 +10,7 @@ import (
 
 var ErrDuckNotFound = errors.New("duck not found")
 
-type DuckService interface {
+type API interface {
 	Create(ctx context.Context, name string) (uuid.UUID, error)
 	SetActive(ctx context.Context, id uuid.UUID, isActive bool) error
 }

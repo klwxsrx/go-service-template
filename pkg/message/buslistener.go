@@ -8,18 +8,23 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
-type RegisterHandlerFunc func(
-	subscriberDomain string,
-	deserializer Deserializer,
-) (consumerTopic string, consumptionType ConsumptionType, handler Handler, err error)
-
-func RegisterMessageHandler(topic string, consumptionType ConsumptionType, handler Handler) RegisterHandlerFunc {
-	return func(_ string, _ Deserializer) (string, ConsumptionType, Handler, error) {
-		return topic, consumptionType, handler, nil
+func RegisterMessageHandler(handler Handler, subscriptions ...ConsumerSubscription) RegisterHandlerFunc {
+	return func(_ string, _ Deserializer) (Handler, []ConsumerSubscription, error) {
+		return handler, subscriptions, nil
 	}
 }
 
 type (
+	RegisterHandlerFunc func(
+		subscriberDomain string,
+		deserializer Deserializer,
+	) (Handler, []ConsumerSubscription, error)
+
+	ConsumerSubscription struct {
+		Topic           string
+		ConsumptionType ConsumptionType
+	}
+
 	HandlerRegistry interface {
 		RegisterHandlers(subscriberDomain string, handler RegisterHandlerFunc, handlers ...RegisterHandlerFunc) error
 	}
@@ -87,36 +92,43 @@ func (b *busListener) registerHandlerFuncImpl(
 	handlerFunc RegisterHandlerFunc,
 	consumersData map[string]consumerData,
 ) (map[string]consumerData, error) {
-	consumerTopic, consumptionType, messageHandler, err := handlerFunc(subscriberDomain, b.deserializer)
+	messageHandler, subscriptions, err := handlerFunc(subscriberDomain, b.deserializer)
 	if err != nil {
 		return nil, fmt.Errorf("execute register func of %v: %w", subscriberDomain, err)
 	}
 
-	consumerKey := fmt.Sprintf("%s/%s", subscriberDomain, consumerTopic)
-	data, ok := consumersData[consumerKey]
-	if ok && data.ConsumptionType != consumptionType {
-		return nil, fmt.Errorf(
-			"register handler for topic %v and consumption type %v: topic already registered with another consumptionType %v",
-			consumerTopic,
-			consumptionType,
-			data.ConsumptionType,
-		)
-	}
-	if !ok {
-		consumer, err := b.consumers.Consumer(consumerTopic, b.getConsumerSubscriptionName(subscriberDomain), consumptionType)
-		if err != nil {
-			return nil, fmt.Errorf("register consumer for topic %s and consumptionType %s: %w", consumerTopic, consumptionType, err)
+	for _, subscription := range subscriptions {
+		consumerKey := fmt.Sprintf("%s/%s", subscriberDomain, subscription.Topic)
+		data, ok := consumersData[consumerKey]
+		if ok && data.ConsumptionType != subscription.ConsumptionType {
+			return nil, fmt.Errorf(
+				"register handler for topic %v and consumption type %v: topic already registered with another consumptionType %v",
+				subscription.Topic,
+				subscription.ConsumptionType,
+				data.ConsumptionType,
+			)
+		}
+		if !ok {
+			consumer, err := b.consumers.Consumer(subscription.Topic, b.getConsumerSubscriptionName(subscriberDomain), subscription.ConsumptionType)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"register consumer for topic %s and consumptionType %s: %w",
+					subscription.Topic,
+					subscription.ConsumptionType,
+					err,
+				)
+			}
+
+			data = consumerData{
+				Consumer:        consumer,
+				ConsumptionType: subscription.ConsumptionType,
+				MessageHandlers: make([]Handler, 0, 1),
+			}
 		}
 
-		data = consumerData{
-			Consumer:        consumer,
-			ConsumptionType: consumptionType,
-			MessageHandlers: make([]Handler, 0, 1),
-		}
+		data.MessageHandlers = append(data.MessageHandlers, messageHandler)
+		b.consumersData[consumerKey] = data
 	}
-
-	data.MessageHandlers = append(data.MessageHandlers, messageHandler)
-	b.consumersData[consumerKey] = data
 
 	return b.consumersData, nil
 }

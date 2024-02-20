@@ -10,11 +10,11 @@ import (
 )
 
 type CreateDuckHandler struct {
-	duckService api.DuckService
+	api api.API
 }
 
-func NewCreateDuckHandler(duckService api.DuckService) CreateDuckHandler {
-	return CreateDuckHandler{duckService: duckService}
+func NewCreateDuckHandler(api api.API) CreateDuckHandler {
+	return CreateDuckHandler{api: api}
 }
 
 func (h CreateDuckHandler) Method() string {
@@ -33,7 +33,7 @@ func (h CreateDuckHandler) HTTPHandler() pkghttp.HandlerFunc {
 			return err
 		}
 
-		duckID, err := h.duckService.Create(r.Context(), data.Name)
+		duckID, err := h.api.Create(r.Context(), data.Name)
 		if err != nil {
 			return err
 		}
