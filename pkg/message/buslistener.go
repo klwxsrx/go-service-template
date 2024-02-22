@@ -31,19 +31,19 @@ type (
 
 	BusListener interface {
 		HandlerRegistry
-		Workers() []worker.Process
+		Workers() []worker.ErrorJob
 	}
 )
 
-type busListener struct { // TODO: add option to use listener with outbox
-	consumers     Consumers
+type busListener struct {
+	consumers     ConsumerProvider
 	middlewares   []HandlerMiddleware
 	deserializer  Deserializer
 	consumersData map[string]consumerData
 }
 
 func NewBusListener(
-	consumers Consumers,
+	consumers ConsumerProvider,
 	handlerMiddlewares ...HandlerMiddleware,
 ) BusListener {
 	return &busListener{
@@ -71,9 +71,9 @@ func (b *busListener) RegisterHandlers(subscriberDomain string, handler Register
 	return nil
 }
 
-func (b *busListener) Workers() []worker.Process {
+func (b *busListener) Workers() []worker.ErrorJob {
 	workerPool := worker.NewPool(worker.MaxWorkersCountUnlimited)
-	listeners := make([]worker.Process, 0, len(b.consumersData))
+	listeners := make([]worker.ErrorJob, 0, len(b.consumersData))
 	for _, data := range b.consumersData {
 		listeners = append(listeners,
 			NewListener(

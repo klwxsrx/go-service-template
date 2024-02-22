@@ -12,34 +12,31 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 	pkgmetricstub "github.com/klwxsrx/go-service-template/pkg/metric/stub"
-	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 const (
-	DefaultOutboxProcessingInterval = time.Second
-
-	messagesBatchSize                        = 100
-	metricNameMessageSendAttemptsTotal       = "msg_outbox_send_attempts_total"
-	metricNameMessageDeleteSentAttemptsTotal = "msg_outbox_delete_sent_attempts_total"
+	producingMessagesBatchSize               = 100
+	metricNameMessageSendAttemptsTotal       = "msg_outbox_producer_send_attempts_total"
+	metricNameMessageDeleteSentAttemptsTotal = "msg_outbox_producer_delete_sent_attempts_total"
 )
 
 type (
 	OutboxStorage interface {
-		Lock(ctx context.Context) (release func() error, err error)
-		GetBatch(ctx context.Context, scheduledBefore time.Time, batchSize int) ([]Message, error)
+		Lock(ctx context.Context, extraKeys ...string) (newCtx context.Context, release func() error, err error)
+		GetBatch(ctx context.Context, scheduledBefore time.Time, batchSize int, specificTopics ...string) ([]Message, error)
 		Store(ctx context.Context, msgs []Message, scheduledAt time.Time) error
 		Delete(ctx context.Context, ids []uuid.UUID) error
 	}
 
-	Outbox interface {
-		Process()
+	OutboxProducer interface {
+		Process(context.Context)
 		Close()
 	}
 
-	OutboxOption func(*outbox)
+	OutboxProducerOption func(*outboxProducer)
 )
 
-type outbox struct {
+type outboxProducer struct {
 	storage          OutboxStorage
 	out              Producer
 	retry            *backoff.ExponentialBackOff
@@ -53,11 +50,11 @@ type outbox struct {
 	onceCloser  *sync.Once
 }
 
-func NewOutbox(
+func NewOutboxProducer(
 	storage OutboxStorage,
 	out Producer,
-	opts ...OutboxOption,
-) Outbox {
+	opts ...OutboxProducerOption,
+) OutboxProducer {
 	retry := backoff.NewExponentialBackOff()
 	retry.InitialInterval = time.Second
 	retry.RandomizationFactor = 0
@@ -65,7 +62,7 @@ func NewOutbox(
 	retry.Multiplier = 2
 	retry.MaxElapsedTime = 0
 
-	mo := &outbox{
+	mo := &outboxProducer{
 		storage:     storage,
 		out:         out,
 		retry:       retry,
@@ -81,24 +78,24 @@ func NewOutbox(
 	}
 
 	go mo.run()
-	mo.Process()
+	mo.Process(context.Background())
 	return mo
 }
 
-func (o *outbox) Process() {
+func (o *outboxProducer) Process(_ context.Context) {
 	select {
 	case o.processChan <- struct{}{}:
 	default:
 	}
 }
 
-func (o *outbox) Close() {
+func (o *outboxProducer) Close() {
 	o.onceCloser.Do(func() {
 		o.stopChan <- struct{}{}
 	})
 }
 
-func (o *outbox) run() {
+func (o *outboxProducer) run() {
 	for {
 		select {
 		case <-o.processChan:
@@ -109,7 +106,7 @@ func (o *outbox) run() {
 	}
 }
 
-func (o *outbox) processSend() {
+func (o *outboxProducer) processSend() {
 	ctx := context.Background()
 
 	process := func() error {
@@ -128,25 +125,25 @@ func (o *outbox) processSend() {
 	_ = backoff.Retry(func() error {
 		err := process()
 		if err != nil {
-			o.logger.WithError(err).Log(ctx, o.loggerErrorLevel, "failed to get process messages")
+			o.logger.WithError(err).Log(ctx, o.loggerErrorLevel, "failed to process stored outbox messages")
 		}
 		return err
 	}, o.retry)
 }
 
-func (o *outbox) processSendBatch(ctx context.Context) (allProcessed bool, err error) {
-	releaseLock, err := o.storage.Lock(ctx)
+func (o *outboxProducer) processSendBatch(ctx context.Context) (allProcessed bool, err error) {
+	ctx, releaseLock, err := o.storage.Lock(ctx)
 	if err != nil {
 		return false, fmt.Errorf("get storage lock: %w", err)
 	}
 	defer func() {
-		err := releaseLock()
+		err = releaseLock()
 		if err != nil {
 			o.logger.WithError(err).Log(ctx, o.loggerErrorLevel, "failed to release message outbox storage lock")
 		}
 	}()
 
-	msgs, err := o.storage.GetBatch(ctx, time.Now(), messagesBatchSize)
+	msgs, err := o.storage.GetBatch(ctx, time.Now(), producingMessagesBatchSize)
 	if err != nil {
 		return false, fmt.Errorf("get messages for send: %w", err)
 	}
@@ -180,38 +177,19 @@ func (o *outbox) processSendBatch(ctx context.Context) (allProcessed bool, err e
 		sentMessages = append(sentMessages, msg.ID)
 	}
 
-	return len(msgs) < messagesBatchSize, nil
+	return len(msgs) < producingMessagesBatchSize, nil
 }
 
-func WithOutboxLogging(logger log.Logger, infoLevel log.Level, errorLevel log.Level) OutboxOption {
-	return func(outbox *outbox) {
+func WithOutboxProducerLogging(logger log.Logger, infoLevel log.Level, errorLevel log.Level) OutboxProducerOption {
+	return func(outbox *outboxProducer) {
 		outbox.logger = logger
 		outbox.loggerInfoLevel = infoLevel
 		outbox.loggerErrorLevel = errorLevel
 	}
 }
 
-func WithOutboxMetrics(metrics metric.Metrics) OutboxOption {
-	return func(o *outbox) {
+func WithOutboxProducerMetrics(metrics metric.Metrics) OutboxProducerOption {
+	return func(o *outboxProducer) {
 		o.metrics = metrics
-	}
-}
-
-func NewOutboxProcessor(
-	outbox Outbox,
-	processingInterval time.Duration,
-) worker.Process {
-	ticker := time.NewTicker(processingInterval)
-	return func(ctx context.Context) error {
-		for {
-			select {
-			case <-ticker.C:
-				outbox.Process()
-			case <-ctx.Done():
-				ticker.Stop()
-				outbox.Close()
-				return nil
-			}
-		}
 	}
 }

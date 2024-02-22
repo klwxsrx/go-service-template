@@ -10,7 +10,7 @@ import (
 
 var ErrDuckNotFound = errors.New("duck not found")
 
-type API interface {
+type API interface { // TODO: change duck to another domain with usage: auth, http-client, producing messages, consuming messages
 	Create(ctx context.Context, name string) (uuid.UUID, error)
 	SetActive(ctx context.Context, id uuid.UUID, isActive bool) error
 }

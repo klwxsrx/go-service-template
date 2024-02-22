@@ -33,7 +33,7 @@ type InfrastructureContainer struct {
 	HTTPClientFactory  lazy.Loader[HTTPClientFactory]
 	MessageBusListener lazy.Loader[message.BusListener]
 	MessageBusProducer lazy.Loader[message.BusProducer]
-	MessageOutbox      lazy.Loader[message.Outbox]
+	MessageOutbox      lazy.Loader[message.OutboxProducer]
 	DBMigrations       lazy.Loader[SQLMigrations]
 	DB                 lazy.Loader[sql.Database]
 	Metrics            lazy.Loader[metric.Metrics]
@@ -59,7 +59,7 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 		HTTPClientFactory:  httpClientFactoryProvider(observer, metrics, logger),
 		MessageBusListener: messageBusListenerProvider(msgBroker, observer, metrics, logger),
 		MessageBusProducer: messageBusProducerProvider(sqlMessageOutboxStorage, observer, metrics, logger),
-		MessageOutbox:      messageOutboxProvider(sqlMessageOutboxStorage, msgBroker, metrics, logger),
+		MessageOutbox:      messageOutboxProducerProvider(sqlMessageOutboxStorage, msgBroker, metrics, logger),
 		DBMigrations:       dbMigrations,
 		DB:                 db,
 		Metrics:            metrics,
@@ -73,7 +73,7 @@ func (i *InfrastructureContainer) Close(ctx context.Context) {
 		defer os.Exit(1)
 	}
 
-	i.MessageOutbox.IfLoaded(func(outbox message.Outbox) { outbox.Close() })
+	i.MessageOutbox.IfLoaded(func(outbox message.OutboxProducer) { outbox.Close() })
 	i.messageBrokerImpl.IfLoaded(func(broker *pulsar.MessageBroker) { broker.Close() })
 	i.DB.IfLoaded(func(db sql.Database) { db.Close(ctx) })
 }
@@ -246,18 +246,18 @@ func messageBusProducerProvider(
 	})
 }
 
-func messageOutboxProvider(
+func messageOutboxProducerProvider(
 	outboxStorage lazy.Loader[message.OutboxStorage],
 	msgBroker lazy.Loader[message.Broker],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[message.Outbox] {
-	return lazy.New(func() (message.Outbox, error) {
-		return message.NewOutbox(
+) lazy.Loader[message.OutboxProducer] {
+	return lazy.New(func() (message.OutboxProducer, error) {
+		return message.NewOutboxProducer(
 			outboxStorage.MustLoad(),
 			msgBroker.MustLoad(),
-			message.WithOutboxMetrics(metrics.MustLoad()),
-			message.WithOutboxLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
+			message.WithOutboxProducerMetrics(metrics.MustLoad()),
+			message.WithOutboxProducerLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
 		), nil
 	})
 }

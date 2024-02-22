@@ -37,9 +37,9 @@ func (d *DSN) String() string {
 
 type Client interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error)
 	GetContext(ctx context.Context, dest any, query string, args ...any) error
 	SelectContext(ctx context.Context, dest any, query string, args ...any) error
+	WithinSingleConnection(ctx context.Context) (context.Context, context.CancelFunc, error)
 }
 
 type ClientTx interface {
@@ -78,18 +78,10 @@ func NewDatabase(ctx context.Context, config *Config, logger log.Logger) (Databa
 
 	enablePostgreSQLSquirrelPlaceholderFormat()
 	return &database{
-		db:                  db,
 		transactionalClient: transactionalClient{db},
+		db:                  db,
 		logger:              logger,
 	}, nil
-}
-
-func (c *database) Begin(ctx context.Context) (ClientTx, error) {
-	tx, err := c.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	return tx, nil
 }
 
 func (c *database) Close(ctx context.Context) {
@@ -119,6 +111,7 @@ func openConnection(ctx context.Context, config *Config) (*sqlx.DB, error) {
 		_ = db.Close()
 		return nil, err
 	}
+
 	return db, nil
 }
 

@@ -27,7 +27,7 @@ func NewListener(
 	consumer Consumer,
 	handler Handler,
 	mws ...HandlerMiddleware,
-) worker.Process {
+) worker.ErrorJob {
 	l := &listener{
 		consumer:          consumer,
 		handler:           handler,
@@ -35,7 +35,7 @@ func NewListener(
 	}
 
 	l.handler = l.wrapWithPanicHandler(l.handler)
-	for i := len(mws) - 1; i >= 0; i-- {
+	for i := len(mws) - 1; i >= 0; i-- { // TODO: check for go 1.22 loops
 		l.handler = mws[i](l.handler)
 	}
 

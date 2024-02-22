@@ -2,6 +2,7 @@
 package worker
 
 import (
+	"context"
 	"runtime"
 	"sync"
 )
@@ -11,12 +12,14 @@ const (
 	MaxWorkersCountUnlimited = 0
 )
 
-type Job func()
+type (
+	Job func(context.Context)
 
-type Pool interface {
-	Do(Job)
-	Wait()
-}
+	Pool interface {
+		Do(context.Context, Job)
+		Wait()
+	}
+)
 
 type pool struct {
 	jobCompleted    *sync.WaitGroup
@@ -37,7 +40,7 @@ func NewPool(maxWorkers int) Pool {
 	}
 }
 
-func (p *pool) Do(job Job) {
+func (p *pool) Do(ctx context.Context, job Job) {
 	p.jobCompleted.Add(1)
 
 	if p.maxWorkers > 0 {
@@ -50,7 +53,7 @@ func (p *pool) Do(job Job) {
 	}
 
 	go func() {
-		job()
+		job(ctx)
 		p.jobCompleted.Done()
 
 		if p.maxWorkers > 0 {

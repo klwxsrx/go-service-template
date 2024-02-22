@@ -8,16 +8,16 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
-func MustRunHub(ctx context.Context, logger log.Logger, process Process, processes ...Process) {
+func MustRunHub(ctx context.Context, logger log.Logger, process ErrorJob, processes ...ErrorJob) {
 	err := RunHub(ctx, logger, process, processes...)
 	if err != nil {
 		panic(fmt.Errorf("process completed with error: %w", err))
 	}
 }
 
-func RunHub(ctx context.Context, logger log.Logger, process Process, processes ...Process) error {
+func RunHub(ctx context.Context, logger log.Logger, process ErrorJob, processes ...ErrorJob) error {
 	errProcessCompleted := errors.New("process completed")
-	loggingWrapper := func(process Process, logger log.Logger) Process {
+	loggingWrapper := func(process ErrorJob, logger log.Logger) ErrorJob {
 		return func(ctx context.Context) error {
 			err := process(ctx)
 			if errors.Is(err, context.Canceled) {

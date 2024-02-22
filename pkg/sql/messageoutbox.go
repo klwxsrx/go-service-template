@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -21,18 +22,38 @@ func NewMessageOutboxStorage(db Client) message.OutboxStorage {
 	return messageOutboxStorage{db: db}
 }
 
-func (s messageOutboxStorage) Lock(ctx context.Context) (release func() error, err error) {
-	return withSessionLevelLock(ctx, messageOutboxLockName, s.db)
+func (s messageOutboxStorage) Lock(ctx context.Context, extraKeys ...string) (newCtx context.Context, release func() error, err error) {
+	if len(extraKeys) == 0 {
+		return withSessionLevelLock(ctx, messageOutboxLockName, s.db)
+	}
+
+	sb := strings.Builder{}
+	sb.WriteString(messageOutboxLockName)
+	for _, key := range extraKeys {
+		sb.WriteString("_")
+		sb.WriteString(key)
+	}
+
+	return withSessionLevelLock(ctx, sb.String(), s.db)
 }
 
-func (s messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore time.Time, batchSize int) ([]message.Message, error) {
-	query, args, err := sq.
+func (s messageOutboxStorage) GetBatch(
+	ctx context.Context,
+	scheduledBefore time.Time,
+	batchSize int,
+	specificTopics ...string,
+) ([]message.Message, error) {
+	qb := sq.
 		Select("id", "topic", "key", "payload").
 		From("message_outbox").
 		Where(sq.LtOrEq{"scheduled_at": scheduledBefore}).
 		OrderBy("scheduled_at").
-		Limit(uint64(batchSize)).
-		ToSql()
+		Limit(uint64(batchSize))
+	if len(specificTopics) > 0 {
+		qb = qb.Where(sq.Eq{"topic": specificTopics})
+	}
+
+	query, args, err := qb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build sql: %w", err)
 	}
@@ -52,6 +73,7 @@ func (s messageOutboxStorage) GetBatch(ctx context.Context, scheduledBefore time
 			Payload: sqlxMsg.Payload,
 		})
 	}
+
 	return result, nil
 }
 
@@ -111,7 +133,7 @@ func MessageOutboxMigrations() ([]Migration, error) {
 					scheduled_at timestamptz not null
 				);
 
-				create index if not exists message_outbox_scheduled_at on message_outbox(scheduled_at)
+				create index if not exists message_outbox_scheduled_at_topic on message_outbox(scheduled_at, topic);
 			`,
 		},
 	}, nil

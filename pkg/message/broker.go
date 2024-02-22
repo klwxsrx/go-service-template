@@ -22,7 +22,7 @@ type Consumer interface {
 	Close()
 }
 
-type Consumers interface {
+type ConsumerProvider interface {
 	Consumer(topic, subscriberName string, consumptionType ConsumptionType) (Consumer, error)
 }
 
@@ -31,6 +31,6 @@ type Producer interface {
 }
 
 type Broker interface {
-	Consumers
+	ConsumerProvider
 	Producer
 }

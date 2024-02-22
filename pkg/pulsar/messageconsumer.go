@@ -44,7 +44,7 @@ type messageConsumer struct {
 
 func newMessageConsumer(pulsarConsumer pulsar.Consumer, subscribedTopic string) message.Consumer {
 	return &messageConsumer{
-		name:     fmt.Sprintf("%s/%s", pulsarConsumer.Subscription(), subscribedTopic),
+		name:     fmt.Sprintf("pulsar/%s/%s", pulsarConsumer.Subscription(), subscribedTopic),
 		pulsar:   pulsarConsumer,
 		onceDoer: &sync.Once{},
 		messages: make(chan *message.ConsumerMessage),

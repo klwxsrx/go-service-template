@@ -75,6 +75,11 @@ func (b busProducer) Produce(ctx context.Context, domainName, msgClass string, m
 		return nil
 	}
 
+	now := time.Now()
+	if scheduleAt.Before(now) {
+		scheduleAt = now
+	}
+
 	return b.producerImpl(
 		ctx,
 		domainName,
@@ -199,9 +204,9 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusOption {
 
 			err := impl(ctx, domainName, msgClass, msgs, scheduleAt)
 			if err != nil {
-				loggerWithFields.WithError(err).Log(ctx, errorLevel, "messages didn't stored to outbox due error")
+				loggerWithFields.WithError(err).Log(ctx, errorLevel, "messages didn't stored to outbox storage due error")
 			} else {
-				loggerWithFields.Log(ctx, infoLevel, "messages stored to outbox")
+				loggerWithFields.Log(ctx, infoLevel, "messages stored to outbox storage")
 			}
 
 			return err

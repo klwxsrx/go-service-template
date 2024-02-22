@@ -2,19 +2,23 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/klwxsrx/go-service-template/internal/pkg/cmd"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
-	pkgmessage "github.com/klwxsrx/go-service-template/pkg/message"
 	pkgworker "github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 func main() {
 	ctx := context.Background()
 	infra := cmd.NewInfrastructureContainer(ctx)
+	logger := infra.Logger.MustLoad()
 
-	pkgworker.MustRunHub(ctx, infra.Logger.MustLoad(),
+	pkgworker.MustRunHub(ctx, logger,
 		pkgcmd.TermSignalAwaiter,
-		pkgmessage.NewOutboxProcessor(infra.MessageOutbox.MustLoad(), pkgmessage.DefaultOutboxProcessingInterval),
+		pkgworker.PeriodicRunner(
+			infra.MessageOutbox.MustLoad().Process,
+			time.Second,
+		),
 	)
 }

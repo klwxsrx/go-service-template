@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/jmoiron/sqlx"
+
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
 
@@ -23,10 +25,10 @@ type transaction struct {
 }
 
 func NewTransaction(client TxClient, instanceName string, onCommit func()) persistence.Transaction {
-	return &transaction{id: instanceID(instanceName), client: client, onCommit: onCommit}
+	return transaction{id: instanceID(instanceName), client: client, onCommit: onCommit}
 }
 
-func (t *transaction) WithinContext(
+func (t transaction) WithinContext(
 	ctx context.Context,
 	fn func(ctx context.Context) error,
 	lockNames ...string,
@@ -36,7 +38,14 @@ func (t *transaction) WithinContext(
 	hasParentTx := ok && storedTx.instanceID == t.id
 	if !hasParentTx {
 		var tx ClientTx
-		tx, err = t.client.Begin(ctx)
+		conn, hasConn := ctx.Value(dbConnectionContextKey).(*sqlx.Conn)
+		if hasConn {
+			var txx *sqlx.Tx
+			txx, err = conn.BeginTxx(ctx, nil)
+			tx = clientTransaction{txx}
+		} else {
+			tx, err = t.client.Begin(ctx)
+		}
 		if err != nil {
 			return fmt.Errorf("start db transaction: %w", err)
 		}
@@ -53,15 +62,9 @@ func (t *transaction) WithinContext(
 
 	slices.Sort(lockNames)
 	for _, lockName := range lockNames {
-		var lockID int64
-		lockID, err = getLockIDByName(lockName)
+		err = withTransactionLevelLock(ctx, lockName, storedTx.ClientTx)
 		if err != nil {
-			return fmt.Errorf("get lock id for %s: %w", lockName, err)
-		}
-
-		_, err = storedTx.ClientTx.ExecContext(ctx, "select pg_advisory_xact_lock($1)", lockID)
-		if err != nil {
-			return fmt.Errorf("get lock %s: %w", lockName, err)
+			return err
 		}
 	}
 
@@ -85,7 +88,7 @@ func (t *transaction) WithinContext(
 	return nil
 }
 
-func (t *transaction) WithLock(ctx context.Context) context.Context {
+func (t transaction) WithLock(ctx context.Context) context.Context {
 	if !HasTransaction(ctx) {
 		return ctx
 	}
@@ -105,38 +108,91 @@ func IsLockRequested(ctx context.Context) bool {
 	return ctx.Value(dbTransactionLockContextKey) != nil
 }
 
-type transactionalClient struct {
-	client Client
-}
+type (
+	transactionalClient struct {
+		db *sqlx.DB
+	}
 
-func (c *transactionalClient) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	tx, ok := ctx.Value(dbTransactionContextKey).(Client)
+	clientTransaction struct {
+		*sqlx.Tx
+	}
+)
+
+func (c transactionalClient) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	tx, ok := ctx.Value(dbTransactionContextKey).(ClientTx)
 	if ok {
 		return tx.ExecContext(ctx, query, args...)
 	}
-	return c.client.ExecContext(ctx, query, args...)
-}
 
-func (c *transactionalClient) NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error) {
-	tx, ok := ctx.Value(dbTransactionContextKey).(Client)
+	conn, ok := ctx.Value(dbConnectionContextKey).(*sqlx.Conn)
 	if ok {
-		return tx.NamedExecContext(ctx, query, arg)
+		return conn.ExecContext(ctx, query, args...)
 	}
-	return c.client.NamedExecContext(ctx, query, arg)
+
+	return c.db.ExecContext(ctx, query, args...)
 }
 
-func (c *transactionalClient) GetContext(ctx context.Context, dest any, query string, args ...any) error {
-	tx, ok := ctx.Value(dbTransactionContextKey).(Client)
+func (c transactionalClient) GetContext(ctx context.Context, dest any, query string, args ...any) error {
+	tx, ok := ctx.Value(dbTransactionContextKey).(ClientTx)
 	if ok {
 		return tx.GetContext(ctx, dest, query, args...)
 	}
-	return c.client.GetContext(ctx, dest, query, args...)
+
+	conn, ok := ctx.Value(dbConnectionContextKey).(*sqlx.Conn)
+	if ok {
+		return conn.GetContext(ctx, dest, query, args...)
+	}
+
+	return c.db.GetContext(ctx, dest, query, args...)
 }
 
-func (c *transactionalClient) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
-	tx, ok := ctx.Value(dbTransactionContextKey).(Client)
+func (c transactionalClient) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
+	tx, ok := ctx.Value(dbTransactionContextKey).(ClientTx)
 	if ok {
 		return tx.SelectContext(ctx, dest, query, args...)
 	}
-	return c.client.SelectContext(ctx, dest, query, args...)
+
+	conn, ok := ctx.Value(dbConnectionContextKey).(*sqlx.Conn)
+	if ok {
+		return conn.SelectContext(ctx, dest, query, args...)
+	}
+
+	return c.db.SelectContext(ctx, dest, query, args...)
+}
+
+func (c transactionalClient) WithinSingleConnection(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	if _, ok := ctx.Value(dbConnectionContextKey).(*sqlx.Conn); ok || HasTransaction(ctx) {
+		return ctx, func() {}, nil
+	}
+
+	conn, err := c.db.Connx(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctx = context.WithValue(ctx, dbConnectionContextKey, conn)
+	return ctx, func() { _ = conn.Close() }, nil
+}
+
+func (c transactionalClient) Begin(ctx context.Context) (ClientTx, error) {
+	type transactional interface {
+		BeginTxx(ctx context.Context, opts *sql.TxOptions) (*sqlx.Tx, error)
+	}
+
+	var impl transactional = c.db
+	conn, ok := ctx.Value(dbConnectionContextKey).(*sqlx.Conn)
+	if ok {
+		impl = conn
+	}
+
+	tx, err := impl.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientTransaction{tx}, nil
+}
+
+func (c clientTransaction) WithinSingleConnection(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	return ctx, func() {}, nil
 }

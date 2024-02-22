@@ -6,10 +6,10 @@ import (
 	"sync"
 )
 
-type Process func(context.Context) error
+type ErrorJob func(context.Context) error
 
 type Group interface {
-	Do(Process)
+	Do(ErrorJob)
 	Wait() error
 }
 
@@ -67,7 +67,7 @@ func NewFailSafeGroup(ctx context.Context) Group {
 	)
 }
 
-func (g *group) Do(process Process) {
+func (g *group) Do(job ErrorJob) {
 	handleErr := func(err error) {
 		if err == nil {
 			return
@@ -82,8 +82,8 @@ func (g *group) Do(process Process) {
 		}
 	}
 
-	g.pool.Do(func() {
-		handleErr(process(g.ctx))
+	g.pool.Do(g.ctx, func(ctx context.Context) {
+		handleErr(job(ctx))
 	})
 }
 

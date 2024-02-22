@@ -6,9 +6,7 @@ import (
 
 type contextKey int
 
-const (
-	handlerMetaContextKey contextKey = iota
-)
+const handlerMetaContextKey contextKey = iota
 
 type panicErr struct {
 	Message    string
