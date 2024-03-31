@@ -87,6 +87,10 @@ func (c ClientImpl) NewRequest(ctx context.Context, route Route) Request {
 }
 
 func (c ClientImpl) With(opts ...ClientOption) Client {
+	if len(opts) == 0 {
+		return c
+	}
+
 	mergedOpts := make([]ClientOption, 0, len(c.opts)+len(opts))
 	mergedOpts = append(mergedOpts, c.opts...)
 	mergedOpts = append(mergedOpts, opts...)

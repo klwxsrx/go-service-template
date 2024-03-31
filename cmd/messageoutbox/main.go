@@ -12,6 +12,8 @@ import (
 func main() {
 	ctx := context.Background()
 	infra := cmd.NewInfrastructureContainer(ctx)
+	defer infra.Close(ctx)
+
 	logger := infra.Logger.MustLoad()
 
 	pkgworker.MustRunHub(ctx, logger,

@@ -68,7 +68,7 @@ func (s messageOutboxStorage) GetBatch(
 	for _, sqlxMsg := range sqlxResult {
 		result = append(result, message.Message{
 			ID:      sqlxMsg.ID,
-			Topic:   sqlxMsg.Topic,
+			Topic:   message.Topic(sqlxMsg.Topic),
 			Key:     sqlxMsg.Key,
 			Payload: sqlxMsg.Payload,
 		})

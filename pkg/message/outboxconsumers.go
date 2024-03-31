@@ -26,7 +26,7 @@ type (
 		processingInterval  time.Duration
 		msgConsumingTimeout time.Duration
 		storage             OutboxStorage
-		topicConsumers      map[string]*outboxConsumer
+		topicConsumers      map[Topic]*outboxConsumer
 		metrics             metric.Metrics
 		logger              log.Logger
 		loggerInfoLevel     log.Level
@@ -67,7 +67,7 @@ func NewOutboxConsumerProvider(storage OutboxStorage, opts ...OutboxConsumerOpti
 		processingInterval:  defaultConsumerProcessingInterval,
 		msgConsumingTimeout: defaultMessageConsumingTimeout,
 		storage:             storage,
-		topicConsumers:      make(map[string]*outboxConsumer),
+		topicConsumers:      make(map[Topic]*outboxConsumer),
 		metrics:             pkgmetricstub.NewMetrics(),
 		logger:              log.New(log.LevelDisabled),
 	}
@@ -79,7 +79,7 @@ func NewOutboxConsumerProvider(storage OutboxStorage, opts ...OutboxConsumerOpti
 	return consumers
 }
 
-func (c *OutboxConsumerProvider) Consumer(topic, _ string, _ ConsumptionType) (Consumer, error) {
+func (c *OutboxConsumerProvider) Consumer(topic Topic, _ SubscriberName, _ ConsumptionType) (Consumer, error) {
 	consumer, ok := c.topicConsumers[topic]
 	if ok {
 		return consumer, nil
@@ -109,7 +109,7 @@ func (c *OutboxConsumerProvider) Run(ctx context.Context) error {
 }
 
 type outboxConsumer struct {
-	topic               string
+	topic               Topic
 	storage             OutboxStorage
 	msgConsumingTimeout time.Duration
 	metrics             metric.Metrics
@@ -126,7 +126,7 @@ type outboxConsumer struct {
 }
 
 func newOutboxConsumer(
-	topic string,
+	topic Topic,
 	storage OutboxStorage,
 	messageConsumingTimeout time.Duration,
 	metrics metric.Metrics,
@@ -194,7 +194,7 @@ func (c *outboxConsumer) Ack(msg *ConsumerMessage) {
 
 	c.logger.
 		WithField("messageID", msg.Message.ID).
-		Log(msg.Context, c.loggerInfoLevel, "got acked message")
+		Log(msg.Context, c.loggerInfoLevel, "outbox message acked")
 
 	err := c.storage.Delete(msg.Context, []uuid.UUID{msg.Message.ID})
 	if err != nil {
@@ -218,7 +218,7 @@ func (c *outboxConsumer) Nack(msg *ConsumerMessage) {
 
 	c.logger.
 		WithField("messageID", msg.Message.ID).
-		Log(msg.Context, c.loggerErrorLevel, "got nacked message")
+		Log(msg.Context, c.loggerErrorLevel, "outbox message nacked")
 
 	// do nothing
 }
@@ -255,7 +255,7 @@ func (c *outboxConsumer) processOutboxMessages(ctx context.Context) {
 }
 
 func (c *outboxConsumer) processOutboxMessagesImpl(ctx context.Context) (allProcessed bool, err error) {
-	ctx, releaseLock, err := c.storage.Lock(ctx, "topic", c.topic)
+	ctx, releaseLock, err := c.storage.Lock(ctx, "topic", string(c.topic))
 	if err != nil {
 		return false, fmt.Errorf("get lock for consumer: %w", err)
 	}
@@ -267,7 +267,7 @@ func (c *outboxConsumer) processOutboxMessagesImpl(ctx context.Context) (allProc
 	}()
 
 	var msgs []Message
-	msgs, err = c.storage.GetBatch(ctx, time.Now(), consumingMessagesBatchSize, c.topic)
+	msgs, err = c.storage.GetBatch(ctx, time.Now(), consumingMessagesBatchSize, string(c.topic))
 	if err != nil {
 		return false, fmt.Errorf("get message by topic: %w", err)
 	}
@@ -295,6 +295,7 @@ func (c *outboxConsumer) processOutboxMessagesImpl(ctx context.Context) (allProc
 
 		select {
 		case c.consumerCh <- &ConsumerMessage{Context: ctx, Message: msg}:
+			c.logger.WithField("messageID", msg.ID).Log(ctx, c.loggerInfoLevel, "outbox message sent to handler")
 			c.addConsumingMessage(msg.ID)
 			go func() { // TODO: test message timeout
 				<-time.After(c.msgConsumingTimeout)

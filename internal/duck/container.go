@@ -24,6 +24,12 @@ const (
 	domainName = "duck"
 )
 
+var (
+	DomainEventTopicDefinitionDuck = pkgmessage.NewDomainEventTopicSubscription(domainName, domain.AggregateNameDuck)
+
+	messageSubscriberNameDuck = pkgmessage.NewSubscriberServiceName(domainName)
+)
+
 type DependencyContainer struct {
 	DuckService          pkglazy.Loader[*service.DuckService]
 	CreateDuckHandler    pkglazy.Loader[http.CreateDuckHandler]
@@ -33,10 +39,10 @@ type DependencyContainer struct {
 func NewDependencyContainer(
 	db pkglazy.Loader[pkgsql.Database],
 	dbMigrations pkglazy.Loader[commoncmd.SQLMigrations],
-	msgBusProducer pkglazy.Loader[pkgmessage.BusProducer],
+	messagingEventDispatcher pkglazy.Loader[pkgmessage.EventDispatcher],
 	httpClients pkglazy.Loader[commoncmd.HTTPClientFactory],
 ) *DependencyContainer {
-	eventDispatcher := eventDispatcherProvider(msgBusProducer)
+	eventDispatcher := eventDispatcherProvider(messagingEventDispatcher)
 
 	transaction := transactionProvider(db)
 	sqlContainer := sql.NewDependencyContainer(db, dbMigrations, eventDispatcher)
@@ -66,29 +72,32 @@ func (c *DependencyContainer) MustRegisterHTTPHandlers(registry pkghttp.HandlerR
 }
 
 func (c *DependencyContainer) MustRegisterMessageHandlers(registry pkgmessage.HandlerRegistry) {
-	err := registry.RegisterHandlers(
-		domainName,
-		pkgmessage.RegisterEventHandler[domain.EventDuckCreated](domainName, c.DuckService.MustLoad().HandleDuckCreated),
-		pkgmessage.RegisterEventHandler[goose.EventGooseQuacked](duckinfragoose.DomainName, c.DuckService.MustLoad().HandleGooseQuacked),
-	)
+	err := registry.RegisterMessageHandlers(messageSubscriberNameDuck, pkgmessage.TopicHandlersMap{
+		DomainEventTopicDefinitionDuck: {
+			pkgmessage.RegisterEventHandler[domain.EventDuckCreated](c.DuckService.MustLoad().HandleDuckCreated),
+		},
+		duckinfragoose.DomainEventTopicDefinitionGoose: {
+			pkgmessage.RegisterEventHandler[goose.EventGooseQuacked](c.DuckService.MustLoad().HandleGooseQuacked),
+		},
+	})
 	if err != nil {
 		panic(fmt.Errorf("register %s message handlers: %w", domainName, err))
 	}
 }
 
-func eventDispatcherProvider(
-	msgBus pkglazy.Loader[pkgmessage.BusProducer],
-) pkglazy.Loader[pkgevent.Dispatcher] {
+func eventDispatcherProvider(messagingEventDispatcher pkglazy.Loader[pkgmessage.EventDispatcher]) pkglazy.Loader[pkgevent.Dispatcher] {
 	return pkglazy.New(func() (pkgevent.Dispatcher, error) {
-		err := msgBus.MustLoad().RegisterMessages(
-			domainName,
-			pkgmessage.RegisterEvent[domain.EventDuckCreated](),
-		)
+		eventDispatcher := messagingEventDispatcher.MustLoad()
+		err := eventDispatcher.RegisterMessages(pkgmessage.TopicMessagesMap{
+			DomainEventTopicDefinitionDuck.Topic: {
+				pkgmessage.RegisterEvent[domain.EventDuckCreated](),
+			},
+		})
 		if err != nil {
-			panic(fmt.Errorf("register %s events: %w", domainName, err))
+			panic(fmt.Errorf("register %s messages: %w", domainName, err))
 		}
 
-		return pkgmessage.NewEventDispatcher(domainName, msgBus.MustLoad()), nil
+		return eventDispatcher, nil
 	})
 }
 

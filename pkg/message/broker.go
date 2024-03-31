@@ -2,35 +2,37 @@ package message
 
 import "context"
 
-type ConsumptionType string
-
 const (
 	ConsumptionTypeSingle ConsumptionType = "single"
 	ConsumptionTypeShared ConsumptionType = "shared"
 )
 
-type ConsumerMessage struct {
-	Context context.Context
-	Message Message
-}
+type (
+	ConsumerMessage struct {
+		Context context.Context
+		Message Message
+	}
 
-type Consumer interface {
-	Name() string
-	Messages() <-chan *ConsumerMessage
-	Ack(msg *ConsumerMessage)
-	Nack(msg *ConsumerMessage)
-	Close()
-}
+	Consumer interface {
+		Name() string
+		Messages() <-chan *ConsumerMessage
+		Ack(msg *ConsumerMessage)
+		Nack(msg *ConsumerMessage)
+		Close()
+	}
 
-type ConsumerProvider interface {
-	Consumer(topic, subscriberName string, consumptionType ConsumptionType) (Consumer, error)
-}
+	ConsumerProvider interface {
+		Consumer(Topic, SubscriberName, ConsumptionType) (Consumer, error)
+	}
 
-type Producer interface {
-	Produce(ctx context.Context, msg *Message) error
-}
+	Producer interface {
+		Produce(ctx context.Context, msg *Message) error
+	}
 
-type Broker interface {
-	ConsumerProvider
-	Producer
-}
+	Broker interface {
+		ConsumerProvider
+		Producer
+	}
+
+	ConsumptionType string
+)

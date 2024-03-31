@@ -8,51 +8,48 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
-/*
-TODO перепилить дизайн топиков и сообщений
-Сообщения не знают, куда им публиковаться. Вместо этого есть сущность регистри и топика, который создается либо по агрегату+домену, либо по типу сообщения и/или домену, либо как-то еще.
-В рамках одного топика уникальны типы сообщений. В реджистри на топики подписываются сообщения, а так же к ним добавляются опции типа количества воркеров (возможно это не реджистри).
-Топик знает структуру подписанных сообщений и умеет их сериализовать и наоборот.
-Тем самым можно собрать конфигурацию и явно реализовать структуру очередей под паттерны событий (на агрегат), команд (на домен), задач (на тип)
-*/
+type (
+	Message struct {
+		ID    uuid.UUID
+		Topic Topic
+		// Key is used for topic partitioning, messages with the same key will fall in the same topic partition
+		Key     string
+		Payload []byte
+	}
 
-type Message struct {
-	ID    uuid.UUID
-	Topic string
-	// Key is used for topic partitioning, messages with the same key will fall in the same topic partition
-	Key     string
-	Payload []byte
-}
+	StructuredMessage interface {
+		ID() uuid.UUID
+		Type() string
+	}
 
-type Handler func(ctx context.Context, msg *Message) error
+	TypedHandler[M any] func(ctx context.Context, msg M) error
+)
 
-func NewCompositeHandler(handlers []Handler, optionalPool worker.Pool) Handler {
+func NewCompositeHandler[M any](handlers []TypedHandler[M], optionalPool worker.Pool) TypedHandler[M] {
 	if len(handlers) == 0 {
-		return func(ctx context.Context, msg *Message) error {
+		return func(ctx context.Context, msg M) error {
 			return nil
 		}
 	}
 
 	if len(handlers) == 1 {
-		handler := handlers[0]
-		return func(ctx context.Context, msg *Message) error {
-			return handler(ctx, msg)
-		}
+		return handlers[0]
 	}
 
 	if optionalPool == nil {
-		return func(ctx context.Context, msg *Message) error {
+		return func(ctx context.Context, msg M) error {
 			for _, handler := range handlers {
 				err := handler(ctx, msg)
 				if err != nil {
 					return err
 				}
 			}
+
 			return nil
 		}
 	}
 
-	return func(ctx context.Context, msg *Message) error {
+	return func(ctx context.Context, msg M) error {
 		group := worker.WithinFailSafeGroup(ctx, optionalPool)
 		for _, handler := range handlers {
 			handlerImpl := handler
@@ -60,6 +57,7 @@ func NewCompositeHandler(handlers []Handler, optionalPool worker.Pool) Handler {
 				return handlerImpl(ctx, msg)
 			})
 		}
+
 		return group.Wait()
 	}
 }

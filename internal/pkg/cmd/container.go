@@ -31,8 +31,9 @@ var logLevelMap = map[string]log.Level{
 type InfrastructureContainer struct {
 	HTTPServer         lazy.Loader[http.Server]
 	HTTPClientFactory  lazy.Loader[HTTPClientFactory]
+	EventDispatcher    lazy.Loader[message.EventDispatcher]
+	TaskScheduler      lazy.Loader[message.TaskScheduler]
 	MessageBusListener lazy.Loader[message.BusListener]
-	MessageBusProducer lazy.Loader[message.BusProducer]
 	MessageOutbox      lazy.Loader[message.OutboxProducer]
 	DBMigrations       lazy.Loader[SQLMigrations]
 	DB                 lazy.Loader[sql.Database]
@@ -54,11 +55,14 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 	msgBrokerImpl := pulsarMessageBrokerProvider()
 	msgBroker := lazy.New(func() (message.Broker, error) { return msgBrokerImpl.Load() })
 
+	msgBusProducer := messageBusProducerProvider(sqlMessageOutboxStorage, observer, metrics, logger)
+
 	return &InfrastructureContainer{
 		HTTPServer:         httpServerProvider(observer, metrics, logger),
 		HTTPClientFactory:  httpClientFactoryProvider(observer, metrics, logger),
+		EventDispatcher:    eventDispatcherProvider(msgBusProducer),
+		TaskScheduler:      taskSchedulerProvider(msgBusProducer),
 		MessageBusListener: messageBusListenerProvider(msgBroker, observer, metrics, logger),
-		MessageBusProducer: messageBusProducerProvider(sqlMessageOutboxStorage, observer, metrics, logger),
 		MessageOutbox:      messageOutboxProducerProvider(sqlMessageOutboxStorage, msgBroker, metrics, logger),
 		DBMigrations:       dbMigrations,
 		DB:                 db,
@@ -243,6 +247,18 @@ func messageBusProducerProvider(
 			message.WithMetrics(metrics.MustLoad()),
 			message.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
 		), nil
+	})
+}
+
+func eventDispatcherProvider(busProducer lazy.Loader[message.BusProducer]) lazy.Loader[message.EventDispatcher] {
+	return lazy.New(func() (message.EventDispatcher, error) {
+		return message.NewEventDispatcher(busProducer.MustLoad()), nil
+	})
+}
+
+func taskSchedulerProvider(busProducer lazy.Loader[message.BusProducer]) lazy.Loader[message.TaskScheduler] {
+	return lazy.New(func() (message.TaskScheduler, error) {
+		return message.NewTaskScheduler(busProducer.MustLoad()), nil
 	})
 }
 

@@ -11,7 +11,11 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
-func (b *MessageBroker) Consumer(topic, subscriberName string, consumptionType message.ConsumptionType) (message.Consumer, error) {
+func (b *MessageBroker) Consumer(
+	topic message.Topic,
+	subscriberName message.SubscriberName,
+	consumptionType message.ConsumptionType,
+) (message.Consumer, error) {
 	var typeOption pulsar.SubscriptionType
 	switch consumptionType {
 	case message.ConsumptionTypeShared:
@@ -23,14 +27,16 @@ func (b *MessageBroker) Consumer(topic, subscriberName string, consumptionType m
 	}
 
 	opts := pulsar.ConsumerOptions{
-		Topic:            topic,
-		SubscriptionName: subscriberName,
+		Topic:            string(topic),
+		SubscriptionName: string(subscriberName),
 		Type:             typeOption,
 	}
+
 	cons, err := b.client.Subscribe(opts)
 	if err != nil {
 		return nil, fmt.Errorf("subscribe to topic %s by %s subscriber", topic, subscriberName)
 	}
+
 	return newMessageConsumer(cons, topic), nil
 }
 
@@ -42,7 +48,7 @@ type messageConsumer struct {
 	messages chan *message.ConsumerMessage
 }
 
-func newMessageConsumer(pulsarConsumer pulsar.Consumer, subscribedTopic string) message.Consumer {
+func newMessageConsumer(pulsarConsumer pulsar.Consumer, subscribedTopic message.Topic) message.Consumer {
 	return &messageConsumer{
 		name:     fmt.Sprintf("pulsar/%s/%s", pulsarConsumer.Subscription(), subscribedTopic),
 		pulsar:   pulsarConsumer,
@@ -78,7 +84,7 @@ func (c *messageConsumer) Messages() <-chan *message.ConsumerMessage {
 				Context: ctx,
 				Message: message.Message{
 					ID:      messageID,
-					Topic:   msg.Topic(),
+					Topic:   message.Topic(msg.Topic()),
 					Key:     msg.Key(),
 					Payload: msg.Payload(),
 				},

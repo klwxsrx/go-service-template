@@ -2,29 +2,28 @@ package message
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
-
-	"github.com/iancoleman/strcase"
 
 	"github.com/klwxsrx/go-service-template/pkg/task"
 )
 
-const messageClassTask = "task"
+type (
+	TaskScheduler interface {
+		task.Scheduler
+		ProducerRegistry
+	}
 
-type taskScheduler struct {
-	domainName string
-	bus        BusProducer
-}
+	taskScheduler struct {
+		bus BusProducer
+	}
+)
 
 func NewTaskScheduler(
-	domainName string,
 	bus BusProducer,
-) task.Scheduler {
+) TaskScheduler {
 	return taskScheduler{
-		domainName: domainName,
-		bus:        bus,
+		bus: bus,
 	}
 }
 
@@ -38,7 +37,7 @@ func (s taskScheduler) Schedule(ctx context.Context, at time.Time, tasks ...task
 		msgs = append(msgs, StructuredMessage(tsk))
 	}
 
-	err := s.bus.Produce(ctx, s.domainName, messageClassTask, msgs, at)
+	err := s.bus.Produce(ctx, msgs, at)
 	if err != nil {
 		return fmt.Errorf("publish task: %w", err)
 	}
@@ -46,81 +45,43 @@ func (s taskScheduler) Schedule(ctx context.Context, at time.Time, tasks ...task
 	return nil
 }
 
-func RegisterTask[T task.Task]() RegisterStructuredMessageFunc {
-	return func(domainName string) (messageClass, messageType string, topicBuilder TopicBuilderFunc, keyBuilder KeyBuilderFunc, err error) {
-		var blank T
-		taskType := blank.Type()
-		if taskType == "" {
-			return "",
-				"",
-				nil,
-				nil,
-				fmt.Errorf("get task type for %T: blank task must return const value", blank)
-		}
+func (s taskScheduler) RegisterMessages(messagesMap TopicMessagesMap) error {
+	return s.bus.RegisterMessages(messagesMap)
+}
 
-		return messageClassTask,
-			taskType,
-			func(string) string {
-				return buildTaskTopic(domainName, taskType)
-			},
-			func(StructuredMessage) string {
-				return ""
-			},
-			nil
+func RegisterTask[T task.Task]() RegisterMessageFunc {
+	return func() (StructuredMessage, KeyBuilderFunc) {
+		var blank T
+		return blank, nil
 	}
 }
 
 func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHandlerFunc {
-	return func(subscriberDomain string, deserializer Deserializer) (Handler, []ConsumerSubscription, error) {
+	return func() (StructuredMessage, DeserializerFunc, TypedHandler[StructuredMessage]) {
 		var blank T
-		taskType := blank.Type()
-		if taskType == "" {
-			return nil,
-				nil,
-				fmt.Errorf("get task type for %T: blank task must return const value", blank)
-		}
+		return blank, TypedJSONDeserializer[T](), func(ctx context.Context, msg StructuredMessage) error {
+			tsk, ok := msg.(T)
+			if !ok {
+				return fmt.Errorf("invalid task struct type %T for messageID %v, expected %T", msg, msg.ID(), tsk)
+			}
 
-		err := deserializer.RegisterDeserializer(subscriberDomain, messageClassTask, taskType, TypedDeserializer[T]())
-		if err != nil {
-			return nil,
-				nil,
-				fmt.Errorf("register task %T deserializer: %w", blank, err)
+			return handler(ctx, tsk)
 		}
-
-		return taskHandlerImpl[T](subscriberDomain, handler, deserializer),
-			[]ConsumerSubscription{{
-				Topic:           buildTaskTopic(subscriberDomain, taskType),
-				ConsumptionType: ConsumptionTypeShared,
-			}},
-			nil
 	}
 }
 
-func buildTaskTopic(domainName, taskType string) string {
-	domainName = strcase.ToKebab(domainName)
-	taskType = strcase.ToKebab(taskType)
-	return fmt.Sprintf("task.%s-domain.%s-queue", domainName, taskType)
+func NewTaskQueueTopic(domainName, taskType string, customTags ...string) Topic {
+	return NewTopic(
+		"task-queue",
+		WithTopicDomainName(domainName),
+		WithTopicMessageType(taskType),
+		WithTopicCustomTags(customTags...),
+	)
 }
 
-func taskHandlerImpl[T task.Task](
-	publisherDomain string,
-	handler task.TypedHandler[T],
-	deserializer Deserializer,
-) Handler {
-	return func(ctx context.Context, msg *Message) error {
-		tsk, err := deserializer.Deserialize(publisherDomain, messageClassTask, msg)
-		if errors.Is(err, ErrDeserializeNotValidMessage) || errors.Is(err, ErrDeserializeUnknownMessage) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("deserialize message %v: %w", msg.ID, err)
-		}
-
-		concreteTask, ok := tsk.(T)
-		if !ok {
-			return fmt.Errorf("invalid task struct type %T for messageID %v, expected %T", tsk, msg.ID, concreteTask)
-		}
-
-		return handler(ctx, concreteTask)
+func NewTaskQueueTopicSubscription(domainName, taskType string, customTags ...string) TopicSubscription {
+	return TopicSubscription{
+		Topic:           NewTaskQueueTopic(domainName, taskType, customTags...),
+		ConsumptionType: ConsumptionTypeShared,
 	}
 }

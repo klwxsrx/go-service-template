@@ -7,85 +7,61 @@ import (
 )
 
 var (
-	ErrDeserializeUnknownMessage  = errors.New("unknown message type")
-	ErrDeserializeNotValidMessage = errors.New("message has not valid struct")
+	errDeserializeUnknownMessage  = errors.New("unknown message type")
+	errDeserializeNotValidMessage = errors.New("message has not valid struct")
 )
 
 type (
-	Deserializer interface {
-		Deserialize(publisherDomain, messageClass string, msg *Message) (StructuredMessage, error)
-		RegisterDeserializer(publisherDomain, messageClass, messageType string, deserializer DeserializerFunc) error
-	}
+	DeserializerFunc func(payload []byte) (StructuredMessage, error)
 
-	DeserializerFunc func(serializedPayload string) (StructuredMessage, error)
+	jsonDeserializer struct {
+		deserializers map[string]DeserializerFunc
+	}
 )
 
-type jsonDeserializer struct {
-	deserializers map[messageIdentity]DeserializerFunc
-}
-
-func newJSONDeserializer() Deserializer {
+func newJSONDeserializer() jsonDeserializer {
 	return jsonDeserializer{
-		deserializers: make(map[messageIdentity]DeserializerFunc),
+		deserializers: make(map[string]DeserializerFunc),
 	}
 }
 
-func (d jsonDeserializer) RegisterDeserializer(publisherDomain, messageClass, messageType string, deserializer DeserializerFunc) error {
-	id := messageIdentity{
-		DomainName:   publisherDomain,
-		MessageClass: messageClass,
-		MessageType:  messageType,
-	}
-	if _, ok := d.deserializers[id]; ok {
-		return fmt.Errorf("deserializer for %v already exists", id)
+func (d jsonDeserializer) Register(messageType string, deserializer DeserializerFunc) error {
+	if _, ok := d.deserializers[messageType]; ok {
+		return fmt.Errorf("deserializer for %v already exists", messageType)
 	}
 
-	d.deserializers[id] = deserializer
+	d.deserializers[messageType] = deserializer
 	return nil
 }
 
-func (d jsonDeserializer) Deserialize(publisherDomain, messageClass string, msg *Message) (StructuredMessage, error) {
+func (d jsonDeserializer) Deserialize(payload []byte) (StructuredMessage, Metadata, error) {
 	var messagePayload jsonPayload
-	err := json.Unmarshal(msg.Payload, &messagePayload)
+	err := json.Unmarshal(payload, &messagePayload)
 	if err != nil {
-		return nil, ErrDeserializeNotValidMessage
+		return nil, nil, errDeserializeNotValidMessage
 	}
 
-	deserializer, ok := d.deserializers[messageIdentity{
-		DomainName:   publisherDomain,
-		MessageClass: messageClass,
-		MessageType:  messagePayload.Type,
-	}]
+	deserializer, ok := d.deserializers[messagePayload.Type]
 	if !ok {
-		return nil, fmt.Errorf("%w %s for domain %s", ErrDeserializeUnknownMessage, messagePayload.Type, publisherDomain)
+		return nil, nil, fmt.Errorf("%w %s", errDeserializeUnknownMessage, messagePayload.Type)
 	}
 
-	return deserializer(messagePayload.Data)
-}
-
-type metadataExtractor struct{}
-
-func newMetadataExtractor() metadataExtractor {
-	return metadataExtractor{}
-}
-
-func (d *metadataExtractor) Extract(msgPayload []byte) (Metadata, error) {
-	var data jsonPayloadMetadata
-	err := json.Unmarshal(msgPayload, &data)
+	message, err := deserializer([]byte(messagePayload.Data))
 	if err != nil {
-		return nil, ErrDeserializeNotValidMessage
+		return nil, nil, err
 	}
 
-	return data.Meta, nil
+	return message, messagePayload.Meta, nil
 }
 
-func TypedDeserializer[T StructuredMessage]() DeserializerFunc {
-	return func(serializedPayload string) (StructuredMessage, error) {
+func TypedJSONDeserializer[T StructuredMessage]() DeserializerFunc {
+	return func(payload []byte) (StructuredMessage, error) {
 		var result T
-		err := json.Unmarshal([]byte(serializedPayload), &result)
+		err := json.Unmarshal(payload, &result)
 		if err != nil {
 			return nil, fmt.Errorf("deserialize message %T: %w", result, err)
 		}
+
 		return result, nil
 	}
 }

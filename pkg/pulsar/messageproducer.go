@@ -25,7 +25,7 @@ func (b *MessageBroker) Produce(ctx context.Context, msg *message.Message) error
 	return err
 }
 
-func (b *MessageBroker) getOrCreateProducer(topic string) (pulsar.Producer, error) {
+func (b *MessageBroker) getOrCreateProducer(topic message.Topic) (pulsar.Producer, error) {
 	topicMutex, _ := b.producerMutexes.LoadOrStore(topic, &sync.Mutex{})
 	topicMutex.(*sync.Mutex).Lock()
 	defer topicMutex.(*sync.Mutex).Unlock()
@@ -36,7 +36,7 @@ func (b *MessageBroker) getOrCreateProducer(topic string) (pulsar.Producer, erro
 	}
 
 	producer, err := b.client.CreateProducer(pulsar.ProducerOptions{
-		Topic: topic,
+		Topic: string(topic),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create producer for topic %s: %w", topic, err)

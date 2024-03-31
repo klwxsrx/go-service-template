@@ -2,28 +2,41 @@ package message
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
-type contextKey int
+const requestIDMetadataKey = "requestID"
 
 const handlerMetaContextKey contextKey = iota
 
-type panicErr struct {
-	Message    string
-	Stacktrace []byte
-}
+type (
+	Metadata map[string]any
 
-type handlerMetadata struct {
-	Panic *panicErr
-	Data  Metadata
-}
+	handlerMetadata struct {
+		MessageID       uuid.UUID
+		MessageTopic    Topic
+		MessageMetadata Metadata
+		Panic           *panicErr
+	}
 
-func withHandlerMetadata(ctx context.Context, data Metadata) context.Context {
+	panicErr struct {
+		Message    string
+		Stacktrace []byte
+	}
+
+	contextKey int
+)
+
+func withHandlerMetadata(ctx context.Context, msg *Message, data Metadata) context.Context {
 	if len(data) == 0 {
 		data = make(Metadata)
 	}
+
 	return context.WithValue(ctx, handlerMetaContextKey, &handlerMetadata{
-		Data: data,
+		MessageID:       msg.ID,
+		MessageTopic:    msg.Topic,
+		MessageMetadata: data,
 	})
 }
 
@@ -32,5 +45,6 @@ func getHandlerMetadata(ctx context.Context) *handlerMetadata {
 	if ok {
 		return meta
 	}
+
 	return &handlerMetadata{}
 }

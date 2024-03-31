@@ -9,6 +9,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
+	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
 const defaultConnectionTimeout = 20 * time.Second
@@ -22,7 +23,7 @@ type MessageBroker struct {
 	client pulsar.Client
 
 	producerMutexes *sync.Map
-	producers       map[string]pulsar.Producer
+	producers       map[message.Topic]pulsar.Producer
 }
 
 func NewMessageBroker(config *Config, logger log.Logger) (*MessageBroker, error) {
@@ -37,7 +38,7 @@ func NewMessageBroker(config *Config, logger log.Logger) (*MessageBroker, error)
 	conn := &MessageBroker{
 		client:          c,
 		producerMutexes: &sync.Map{},
-		producers:       make(map[string]pulsar.Producer),
+		producers:       make(map[message.Topic]pulsar.Producer),
 	}
 
 	connTimeout := defaultConnectionTimeout

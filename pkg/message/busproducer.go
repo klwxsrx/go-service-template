@@ -3,43 +3,40 @@ package message
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
 )
 
-const requestIDMetadataKey = "requestID"
-
 type (
-	StructuredMessage interface {
-		ID() uuid.UUID
-		// Type must be unique string for message class
-		Type() string
-	}
+	TopicMessagesMap map[Topic]TopicMessages
+	TopicMessages    []RegisterMessageFunc
 
-	RegisterStructuredMessageFunc func(
-		domainName string,
-	) (messageClass, messageType string, topicBuilder TopicBuilderFunc, keyBuilder KeyBuilderFunc, err error)
+	ProducerRegistry interface {
+		RegisterMessages(TopicMessagesMap) error
+	}
 
 	BusProducer interface {
-		Produce(ctx context.Context, domainName, messageClass string, msgs []StructuredMessage, scheduleAt time.Time) error
-		RegisterMessages(domainName string, msg RegisterStructuredMessageFunc, msgs ...RegisterStructuredMessageFunc) error
+		Produce(context.Context, []StructuredMessage, time.Time) error
+		ProducerRegistry
 	}
+
+	RegisterMessageFunc func() (StructuredMessage, KeyBuilderFunc)
+	KeyBuilderFunc      func(StructuredMessage) string
 
 	BusOption           func() (BusProducerMW, MetadataBuilderFunc)
 	BusProducerMW       func(BusProducerFunc) BusProducerFunc
-	BusProducerFunc     func(ctx context.Context, domainName string, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error
+	BusProducerFunc     func(context.Context, []StructuredMessage, time.Time) error
 	MetadataBuilderFunc func(context.Context) (Metadata, error)
-	Metadata            map[string]any
 )
 
 type busProducer struct {
-	serializer   *jsonSerializer
-	producerImpl BusProducerFunc
+	topicSerializers map[Topic]jsonSerializer
+	messageTopics    map[reflect.Type][]Topic
+	producerImpl     BusProducerFunc
 }
 
 func NewBusProducer(
@@ -58,19 +55,22 @@ func NewBusProducer(
 		}
 	}
 
-	serializer := newJSONSerializer()
-	producerImpl := newBusProducerImpl(serializer, storage, metadataBuilders)
+	topicSerializers := make(map[Topic]jsonSerializer)
+	messageTopics := make(map[reflect.Type][]Topic)
+
+	producerImpl := newBusProducerImpl(topicSerializers, messageTopics, metadataBuilders, storage)
 	for i := len(producerMWs) - 1; i >= 0; i-- {
 		producerImpl = producerMWs[i](producerImpl)
 	}
 
 	return busProducer{
-		serializer:   serializer,
-		producerImpl: producerImpl,
+		topicSerializers: topicSerializers,
+		messageTopics:    messageTopics,
+		producerImpl:     producerImpl,
 	}
 }
 
-func (b busProducer) Produce(ctx context.Context, domainName, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
+func (b busProducer) Produce(ctx context.Context, msgs []StructuredMessage, scheduleAt time.Time) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -82,24 +82,40 @@ func (b busProducer) Produce(ctx context.Context, domainName, msgClass string, m
 
 	return b.producerImpl(
 		ctx,
-		domainName,
-		msgClass,
 		msgs,
 		scheduleAt,
 	)
 }
 
-func (b busProducer) RegisterMessages(domainName string, message RegisterStructuredMessageFunc, messages ...RegisterStructuredMessageFunc) error {
-	messages = append([]RegisterStructuredMessageFunc{message}, messages...)
-	for _, registerFunc := range messages {
-		messageClass, messageType, topicBuilder, keyBuilder, err := registerFunc(domainName)
-		if err != nil {
-			return fmt.Errorf("register message for domain %s: %w", domainName, err)
-		}
+func (b busProducer) RegisterMessages(topicMessages TopicMessagesMap) error {
+	for topic, msgs := range topicMessages {
+		for _, registerFunc := range msgs {
+			msgSchema, keyBuilder := registerFunc()
+			msgSchemaType := reflect.TypeOf(msgSchema)
 
-		err = b.serializer.RegisterSerializer(domainName, messageClass, messageType, topicBuilder, keyBuilder)
-		if err != nil {
-			return fmt.Errorf("register message serializer for message class %s type %s, domain %s: %w", messageClass, messageType, domainName, err)
+			topics, ok := b.messageTopics[msgSchemaType]
+			if !ok {
+				topics = make([]Topic, 0, 1)
+			}
+
+			topics = append(topics, topic)
+			b.messageTopics[msgSchemaType] = topics
+
+			serializer, ok := b.topicSerializers[topic]
+			if !ok {
+				serializer = newJSONSerializer(topic)
+				b.topicSerializers[topic] = serializer
+			}
+
+			messageType := msgSchema.Type()
+			if messageType == "" {
+				return fmt.Errorf("get message type for %T: blank message must return const value", msgSchema)
+			}
+
+			err := serializer.RegisterSerializer(messageType, keyBuilder)
+			if err != nil {
+				return fmt.Errorf("register message serializer for type %s: %w", messageType, err)
+			}
 		}
 	}
 
@@ -107,11 +123,12 @@ func (b busProducer) RegisterMessages(domainName string, message RegisterStructu
 }
 
 func newBusProducerImpl(
-	serializer *jsonSerializer,
-	storage OutboxStorage,
+	topicSerializers map[Topic]jsonSerializer,
+	messageTopics map[reflect.Type][]Topic,
 	metadataBuilders []MetadataBuilderFunc,
+	storage OutboxStorage,
 ) BusProducerFunc {
-	serializeImpl := func(ctx context.Context, domainName, msgClass string, msg StructuredMessage) (*Message, error) {
+	serializeImpl := func(ctx context.Context, msg StructuredMessage, serializer jsonSerializer) (*Message, error) {
 		meta := make(Metadata, len(metadataBuilders))
 		for _, metaBuilder := range metadataBuilders {
 			tmpMeta, err := metaBuilder(ctx)
@@ -123,7 +140,7 @@ func newBusProducerImpl(
 			}
 		}
 
-		serializedMsg, err := serializer.Serialize(domainName, msgClass, msg, meta)
+		serializedMsg, err := serializer.Serialize(msg, meta)
 		if err != nil {
 			return nil, fmt.Errorf("serialize message %T: %w", msg, err)
 		}
@@ -131,15 +148,27 @@ func newBusProducerImpl(
 		return serializedMsg, nil
 	}
 
-	return func(ctx context.Context, domainName, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
+	return func(ctx context.Context, msgs []StructuredMessage, scheduleAt time.Time) error {
 		serializedMsgs := make([]Message, 0, len(msgs))
 		for _, msg := range msgs {
-			serializedMsg, err := serializeImpl(ctx, domainName, msgClass, msg)
-			if err != nil {
-				return err
+			topics, ok := messageTopics[reflect.TypeOf(msg)]
+			if !ok {
+				return fmt.Errorf("unknown message type %T", msg)
 			}
 
-			serializedMsgs = append(serializedMsgs, *serializedMsg)
+			for _, topic := range topics {
+				serializer, ok := topicSerializers[topic]
+				if !ok {
+					return fmt.Errorf("serializer for topic %s not found", topic)
+				}
+
+				serializedMsg, err := serializeImpl(ctx, msg, serializer)
+				if err != nil {
+					return err
+				}
+
+				serializedMsgs = append(serializedMsgs, *serializedMsg)
+			}
 		}
 
 		return storage.Store(ctx, serializedMsgs, scheduleAt)
@@ -163,18 +192,10 @@ func WithObservability(observer observability.Observer) BusOption {
 
 func WithMetrics(metrics metric.Metrics) BusOption {
 	metricsMW := func(impl BusProducerFunc) BusProducerFunc {
-		return func(ctx context.Context, domainName string, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
-			err := impl(ctx, domainName, msgClass, msgs, scheduleAt)
+		return func(ctx context.Context, msgs []StructuredMessage, scheduleAt time.Time) error {
+			err := impl(ctx, msgs, scheduleAt)
 
-			metricsWithLabels := metrics.With(metric.Labels{
-				"domain":  domainName,
-				"class":   msgClass,
-				"success": err == nil,
-			})
-			for _, msg := range msgs {
-				metricsWithLabels.WithLabel("type", msg.Type()).Increment("msg_store_attempts_total")
-			}
-
+			metrics.WithLabel("success", err == nil).Count("msg_store_attempts_total", len(msgs))
 			return err
 		}
 	}
@@ -186,7 +207,7 @@ func WithMetrics(metrics metric.Metrics) BusOption {
 
 func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusOption {
 	loggingMW := func(impl BusProducerFunc) BusProducerFunc {
-		return func(ctx context.Context, domainName string, msgClass string, msgs []StructuredMessage, scheduleAt time.Time) error {
+		return func(ctx context.Context, msgs []StructuredMessage, scheduleAt time.Time) error {
 			messageIDTypes := make([]log.Fields, 0, len(msgs))
 			for _, msg := range msgs {
 				messageIDTypes = append(messageIDTypes, log.Fields{
@@ -196,13 +217,11 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusOption {
 			}
 
 			loggerWithFields := logger.With(log.Fields{
-				"domainName":    domainName,
-				"messageClass":  msgClass,
 				"messageIDType": messageIDTypes,
 				"scheduleAt":    scheduleAt,
 			})
 
-			err := impl(ctx, domainName, msgClass, msgs, scheduleAt)
+			err := impl(ctx, msgs, scheduleAt)
 			if err != nil {
 				loggerWithFields.WithError(err).Log(ctx, errorLevel, "messages didn't stored to outbox storage due error")
 			} else {

@@ -15,23 +15,24 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
-type HandlerMiddleware func(Handler) Handler
+type HandlerMiddleware func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage]
 
 type listener struct {
-	consumer          Consumer
-	handler           Handler
-	metadataExtractor metadataExtractor
+	consumer     Consumer
+	deserializer jsonDeserializer
+	handler      TypedHandler[StructuredMessage]
 }
 
-func NewListener(
+func newListener(
 	consumer Consumer,
-	handler Handler,
+	messageDeserializer jsonDeserializer,
+	handler TypedHandler[StructuredMessage],
 	mws ...HandlerMiddleware,
 ) worker.ErrorJob {
 	l := &listener{
-		consumer:          consumer,
-		handler:           handler,
-		metadataExtractor: newMetadataExtractor(),
+		consumer:     consumer,
+		deserializer: messageDeserializer,
+		handler:      handler,
 	}
 
 	l.handler = l.wrapWithPanicHandler(l.handler)
@@ -42,8 +43,8 @@ func NewListener(
 	return l.workerImpl
 }
 
-func (l *listener) wrapWithPanicHandler(handler Handler) Handler {
-	return func(ctx context.Context, msg *Message) (err error) {
+func (l *listener) wrapWithPanicHandler(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+	return func(ctx context.Context, msg StructuredMessage) (err error) {
 		recoverPanic := func(ctx context.Context) {
 			panicMsg := recover()
 			if panicMsg == nil {
@@ -87,9 +88,18 @@ func (l *listener) workerImpl(ctx context.Context) error {
 }
 
 func (l *listener) processMessage(msg *ConsumerMessage) {
-	ctx := l.enrichWithHandlerMetadata(msg.Context, &msg.Message)
+	deserializedMsg, meta, err := l.deserializer.Deserialize(msg.Message.Payload)
+	if errors.Is(err, errDeserializeNotValidMessage) || errors.Is(err, errDeserializeUnknownMessage) {
+		l.consumer.Ack(msg)
+		return
+	}
+	if err != nil {
+		l.consumer.Nack(msg)
+		return
+	}
 
-	err := l.handler(ctx, &msg.Message)
+	ctx := withHandlerMetadata(msg.Context, &msg.Message, meta)
+	err = l.handler(ctx, deserializedMsg)
 	if err != nil {
 		l.consumer.Nack(msg)
 		return
@@ -98,24 +108,20 @@ func (l *listener) processMessage(msg *ConsumerMessage) {
 	l.consumer.Ack(msg)
 }
 
-func (l *listener) enrichWithHandlerMetadata(ctx context.Context, msg *Message) context.Context {
-	metadata, _ := l.metadataExtractor.Extract(msg.Payload)
-	return withHandlerMetadata(ctx, metadata)
-}
-
 func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) HandlerMiddleware {
-	return func(handler Handler) Handler {
-		return func(ctx context.Context, msg *Message) error {
+	return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+		return func(ctx context.Context, msg StructuredMessage) error {
+			meta := getHandlerMetadata(ctx)
 			ctx = logger.WithContext(ctx, log.Fields{
 				"consumerMessage": log.Fields{
 					"correlationID": uuid.New(),
-					"messageID":     msg.ID,
-					"topic":         msg.Topic,
+					"topic":         meta.MessageTopic,
+					"messageID":     meta.MessageID,
+					"messageType":   msg.Type(),
 				},
 			})
 
 			err := handler(ctx, msg)
-			meta := getHandlerMetadata(ctx)
 			if meta.Panic != nil {
 				logger.WithField("panic", log.Fields{
 					"message": meta.Panic.Message,
@@ -135,18 +141,18 @@ func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) Hand
 }
 
 func WithHandlerMetrics(metrics metric.Metrics) HandlerMiddleware {
-	return func(handler Handler) Handler {
-		return func(ctx context.Context, msg *Message) error {
+	return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+		return func(ctx context.Context, msg StructuredMessage) error {
 			started := time.Now()
 
 			err := handler(ctx, msg)
 			meta := getHandlerMetadata(ctx)
 			if meta.Panic != nil {
-				metrics.WithLabel("topic", msg.Topic).Increment("msg_handle_panics_total")
+				metrics.WithLabel("topic", meta.MessageTopic).Increment("msg_handle_panics_total")
 			}
 
 			metrics.With(metric.Labels{
-				"topic":   msg.Topic,
+				"topic":   meta.MessageTopic,
 				"success": err == nil,
 			}).Duration("msg_handle_duration_seconds", time.Since(started))
 			return err
@@ -155,10 +161,10 @@ func WithHandlerMetrics(metrics metric.Metrics) HandlerMiddleware {
 }
 
 func WithHandlerObservability(observer observability.Observer) HandlerMiddleware {
-	return func(handler Handler) Handler {
-		return func(ctx context.Context, msg *Message) error {
+	return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+		return func(ctx context.Context, msg StructuredMessage) error {
 			meta := getHandlerMetadata(ctx)
-			requestID := getRequestIDFromMetadata(meta.Data)
+			requestID := getRequestIDFromMetadata(meta.MessageMetadata)
 			if requestID == nil {
 				return handler(ctx, msg)
 			}
@@ -174,5 +180,6 @@ func getRequestIDFromMetadata(data Metadata) *string {
 	if !ok {
 		return nil
 	}
+
 	return &requestID
 }

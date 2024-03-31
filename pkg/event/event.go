@@ -10,9 +10,8 @@ import (
 
 type Event interface {
 	ID() uuid.UUID
-	Type() string
 	AggregateID() uuid.UUID
-	AggregateName() string
+	Type() string
 }
 
 type (
@@ -30,7 +29,8 @@ type dispatcher struct {
 	handlers map[string]Handler
 }
 
-func NewDispatcher(handlers ...RegisterHandlerFunc) (Dispatcher, error) {
+func NewDispatcher(handler RegisterHandlerFunc, handlers ...RegisterHandlerFunc) (Dispatcher, error) {
+	handlers = append([]RegisterHandlerFunc{handler}, handlers...)
 	handlersMap := make(map[string]Handler, len(handlers))
 	for _, registerFunc := range handlers {
 		eventType, handler, err := registerFunc()

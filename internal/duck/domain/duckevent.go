@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	aggregateNameDuck = "duck"
+	AggregateNameDuck = "duck"
 )
 
 type EventDuckCreated struct {
@@ -19,14 +19,10 @@ func (e EventDuckCreated) ID() uuid.UUID {
 	return e.EventID
 }
 
-func (e EventDuckCreated) Type() string {
-	return fmt.Sprintf("%s.created", aggregateNameDuck)
-}
-
 func (e EventDuckCreated) AggregateID() uuid.UUID {
 	return e.DuckID
 }
 
-func (e EventDuckCreated) AggregateName() string {
-	return aggregateNameDuck
+func (e EventDuckCreated) Type() string {
+	return fmt.Sprintf("%s.created", AggregateNameDuck)
 }

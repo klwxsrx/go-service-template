@@ -12,11 +12,12 @@ import (
 func main() {
 	ctx := context.Background()
 	infra := cmd.NewInfrastructureContainer(ctx)
+	defer infra.Close(ctx)
 
 	container := duck.NewDependencyContainer(
 		infra.DB,
 		infra.DBMigrations,
-		infra.MessageBusProducer,
+		infra.EventDispatcher,
 		infra.HTTPClientFactory,
 	)
 
