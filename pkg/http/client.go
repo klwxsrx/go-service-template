@@ -166,7 +166,7 @@ func WithRequestMetrics(metrics metric.Metrics) ClientOption {
 			destinationName = "none"
 		}
 
-		c.RESTClient.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
+		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
 			metrics.With(metric.Labels{
 				"destination": destinationName,
 				"method":      resp.Request.Method,
@@ -272,7 +272,6 @@ func (r restyRequestWrapper) SetCookie(cookie *http.Cookie) Request {
 
 func (r restyRequestWrapper) SetCookies(cookies []http.Cookie) Request {
 	for _, cookie := range cookies {
-		cookie := cookie
 		r.Request.SetCookie(&cookie)
 	}
 	return r

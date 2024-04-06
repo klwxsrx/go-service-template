@@ -36,7 +36,7 @@ func newListener(
 	}
 
 	l.handler = l.wrapWithPanicHandler(l.handler)
-	for i := len(mws) - 1; i >= 0; i-- { // TODO: check for go 1.22 loops
+	for i := len(mws) - 1; i >= 0; i-- {
 		l.handler = mws[i](l.handler)
 	}
 

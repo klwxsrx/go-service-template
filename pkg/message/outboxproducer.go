@@ -157,7 +157,6 @@ func (o *outboxProducer) processSendBatch(ctx context.Context) (allProcessed boo
 	}()
 
 	for _, msg := range msgs {
-		msg := msg
 		metrics := o.metrics.WithLabel("topic", msg.Topic)
 
 		err = o.out.Produce(ctx, &msg)

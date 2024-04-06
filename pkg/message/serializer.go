@@ -38,7 +38,7 @@ func (s jsonSerializer) Serialize(
 		return nil, fmt.Errorf("unknown message type %s", msg.Type())
 	}
 
-	keyBuilder := func(message StructuredMessage) string { return "" }
+	keyBuilder := func(_ StructuredMessage) string { return "" }
 	if serializerHelper.Key != nil {
 		keyBuilder = serializerHelper.Key
 	}

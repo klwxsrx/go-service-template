@@ -65,7 +65,7 @@ func WithTopicMessageType(msgType string) TopicBuilderOption {
 }
 
 func WithTopicCustomTags(tags ...string) TopicBuilderOption {
-	for i := 0; i < len(tags); i++ {
+	for i := range len(tags) {
 		tags[i] = strcase.ToKebab(tags[i])
 	}
 

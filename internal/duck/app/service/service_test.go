@@ -33,7 +33,7 @@ func TestDuckService_Create_Returns(t *testing.T) {
 			duckRepo: func(ctrl *gomock.Controller) domain.DuckRepo {
 				mock := duckdomainmock.NewDuckRepo(ctrl)
 				mock.EXPECT().Store(gomock.Any(), gomock.Any()).
-					Do(func(ctx context.Context, duck *domain.Duck) {
+					Do(func(_ context.Context, duck *domain.Duck) {
 						assert.NotNil(t, duck)
 						assert.NotEqual(t, duck.ID, uuid.Nil)
 						assert.Len(t, duck.Changes, 1)
@@ -66,7 +66,7 @@ func TestDuckService_Create_Returns(t *testing.T) {
 				return duckdomainmock.NewDuckRepo(ctrl)
 			},
 			transaction: func(ctrl *gomock.Controller) persistence.Transaction {
-				testFunc := func(ctx context.Context, fn func(context.Context) error, _ ...string) error {
+				testFunc := func(_ context.Context, _ func(context.Context) error, _ ...string) error {
 					return errors.New("unexpected")
 				}
 
@@ -80,8 +80,7 @@ func TestDuckService_Create_Returns(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
-		tc := test
+	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
@@ -252,7 +251,7 @@ func TestDuckService_SetActive_Returns(t *testing.T) {
 		{
 			name: "error_when_transaction_returns_error",
 			transaction: func(ctrl *gomock.Controller) persistence.Transaction {
-				testFunc := func(ctx context.Context, fn func(context.Context) error, _ ...string) error {
+				testFunc := func(_ context.Context, _ func(context.Context) error, _ ...string) error {
 					return errors.New("unexpected")
 				}
 
@@ -269,8 +268,7 @@ func TestDuckService_SetActive_Returns(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
-		tc := test
+	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)

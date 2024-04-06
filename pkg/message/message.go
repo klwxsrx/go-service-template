@@ -27,9 +27,7 @@ type (
 
 func NewCompositeHandler[M any](handlers []TypedHandler[M], optionalPool worker.Pool) TypedHandler[M] {
 	if len(handlers) == 0 {
-		return func(ctx context.Context, msg M) error {
-			return nil
-		}
+		return func(_ context.Context, _ M) error { return nil }
 	}
 
 	if len(handlers) == 1 {
@@ -52,9 +50,8 @@ func NewCompositeHandler[M any](handlers []TypedHandler[M], optionalPool worker.
 	return func(ctx context.Context, msg M) error {
 		group := worker.WithinFailSafeGroup(ctx, optionalPool)
 		for _, handler := range handlers {
-			handlerImpl := handler
 			group.Do(func(ctx context.Context) error {
-				return handlerImpl(ctx, msg)
+				return handler(ctx, msg)
 			})
 		}
 

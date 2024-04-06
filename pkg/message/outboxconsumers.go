@@ -293,8 +293,6 @@ func (c *outboxConsumer) processOutboxMessagesImpl(ctx context.Context) (allProc
 	}()
 
 	for _, msg := range msgs {
-		msg := msg
-
 		select {
 		case c.consumerCh <- &ConsumerMessage{Context: ctx, Message: msg}:
 			c.logger.WithField(messageIDLogField, msg.ID).Log(ctx, c.loggerInfoLevel, "outbox message sent to handler")
