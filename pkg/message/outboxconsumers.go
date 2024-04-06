@@ -16,7 +16,9 @@ import (
 )
 
 const (
-	consumingMessagesBatchSize        = 100
+	consumingMessagesBatchSize = 100
+	messageIDLogField          = "messageID"
+
 	defaultConsumerProcessingInterval = time.Second
 	defaultMessageConsumingTimeout    = time.Minute
 )
@@ -206,11 +208,11 @@ func (c *outboxConsumer) Ack(msg *ConsumerMessage) {
 			Log(msg.Context, c.loggerErrorLevel, "failed to delete acked message")
 	}
 
-	c.releaseConsumingMessage(msg.Message.ID)
+	c.releaseConsumingMessage(msg.Context, msg.Message.ID, "")
 }
 
 func (c *outboxConsumer) Nack(msg *ConsumerMessage) {
-	c.releaseConsumingMessage(msg.Message.ID)
+	c.releaseConsumingMessage(msg.Context, msg.Message.ID, "")
 
 	c.metrics.
 		WithLabel("topic", msg.Message.Topic).
@@ -295,11 +297,11 @@ func (c *outboxConsumer) processOutboxMessagesImpl(ctx context.Context) (allProc
 
 		select {
 		case c.consumerCh <- &ConsumerMessage{Context: ctx, Message: msg}:
-			c.logger.WithField("messageID", msg.ID).Log(ctx, c.loggerInfoLevel, "outbox message sent to handler")
+			c.logger.WithField(messageIDLogField, msg.ID).Log(ctx, c.loggerInfoLevel, "outbox message sent to handler")
 			c.addConsumingMessage(msg.ID)
-			go func() { // TODO: test message timeout
+			go func() {
 				<-time.After(c.msgConsumingTimeout)
-				c.releaseConsumingMessage(msg.ID)
+				c.releaseConsumingMessage(ctx, msg.ID, "outbox message got handler timeout")
 			}()
 		case <-ctx.Done():
 			return true, nil
@@ -316,9 +318,13 @@ func (c *outboxConsumer) addConsumingMessage(msgID uuid.UUID) {
 	c.consumingMessages[msgID] = struct{}{}
 }
 
-func (c *outboxConsumer) releaseConsumingMessage(msgID uuid.UUID) {
+func (c *outboxConsumer) releaseConsumingMessage(ctx context.Context, msgID uuid.UUID, logMsg string) {
 	c.consumingCond.L.Lock()
 	defer c.consumingCond.L.Unlock()
+
+	if _, ok := c.consumingMessages[msgID]; ok && logMsg != "" {
+		c.logger.WithField(messageIDLogField, msgID).Log(ctx, c.loggerInfoLevel, logMsg)
+	}
 
 	delete(c.consumingMessages, msgID)
 	if len(c.consumingMessages) == 0 {
