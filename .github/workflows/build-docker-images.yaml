@@ -96,7 +96,7 @@ jobs:
         include:
           - image-tag: klwxsrx/duck-service
             image-file: duck.image.tar
-          - image-tag: klwxsrx/duck-event-handler
+          - image-tag: klwxsrx/duck-message-handler
             image-file: duckhandler.image.tar
           - image-tag: klwxsrx/duck-message-outbox
             image-file: messageoutbox.image.tar

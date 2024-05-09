@@ -13,4 +13,4 @@ COPY ./bin/messageoutbox /app/messageoutbox
 
 EXPOSE 8080
 
-CMD ["/app/messageoutbox"]
+ENTRYPOINT ["/app/messageoutbox"]

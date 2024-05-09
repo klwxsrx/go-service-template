@@ -13,4 +13,4 @@ COPY ./bin/duck /app/duck
 
 EXPOSE 8080
 
-CMD ["/app/duck"]
+ENTRYPOINT ["/app/duck"]

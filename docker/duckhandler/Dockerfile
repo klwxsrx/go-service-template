@@ -13,4 +13,4 @@ COPY ./bin/duckhandler /app/duckhandler
 
 EXPOSE 8080
 
-CMD ["/app/duckhandler"]
+ENTRYPOINT ["/app/duckhandler"]
