@@ -30,7 +30,7 @@ arch: tools
 test: codegen
 	go test ./...
 
-tools: tools-invalidate tools/bin/mockgen tools/bin/golangci-lint tools/bin/go-cleanarch tools/bin/.go-mod.checksum
+tools: tools-invalidate tools/bin/mockgen tools/bin/golangci-lint tools/bin/go-cleanarch tools/bin/goverter tools/bin/.go-mod.checksum
 
 tools-invalidate:
 	shasum -c ./tools/bin/.go-mod.checksum 2> /dev/null || make tools-clean
@@ -46,6 +46,9 @@ tools/bin/golangci-lint:
 
 tools/bin/go-cleanarch:
 	go build -modfile ./tools/go.mod -o ./tools/bin/go-cleanarch github.com/roblaszczak/go-cleanarch
+
+tools/bin/goverter:
+	go build -modfile ./tools/go.mod -o ./tools/bin/goverter github.com/jmattheis/goverter/cmd/goverter
 
 tools/bin/.go-mod.checksum:
 	shasum ./tools/go.mod ./tools/go.sum > ./tools/bin/.go-mod.checksum
