@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"time"
 
 	commonhttp "github.com/klwxsrx/go-service-template/internal/pkg/http"
-	"github.com/klwxsrx/go-service-template/pkg/cmd"
 	"github.com/klwxsrx/go-service-template/pkg/env"
 	"github.com/klwxsrx/go-service-template/pkg/http"
 	"github.com/klwxsrx/go-service-template/pkg/lazy"
@@ -73,7 +73,12 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 }
 
 func (i *InfrastructureContainer) Close(ctx context.Context) {
-	if cmd.HandleAppPanic(ctx, i.Logger.MustLoad()) {
+	panicMsg := recover()
+	if panicMsg != nil {
+		i.Logger.MustLoad().WithField("panic", log.Fields{
+			"message": fmt.Sprintf("%v", panicMsg),
+			"stack":   string(debug.Stack()),
+		}).Error(ctx, "app failed with panic")
 		defer os.Exit(1)
 	}
 
