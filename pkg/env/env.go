@@ -46,22 +46,42 @@ func ParseOptional[T supportedOptionalTypes](key string) (result T, err error) {
 	return result, nil
 }
 
-func ParseList[T supportedTypes](key string, delimiter string) ([]T, error) {
+func ParseList[T supportedTypes](key, delimiter string) ([]T, error) {
 	str, ok := os.LookupEnv(key)
 	if !ok {
 		var empty T
 		return nil, notFoundError(key, empty)
 	}
 
-	strList := strings.Split(str, delimiter)
-	resultList := make([]T, 0, len(strList))
-	for _, str := range strList {
-		str = strings.TrimSpace(str)
-		if str == "" {
+	return parseListImpl[T](key, str, delimiter)
+}
+
+func ParseListOptional[T supportedTypes](key, delimiter string) ([]T, error) {
+	str, ok := os.LookupEnv(key)
+	if !ok {
+		return nil, nil
+	}
+
+	return parseListImpl[T](key, str, delimiter)
+}
+
+func Must[T any](val T, err error) T {
+	if err != nil {
+		panic(fmt.Errorf("parse environment: %w", err))
+	}
+	return val
+}
+
+func parseListImpl[T supportedTypes](key, value, delimiter string) ([]T, error) {
+	valueList := strings.Split(value, delimiter)
+	resultList := make([]T, 0, len(valueList))
+	for _, value := range valueList {
+		value = strings.TrimSpace(value)
+		if value == "" {
 			continue
 		}
 
-		t, err := pkgstrings.ParseTypedValue[T](str)
+		t, err := pkgstrings.ParseTypedValue[T](value)
 		if err != nil {
 			var empty T
 			return nil, invalidValueError(key, empty, err)
@@ -71,13 +91,6 @@ func ParseList[T supportedTypes](key string, delimiter string) ([]T, error) {
 	}
 
 	return resultList, nil
-}
-
-func Must[T any](val T, err error) T {
-	if err != nil {
-		panic(fmt.Errorf("parse environment: %w", err))
-	}
-	return val
 }
 
 func notFoundError(key string, varType any) error {

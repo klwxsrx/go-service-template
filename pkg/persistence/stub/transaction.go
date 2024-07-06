@@ -16,6 +16,6 @@ func (s transaction) WithinContext(ctx context.Context, fn func(ctx context.Cont
 	return fn(ctx)
 }
 
-func (s transaction) WithLock(ctx context.Context) context.Context {
+func (s transaction) WithLock(ctx context.Context, _ ...persistence.LockOption) context.Context {
 	return ctx
 }

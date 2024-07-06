@@ -3,7 +3,13 @@ package persistence
 
 import "context"
 
-type Transaction interface {
-	WithinContext(ctx context.Context, fn func(ctx context.Context) error, lockNames ...string) error
-	WithLock(ctx context.Context) context.Context
-}
+const SkipAlreadyLockedData = LockOption("skip_already_locked_data")
+
+type (
+	Transaction interface {
+		WithinContext(ctx context.Context, fn func(context.Context) error, lockNames ...string) error
+		WithLock(ctx context.Context, opts ...LockOption) context.Context
+	}
+
+	LockOption string
+)

@@ -53,19 +53,19 @@ func WithTopicDomainName(name string) TopicBuilderOption {
 func WithTopicAggregateName(name string) TopicBuilderOption {
 	name = strcase.ToKebab(name)
 	return func(builder *topicBuilder) {
-		builder.domain = fmt.Sprintf("%s-aggregate", name)
+		builder.aggregate = fmt.Sprintf("%s-aggregate", name)
 	}
 }
 
 func WithTopicMessageType(msgType string) TopicBuilderOption {
 	msgType = strcase.ToKebab(msgType)
 	return func(builder *topicBuilder) {
-		builder.domain = fmt.Sprintf("%s-type", msgType)
+		builder.messageType = fmt.Sprintf("%s-type", msgType)
 	}
 }
 
 func WithTopicCustomTags(tags ...string) TopicBuilderOption {
-	for i := range len(tags) {
+	for i := range tags {
 		tags[i] = strcase.ToKebab(tags[i])
 	}
 

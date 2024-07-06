@@ -11,18 +11,20 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
 )
 
-type instanceID string
+type (
+	instanceID string
 
-type txData struct {
-	ClientTx
-	instanceID instanceID
-}
+	txData struct {
+		ClientTx
+		instanceID instanceID
+	}
 
-type transaction struct {
-	id       instanceID
-	client   TxClient
-	onCommit func()
-}
+	transaction struct {
+		id       instanceID
+		client   TxClient
+		onCommit func()
+	}
+)
 
 func NewTransaction(client TxClient, instanceName string, onCommit func()) persistence.Transaction {
 	return transaction{id: instanceID(instanceName), client: client, onCommit: onCommit}
@@ -88,24 +90,40 @@ func (t transaction) WithinContext(
 	return nil
 }
 
-func (t transaction) WithLock(ctx context.Context) context.Context {
+func (t transaction) WithLock(ctx context.Context, opts ...persistence.LockOption) context.Context {
+	hasSkipLockedFn := func(opts []persistence.LockOption) bool {
+		for _, opt := range opts {
+			if opt == persistence.SkipAlreadyLockedData {
+				return true
+			}
+		}
+		return false
+	}
+
 	if !HasTransaction(ctx) {
 		return ctx
 	}
 
-	if IsLockRequested(ctx) {
+	lockRequested, skipLocked := IsLockRequested(ctx)
+	if lockRequested && skipLocked {
 		return ctx
 	}
 
-	return context.WithValue(ctx, dbTransactionLockContextKey, struct{}{})
+	hasSkipLocked := hasSkipLockedFn(opts)
+	if lockRequested && !hasSkipLocked {
+		return ctx
+	}
+
+	return context.WithValue(ctx, dbTransactionLockContextKey, hasSkipLocked)
 }
 
 func HasTransaction(ctx context.Context) bool {
 	return ctx.Value(dbTransactionContextKey) != nil
 }
 
-func IsLockRequested(ctx context.Context) bool {
-	return ctx.Value(dbTransactionLockContextKey) != nil
+func IsLockRequested(ctx context.Context) (lockRequested, skipLocked bool) {
+	skipLocked, lockRequested = ctx.Value(dbTransactionLockContextKey).(bool)
+	return
 }
 
 type (

@@ -34,7 +34,7 @@ func (r *duckRepo) FindOne(ctx context.Context, spec domain.DuckSpec) (*domain.D
 	if spec.ID != nil {
 		qb = qb.Where(sq.Eq{"id": *spec.ID})
 	}
-	if pkgsql.IsLockRequested(ctx) {
+	if lockRequested, _ := pkgsql.IsLockRequested(ctx); lockRequested {
 		qb = qb.Suffix("for update")
 	}
 
