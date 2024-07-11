@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+
+	"github.com/klwxsrx/go-service-template/pkg/auth"
 )
 
 type contextKey int
@@ -20,6 +22,7 @@ type panicErr struct {
 }
 
 type handlerMetadata struct {
+	Auth  auth.Authentication[auth.Principal]
 	Code  int
 	Panic *panicErr
 	Error error

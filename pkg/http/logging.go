@@ -5,6 +5,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/klwxsrx/go-service-template/pkg/auth"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
@@ -33,19 +34,20 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 			result := getHandlerMetadata(r.Context())
 
 			routeName := mux.CurrentRoute(r).GetName()
-			loggerWithFields := getRequestResponseFieldsLogger(routeName, r, result.Code, logger)
+			logger := getAuthFieldsLogger(result.Auth, logger)
+			logger = getRequestResponseFieldsLogger(routeName, r, result.Code, logger)
 			switch {
 			case result.Panic != nil:
-				loggerWithFields.WithField("panic", log.Fields{
+				logger.WithField("panic", log.Fields{
 					"message": result.Panic.Message,
 					"stack":   string(result.Panic.Stacktrace),
 				}).Error(r.Context(), "request handled with panic")
 			case result.Code >= http.StatusInternalServerError:
-				loggerWithFields.
+				logger.
 					WithError(result.Error).
 					Log(r.Context(), errorLevel, "request handled with internal error")
 			default:
-				loggerWithFields.
+				logger.
 					WithError(result.Error).
 					Log(r.Context(), infoLevel, "request handled")
 			}
@@ -53,13 +55,38 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 	})
 }
 
-func getRequestFieldsLogger(routeName string, r *http.Request, logger log.Logger) log.Logger {
+func getAuthFieldsLogger(
+	authentication auth.Authentication[auth.Principal],
+	logger log.Logger,
+) log.Logger {
+	if authentication == nil {
+		return logger
+	}
+
+	var principalType, principalID *string
+	if authentication.Principal() != nil {
+		principalTypeValue := string((*authentication.Principal()).Type())
+		principalType = &principalTypeValue
+		principalID = (*authentication.Principal()).ID()
+	}
+
+	return logger.WithField("auth", log.Fields{
+		"type": principalType,
+		"id":   principalID,
+	})
+}
+
+func getRequestFieldsLogger(
+	routeName string,
+	request *http.Request,
+	logger log.Logger,
+) log.Logger {
 	fields := log.Fields{
-		"method":   r.Method,
-		"scheme":   r.URL.Scheme,
-		"host":     r.URL.Host,
-		"path":     r.URL.Path,
-		"rawQuery": r.URL.RawQuery,
+		"method":   request.Method,
+		"scheme":   request.URL.Scheme,
+		"host":     request.URL.Host,
+		"path":     request.URL.Path,
+		"rawQuery": request.URL.RawQuery,
 	}
 	if routeName != "" {
 		fields["routeName"] = routeName
@@ -68,8 +95,13 @@ func getRequestFieldsLogger(routeName string, r *http.Request, logger log.Logger
 	return logger.With(wrapFieldsWithRequestLogEntry(fields))
 }
 
-func getRequestResponseFieldsLogger(routeName string, r *http.Request, responseCode int, logger log.Logger) log.Logger {
-	return getRequestFieldsLogger(routeName, r, logger).With(wrapFieldsWithRequestLogEntry(
+func getRequestResponseFieldsLogger(
+	routeName string,
+	request *http.Request,
+	responseCode int,
+	logger log.Logger,
+) log.Logger {
+	return getRequestFieldsLogger(routeName, request, logger).With(wrapFieldsWithRequestLogEntry(
 		log.Fields{
 			"responseCode": responseCode,
 		},

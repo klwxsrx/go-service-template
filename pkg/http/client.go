@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
+	"github.com/klwxsrx/go-service-template/pkg/auth"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
@@ -122,8 +123,12 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 	const destinationNameLogField = "destinationName"
 	return func(c *ClientImpl) {
 		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
+			authentication, _ := auth.GetAuthentication[auth.Principal](resp.Request.Context())
+			logger := getAuthFieldsLogger(authentication, logger)
+
 			routeName, _ := resp.Request.Context().Value(clientRouteName).(string)
 			logger = getRequestResponseFieldsLogger(routeName, resp.Request.RawRequest, resp.StatusCode(), logger)
+
 			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
 				destinationNameLogField: getDestinationNameForLogging(c),
 			}))
@@ -138,6 +143,9 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 		})
 
 		c.RESTClient.OnError(func(req *resty.Request, err error) {
+			authentication, _ := auth.GetAuthentication[auth.Principal](req.Context())
+			logger := getAuthFieldsLogger(authentication, logger)
+
 			if req.RawRequest != nil {
 				routeName, _ := req.Context().Value(clientRouteName).(string)
 				logger = getRequestFieldsLogger(routeName, req.RawRequest, logger)
@@ -167,12 +175,36 @@ func WithRequestMetrics(metrics metric.Metrics) ClientOption {
 		}
 
 		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
+			var authType *string
+			if resp.Request != nil {
+				authentication, _ := auth.GetAuthentication[auth.Principal](resp.Request.Context())
+				if authentication.Principal() != nil {
+					v := string((*authentication.Principal()).Type())
+					authType = &v
+				}
+			}
+
 			metrics.With(metric.Labels{
 				"destination": destinationName,
+				"authType":    authType,
 				"method":      resp.Request.Method,
 				"path":        resp.Request.RawRequest.URL.Path,
 				"code":        fmt.Sprintf("%d", resp.StatusCode()),
 			}).Duration("http_client_request_duration_seconds", resp.Time())
+			return nil
+		})
+	}
+}
+
+func WithRequestAuth[T auth.Principal](fn func(auth.Authentication[T], Request)) ClientOption {
+	return func(c *ClientImpl) {
+		c.RESTClient.OnBeforeRequest(func(_ *resty.Client, r *resty.Request) error {
+			authentication, ok := auth.GetAuthentication[T](r.Context())
+			if !ok || !authentication.IsAuthenticated() {
+				return nil
+			}
+
+			fn(authentication, restyRequestWrapper{r})
 			return nil
 		})
 	}

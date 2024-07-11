@@ -15,17 +15,25 @@ func WithMetrics(metrics metric.Metrics) ServerOption {
 			handler.ServeHTTP(w, r)
 			result := getHandlerMetadata(r.Context())
 
+			var authType *string
+			if result.Auth != nil && result.Auth.Principal() != nil {
+				v := string((*result.Auth.Principal()).Type())
+				authType = &v
+			}
+
 			if result.Panic != nil {
 				metrics.With(metric.Labels{
-					"method": r.Method,
-					"path":   r.URL.Path,
+					"authType": authType,
+					"method":   r.Method,
+					"path":     r.URL.Path,
 				}).Increment("http_api_request_panics_total")
 			}
 
 			metrics.With(metric.Labels{
-				"method": r.Method,
-				"path":   r.URL.Path,
-				"code":   fmt.Sprintf("%d", result.Code),
+				"authType": authType,
+				"method":   r.Method,
+				"path":     r.URL.Path,
+				"code":     fmt.Sprintf("%d", result.Code),
 			}).Duration("http_api_request_duration_seconds", time.Since(started))
 		})
 	})

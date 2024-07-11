@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/klwxsrx/go-service-template/pkg/auth"
 	"github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
@@ -192,6 +193,8 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 	switch {
 	case errors.Is(err, ErrParsingError):
 		httpCode = http.StatusBadRequest
+	case errors.Is(err, auth.ErrPermissionDenied):
+		httpCode = http.StatusForbidden
 	case err != nil:
 		httpCode = http.StatusInternalServerError
 	default:
