@@ -193,6 +193,8 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 	switch {
 	case errors.Is(err, ErrParsingError):
 		httpCode = http.StatusBadRequest
+	case errors.Is(err, auth.ErrUnauthenticated):
+		httpCode = http.StatusUnauthorized
 	case errors.Is(err, auth.ErrPermissionDenied):
 		httpCode = http.StatusForbidden
 	case err != nil:

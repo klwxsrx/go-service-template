@@ -19,7 +19,7 @@ type (
 
 	Route struct {
 		Method string
-		// URL should be passed as a common URL with path param placeholders, for example /duck/{id}/status
+		// URL should be passed as a common URL with path param placeholders, for example /users/{id}/status
 		URL string
 	}
 

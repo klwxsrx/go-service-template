@@ -19,7 +19,7 @@ type Config struct {
 	ConnectionTimeout time.Duration
 }
 
-type MessageBroker struct {
+type MessageBroker struct { // TODO: change to kafka
 	client pulsar.Client
 
 	producerMutexes *sync.Map
