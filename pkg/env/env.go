@@ -49,11 +49,21 @@ func ParseOptional[T supportedOptionalTypes](key string) (result T, err error) {
 func ParseList[T supportedTypes](key, delimiter string) ([]T, error) {
 	str, ok := os.LookupEnv(key)
 	if !ok {
-		var empty T
+		var empty []T
 		return nil, notFoundError(key, empty)
 	}
 
-	return parseListImpl[T](key, str, delimiter)
+	result, err := parseListImpl[T](key, str, delimiter)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result) == 0 {
+		var empty []T
+		return nil, fmt.Errorf("env %s with type %T is empty", strings.ToUpper(key), empty)
+	}
+
+	return result, nil
 }
 
 func ParseListOptional[T supportedTypes](key, delimiter string) ([]T, error) {
@@ -83,7 +93,7 @@ func parseListImpl[T supportedTypes](key, value, delimiter string) ([]T, error) 
 
 		t, err := pkgstrings.ParseTypedValue[T](value)
 		if err != nil {
-			var empty T
+			var empty []T
 			return nil, invalidValueError(key, empty, err)
 		}
 
