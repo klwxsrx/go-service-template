@@ -22,35 +22,35 @@ const (
 )
 
 type (
+	MigrationSource func() ([]Migration, error)
+
 	Migration struct {
 		ID  string
 		SQL string
 	}
 
-	MigrationSource func() ([]Migration, error)
+	Migrator struct {
+		txClient TxClient
+		logger   log.Logger
+	}
 )
 
-type Migrator struct {
-	txClient TxClient
-	logger   log.Logger
-}
-
-func NewMigrator(txClient TxClient, logger log.Logger) *Migrator {
-	return &Migrator{
+func NewMigrator(txClient TxClient, logger log.Logger) Migrator {
+	return Migrator{
 		txClient: txClient,
 		logger:   logger,
 	}
 }
 
-func (m *Migrator) Execute(ctx context.Context, migrationSources ...MigrationSource) error {
-	if len(migrationSources) == 0 {
+func (m Migrator) Execute(ctx context.Context, sources ...MigrationSource) error {
+	if len(sources) == 0 {
 		return nil
 	}
 
-	migrationSources = append(migrationSources, migrationTableDDL)
+	sources = append(sources, migrationTableDDL)
 
 	var migrations []Migration
-	for _, migrationSource := range migrationSources {
+	for _, migrationSource := range sources {
 		sourceMigrations, err := migrationSource()
 		if err != nil {
 			return fmt.Errorf("get migrations from source: %w", err)
@@ -75,7 +75,7 @@ func (m *Migrator) Execute(ctx context.Context, migrationSources ...MigrationSou
 	return m.performMigrations(ctx, migrations)
 }
 
-func (m *Migrator) performMigrations(ctx context.Context, migrations []Migration) error {
+func (m Migrator) performMigrations(ctx context.Context, migrations []Migration) error {
 	performedMigrationIDs, err := m.getPerformedMigrationIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("get performed migrations: %w", err)
@@ -94,7 +94,7 @@ func (m *Migrator) performMigrations(ctx context.Context, migrations []Migration
 	return nil
 }
 
-func (m *Migrator) getPerformedMigrationIDs(ctx context.Context) (map[string]struct{}, error) {
+func (m Migrator) getPerformedMigrationIDs(ctx context.Context) (map[string]struct{}, error) {
 	query, _, err := sq.Select("id").From("migration").ToSql()
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (m *Migrator) getPerformedMigrationIDs(ctx context.Context) (map[string]str
 	return result, nil
 }
 
-func (m *Migrator) performMigration(ctx context.Context, migration Migration) error {
+func (m Migrator) performMigration(ctx context.Context, migration Migration) error {
 	tx, err := m.txClient.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("start tx: %w", err)
@@ -139,7 +139,7 @@ func (m *Migrator) performMigration(ctx context.Context, migration Migration) er
 	return nil
 }
 
-func (m *Migrator) performMigrationImpl(ctx context.Context, client Client, migration Migration) error {
+func (m Migrator) performMigrationImpl(ctx context.Context, client Client, migration Migration) error {
 	migration.SQL = strings.TrimSpace(migration.SQL)
 	if migration.SQL == "" {
 		return errors.New("empty migration")
@@ -157,7 +157,7 @@ func (m *Migrator) performMigrationImpl(ctx context.Context, client Client, migr
 	return m.createMigrationRecord(ctx, client, migration.ID)
 }
 
-func (m *Migrator) splitIntoQueries(sql string) []string {
+func (m Migrator) splitIntoQueries(sql string) []string {
 	queries := strings.Split(sql, querySeparator)
 	result := make([]string, 0, len(queries))
 	for _, query := range queries {
@@ -169,7 +169,7 @@ func (m *Migrator) splitIntoQueries(sql string) []string {
 	return result
 }
 
-func (m *Migrator) createMigrationRecord(ctx context.Context, client Client, fileName string) error {
+func (m Migrator) createMigrationRecord(ctx context.Context, client Client, fileName string) error {
 	query, args, err := sq.Insert("migration").Values(fileName).ToSql()
 	if err != nil {
 		return err

@@ -25,22 +25,20 @@ func (h CreateDuckHandler) Path() string {
 	return "/duck"
 }
 
-func (h CreateDuckHandler) HTTPHandler() pkghttp.HandlerFunc {
-	return func(w pkghttp.ResponseWriter, r *http.Request) (err error) {
-		data, err := pkghttp.Parse(r, pkghttp.JSONBody[createDuckIn](), err)
-		_ = pkghttp.ParseOptional(r, pkghttp.QueryParameter[*string]("utm"), err)
-		if err != nil {
-			return err
-		}
-
-		duckID, err := h.api.Create(r.Context(), data.Name)
-		if err != nil {
-			return err
-		}
-
-		w.SetJSONBody(createDuckOut{DuckID: duckID})
-		return nil
+func (h CreateDuckHandler) Handle(w pkghttp.ResponseWriter, r *http.Request) (err error) {
+	data, err := pkghttp.Parse(r, pkghttp.JSONBody[createDuckIn](), err)
+	_ = pkghttp.ParseOptional(r, pkghttp.QueryParameter[*string]("utm"), err)
+	if err != nil {
+		return err
 	}
+
+	duckID, err := h.api.Create(r.Context(), data.Name)
+	if err != nil {
+		return err
+	}
+
+	w.SetJSONBody(createDuckOut{DuckID: duckID})
+	return nil
 }
 
 type createDuckIn struct {

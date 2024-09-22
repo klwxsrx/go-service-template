@@ -71,9 +71,9 @@ func setHandlerAuthentication[T auth.Principal](r *http.Request, a auth.Authenti
 }
 
 func writeHandlerResult(ctx context.Context, w http.ResponseWriter, httpCode int, err error) {
-	w.WriteHeader(httpCode)
-
 	meta := getHandlerMetadata(ctx)
 	meta.Code = httpCode
 	meta.Error = err
+
+	w.WriteHeader(httpCode)
 }

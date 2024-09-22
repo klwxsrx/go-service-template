@@ -24,7 +24,14 @@ const (
 )
 
 type (
-	OutboxConsumerProvider struct {
+	OutboxConsumerProvider interface {
+		ConsumerProvider
+		Run(ctx context.Context) error
+	}
+
+	OutboxConsumerOption func(*outboxConsumerProvider)
+
+	outboxConsumerProvider struct {
 		processingInterval  time.Duration
 		msgConsumingTimeout time.Duration
 		storage             OutboxStorage
@@ -34,12 +41,10 @@ type (
 		loggerInfoLevel     log.Level
 		loggerErrorLevel    log.Level
 	}
-
-	OutboxConsumerOption func(*OutboxConsumerProvider)
 )
 
 func WithOutboxConsumerLogging(logger log.Logger, infoLevel, errorLevel log.Level) OutboxConsumerOption {
-	return func(consumers *OutboxConsumerProvider) {
+	return func(consumers *outboxConsumerProvider) {
 		consumers.logger = logger
 		consumers.loggerInfoLevel = infoLevel
 		consumers.loggerErrorLevel = errorLevel
@@ -47,25 +52,25 @@ func WithOutboxConsumerLogging(logger log.Logger, infoLevel, errorLevel log.Leve
 }
 
 func WithOutboxConsumerMetrics(metrics metric.Metrics) OutboxConsumerOption {
-	return func(consumers *OutboxConsumerProvider) {
+	return func(consumers *outboxConsumerProvider) {
 		consumers.metrics = metrics
 	}
 }
 
 func WithOutboxConsumerProcessingInterval(interval time.Duration) OutboxConsumerOption {
-	return func(consumers *OutboxConsumerProvider) {
+	return func(consumers *outboxConsumerProvider) {
 		consumers.processingInterval = interval
 	}
 }
 
 func WithOutboxConsumerMessageTimeout(timeout time.Duration) OutboxConsumerOption {
-	return func(consumers *OutboxConsumerProvider) {
+	return func(consumers *outboxConsumerProvider) {
 		consumers.msgConsumingTimeout = timeout
 	}
 }
 
-func NewOutboxConsumerProvider(storage OutboxStorage, opts ...OutboxConsumerOption) *OutboxConsumerProvider {
-	consumers := &OutboxConsumerProvider{
+func NewOutboxConsumerProvider(storage OutboxStorage, opts ...OutboxConsumerOption) OutboxConsumerProvider {
+	consumers := &outboxConsumerProvider{
 		processingInterval:  defaultConsumerProcessingInterval,
 		msgConsumingTimeout: defaultMessageConsumingTimeout,
 		storage:             storage,
@@ -81,7 +86,7 @@ func NewOutboxConsumerProvider(storage OutboxStorage, opts ...OutboxConsumerOpti
 	return consumers
 }
 
-func (c *OutboxConsumerProvider) Consumer(topic Topic, _ SubscriberName, _ ConsumptionType) (Consumer, error) {
+func (c *outboxConsumerProvider) Consumer(topic Topic, _ SubscriberName, _ ConsumptionType) (Consumer, error) {
 	consumer, ok := c.topicConsumers[topic]
 	if ok {
 		return consumer, nil
@@ -101,7 +106,7 @@ func (c *OutboxConsumerProvider) Consumer(topic Topic, _ SubscriberName, _ Consu
 	return consumer, nil
 }
 
-func (c *OutboxConsumerProvider) Run(ctx context.Context) error {
+func (c *outboxConsumerProvider) Run(ctx context.Context) error {
 	for _, consumer := range c.topicConsumers {
 		consumer.Run(ctx, c.processingInterval)
 	}

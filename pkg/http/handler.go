@@ -14,13 +14,15 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
+const statusNotSetValue = 0
+
 type (
-	HandlerFunc func(w ResponseWriter, r *http.Request) (err error)
+	HandlerFunc func(ResponseWriter, *http.Request) error
 
 	Handler interface {
 		Method() string
 		Path() string
-		HTTPHandler() HandlerFunc
+		Handle(ResponseWriter, *http.Request) error
 	}
 
 	ResponseWriter interface {
@@ -153,25 +155,32 @@ func parseTypedValueImpl[T supportedParsingTypes](value string) (T, error) {
 	return v, fmt.Errorf("%w: %w", ErrParsingError, err)
 }
 
-type responseWriter struct {
-	impl http.ResponseWriter
+type (
+	responseWriter struct {
+		deferredWriter *deferredResponseWriter
+		encodeBodyFunc func(http.Header) ([]byte, error)
+	}
 
-	encodeBodyFunc func(http.Header) ([]byte, error)
-	httpCode       int
-}
+	deferredResponseWriter struct {
+		w        http.ResponseWriter
+		r        *http.Request
+		httpCode int
+		data     []byte
+	}
+)
 
 func (w *responseWriter) SetHeader(key, value string) ResponseWriter {
-	w.impl.Header().Set(key, value)
+	w.deferredWriter.Header().Set(key, value)
 	return w
 }
 
 func (w *responseWriter) SetStatusCode(httpCode int) ResponseWriter {
-	w.httpCode = httpCode
+	w.deferredWriter.WriteHeader(httpCode)
 	return w
 }
 
 func (w *responseWriter) SetCookie(cookie *http.Cookie) ResponseWriter {
-	http.SetCookie(w.impl, cookie)
+	http.SetCookie(w.deferredWriter, cookie)
 	return w
 }
 
@@ -189,46 +198,40 @@ func (w *responseWriter) SetJSONBody(data any) ResponseWriter {
 }
 
 func (w *responseWriter) Write(ctx context.Context, err error) {
-	var httpCode int
 	switch {
+	case w.deferredWriter.IsStatusCodeExplicitlyWritten():
+		// do nothing
 	case errors.Is(err, ErrParsingError):
-		httpCode = http.StatusBadRequest
+		w.deferredWriter.WriteHeader(http.StatusBadRequest)
 	case errors.Is(err, auth.ErrUnauthenticated):
-		httpCode = http.StatusUnauthorized
+		w.deferredWriter.WriteHeader(http.StatusUnauthorized)
 	case errors.Is(err, auth.ErrPermissionDenied):
-		httpCode = http.StatusForbidden
+		w.deferredWriter.WriteHeader(http.StatusForbidden)
 	case err != nil:
-		httpCode = http.StatusInternalServerError
+		w.deferredWriter.WriteHeader(http.StatusInternalServerError)
 	default:
-		httpCode = w.httpCode
 	}
 
 	var bodyEncoded []byte
 	if w.encodeBodyFunc != nil {
 		var encodingErr error
-		bodyEncoded, encodingErr = w.encodeBodyFunc(w.impl.Header())
+		bodyEncoded, encodingErr = w.encodeBodyFunc(w.deferredWriter.Header())
 		if encodingErr != nil {
-			httpCode = http.StatusInternalServerError
+			w.deferredWriter.WriteHeader(http.StatusInternalServerError)
 			if err == nil {
 				err = encodingErr
 			}
 		}
 	}
-	w.impl.WriteHeader(httpCode)
-
 	if len(bodyEncoded) > 0 {
-		_, writeBodyErr := w.impl.Write(bodyEncoded)
-		if writeBodyErr != nil {
-			httpCode = http.StatusInternalServerError
-		}
-		if err == nil {
-			err = writeBodyErr
-		}
+		_, _ = w.deferredWriter.Write(bodyEncoded)
 	}
 
 	meta := getHandlerMetadata(ctx)
-	meta.Code = httpCode
+	meta.Code = w.deferredWriter.StatusCode()
 	meta.Error = err
+
+	w.deferredWriter.PersistWrite()
 }
 
 func (w *responseWriter) WritePanic(ctx context.Context, panic panicErr) {
@@ -236,17 +239,74 @@ func (w *responseWriter) WritePanic(ctx context.Context, panic panicErr) {
 	meta.Code = http.StatusInternalServerError
 	meta.Panic = &panic
 
-	w.impl.WriteHeader(http.StatusInternalServerError)
+	w.deferredWriter.WriteHeader(http.StatusInternalServerError)
+	w.deferredWriter.ClearData()
+	w.deferredWriter.PersistWrite()
+}
+
+func newDeferredResponseWriter(w http.ResponseWriter, r *http.Request) *deferredResponseWriter {
+	return &deferredResponseWriter{
+		w:        w,
+		r:        r,
+		httpCode: statusNotSetValue,
+		data:     nil,
+	}
+}
+
+func (w *deferredResponseWriter) Header() http.Header {
+	return w.w.Header()
+}
+
+func (w *deferredResponseWriter) Write(bytes []byte) (int, error) {
+	w.data = bytes
+	return len(bytes), nil
+}
+
+func (w *deferredResponseWriter) WriteHeader(statusCode int) {
+	w.httpCode = statusCode
+}
+
+func (w *deferredResponseWriter) StatusCode() int {
+	if w.IsStatusCodeExplicitlyWritten() {
+		return w.httpCode
+	}
+	return http.StatusOK
+}
+
+func (w *deferredResponseWriter) IsStatusCodeExplicitlyWritten() bool {
+	return w.httpCode != statusNotSetValue
+}
+
+func (w *deferredResponseWriter) ClearData() {
+	w.data = nil
+}
+
+func (w *deferredResponseWriter) PersistWrite() {
+	if w.IsStatusCodeExplicitlyWritten() {
+		w.w.WriteHeader(w.httpCode)
+	}
+
+	if len(w.data) == 0 {
+		return
+	}
+
+	_, err := w.w.Write(w.data)
+	if err != nil {
+		meta := getHandlerMetadata(w.r.Context())
+		if meta.Error == nil {
+			meta.Error = fmt.Errorf("write body: %w", err)
+		}
+	}
 }
 
 func httpHandlerWrapper(handler HandlerFunc) http.HandlerFunc {
-	recoverPanic := func(r *http.Request, respWriter *responseWriter) {
+	recoverPanic := func(r *http.Request, w *responseWriter) {
 		msg := recover()
 		if msg == nil {
 			return
 		}
 
-		respWriter.WritePanic(r.Context(), panicErr{
+		w.WritePanic(r.Context(), panicErr{
 			Message:    fmt.Sprintf("%v", msg),
 			Stacktrace: debug.Stack(),
 		})
@@ -254,9 +314,8 @@ func httpHandlerWrapper(handler HandlerFunc) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		respWriter := &responseWriter{
-			impl:           w,
+			deferredWriter: newDeferredResponseWriter(w, r),
 			encodeBodyFunc: nil,
-			httpCode:       http.StatusOK,
 		}
 
 		defer recoverPanic(r, respWriter)

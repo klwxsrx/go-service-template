@@ -210,6 +210,8 @@ func WithRequestAuth[T auth.Principal](fn func(auth.Authentication[T], Request))
 	}
 }
 
+// TODO: add rest-client option which parses 401/403 or specified errors then converts to AuthErrors
+
 type ClientFactory struct {
 	baseOpts []ClientOption
 }

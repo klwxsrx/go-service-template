@@ -97,7 +97,7 @@ func (s server) Register(handler Handler, opts ...ServerOption) {
 		}
 	}
 
-	httpHandler := httpHandlerWrapper(handler.HTTPHandler())
+	httpHandler := httpHandlerWrapper(handler.Handle)
 	router.
 		Name(getRouteName(handler.Method(), handler.Path())).
 		Methods(handler.Method()).
