@@ -1,0 +1,18 @@
+pre-commit:
+  piped: true
+  skip:
+    - merge
+    - rebase
+  commands:
+    go-tools:
+      priority: 1
+      run: make tools
+    go-check-codegen:
+      priority: 2
+      run: make codegen && git diff --quiet
+    go-checks:
+      priority: 3
+      run: make check
+    go-build:
+      priority: 4
+      run: make build-clean build

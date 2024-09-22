@@ -1,27 +1,29 @@
-export TOOLS_PATH := ${CURDIR}/tools/bin
+export TOOLS_BIN := ${CURDIR}/tools/bin
 
-.PHONY: build-clean codegen codegen-clean lint lint-fix arch test tools tools-invalidate tools-clean git-pre-commit
+.PHONY: check build-clean codegen codegen-clean lint lint-fix arch test tools tools-invalidate tools-clean git-hooks-invalidate git-hooks-clean
 
-all: lint arch test build-clean build
+all: check build-clean build
+
+check: lint arch test
 
 build: bin/duck bin/duckhandler bin/messageoutbox
 
 build-clean:
 	rm -rf bin/*
 
-bin/%:
+bin/%: codegen
 	GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -o ./bin/$(notdir $@) ./cmd/$(notdir $@)
 
 codegen: tools codegen-clean
 	go generate ./...
 
 codegen-clean:
-	find . -type f -path "*/mock/*" -exec rm -f "{}" \;
+	find . -type f \( -path "*/mock/*" -o -path "*/generated/*" \) -exec rm -f "{}" \;
 
-lint: codegen tools
+lint: tools codegen
 	tools/bin/golangci-lint --color=always run ./...
 
-lint-fix: codegen tools
+lint-fix: tools codegen
 	tools/bin/golangci-lint --color=always run --fix ./...
 
 arch: tools
@@ -30,10 +32,12 @@ arch: tools
 test: codegen
 	go test ./...
 
-tools: tools-invalidate tools/bin/mockgen tools/bin/golangci-lint tools/bin/go-cleanarch tools/bin/goverter tools/bin/.go-mod.checksum
+tools: tools-invalidate git-hooks-invalidate \
+	tools/bin/mockgen tools/bin/golangci-lint tools/bin/go-cleanarch tools/bin/goverter tools/bin/lefthook \
+	tools/bin/.go-mod.checksum tools/bin/.git-hooks.checksum
 
 tools-invalidate:
-	shasum -c ./tools/bin/.go-mod.checksum 2> /dev/null || make tools-clean
+	shasum -c ./tools/bin/.go-mod.checksum > /dev/null 2>&1 || make tools-clean
 
 tools-clean:
 	rm -rf ./tools/bin/* && rm -f ./tools/bin/.go-mod.checksum
@@ -50,13 +54,17 @@ tools/bin/go-cleanarch:
 tools/bin/goverter:
 	go build -modfile ./tools/go.mod -o ./tools/bin/goverter github.com/jmattheis/goverter/cmd/goverter
 
+tools/bin/lefthook:
+	go build -modfile ./tools/go.mod -o ./tools/bin/lefthook github.com/evilmartians/lefthook
+
+git-hooks-invalidate:
+	shasum -c ./tools/bin/.git-hooks.checksum ./tools/bin/.go-mod.checksum > /dev/null 2>&1 || make git-hooks-clean
+
+git-hooks-clean:
+	rm -rf .git/hooks/* && rm -f ./tools/bin/.git-hooks.checksum
+
 tools/bin/.go-mod.checksum:
 	shasum ./tools/go.mod ./tools/go.sum > ./tools/bin/.go-mod.checksum
 
-git-hooks: .git/hooks/pre-commit
-
-git-pre-commit: lint arch test build-clean build
-
-.git/hooks/%:
-	cp  ./tools/githooks/$(notdir $@) ./.git/hooks/$(notdir $@) && \
-	chmod +x ./.git/hooks/$(notdir $@)
+tools/bin/.git-hooks.checksum: tools/bin/lefthook
+	tools/bin/lefthook install && shasum ./.lefthook.yaml > ./tools/bin/.git-hooks.checksum
