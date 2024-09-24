@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -120,39 +121,54 @@ func WithRequestObservability(observer observability.Observer, requestIDHeaderNa
 }
 
 func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) ClientOption {
-	const destinationNameLogField = "destinationName"
 	return func(c *ClientImpl) {
-		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
+		c.RESTClient.OnSuccess(func(_ *resty.Client, resp *resty.Response) {
 			authentication, _ := auth.GetAuthentication[auth.Principal](resp.Request.Context())
 			logger := getAuthFieldsLogger(authentication, logger)
 
 			routeName, _ := resp.Request.Context().Value(clientRouteName).(string)
-			logger = getRequestResponseFieldsLogger(routeName, resp.Request.RawRequest, resp.StatusCode(), logger)
-
-			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
-				destinationNameLogField: getDestinationNameForLogging(c),
-			}))
+			logger = getResponseFieldsLogger(getDestinationNameForLogging(c), routeName, resp.Request.RawRequest, resp.StatusCode(), logger)
 
 			if resp.StatusCode() >= http.StatusInternalServerError {
 				logger.Log(resp.Request.Context(), errorLevel, "http call completed with internal error")
 			} else {
 				logger.Log(resp.Request.Context(), infoLevel, "http call completed")
 			}
+		})
 
-			return nil
+		c.RESTClient.OnInvalid(func(req *resty.Request, err error) {
+			authentication, _ := auth.GetAuthentication[auth.Principal](req.Context())
+			logger := getAuthFieldsLogger(authentication, logger)
+
+			routeName, _ := req.Context().Value(clientRouteName).(string)
+			if req.RawRequest != nil {
+				logger = getResponseFieldsLogger(getDestinationNameForLogging(c), routeName, req.RawRequest, 0, logger)
+			} else {
+				logger = getRouteNameFieldsLogger(routeName, logger)
+			}
+
+			logger.
+				WithError(err).
+				Log(req.Context(), errorLevel, "http call not executed, invalid request")
 		})
 
 		c.RESTClient.OnError(func(req *resty.Request, err error) {
 			authentication, _ := auth.GetAuthentication[auth.Principal](req.Context())
 			logger := getAuthFieldsLogger(authentication, logger)
 
-			if req.RawRequest != nil {
+			var respError *resty.ResponseError
+			switch {
+			case errors.As(err, &respError):
+				resp := respError.Response
+				routeName, _ := resp.Request.Context().Value(clientRouteName).(string)
+				logger = getResponseFieldsLogger(getDestinationNameForLogging(c), routeName, resp.Request.RawRequest, resp.StatusCode(), logger)
+			case req.RawRequest != nil:
 				routeName, _ := req.Context().Value(clientRouteName).(string)
-				logger = getRequestFieldsLogger(routeName, req.RawRequest, logger)
+				logger = getResponseFieldsLogger(getDestinationNameForLogging(c), routeName, req.RawRequest, 0, logger)
+			default:
+				routeName, _ := req.Context().Value(clientRouteName).(string)
+				logger = getRouteNameFieldsLogger(routeName, logger)
 			}
-			logger = logger.With(wrapFieldsWithRequestLogEntry(log.Fields{
-				destinationNameLogField: getDestinationNameForLogging(c),
-			}))
 
 			logger.
 				WithError(err).
@@ -161,32 +177,26 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 	}
 }
 
-func WithRequestHeader(header, value string) ClientOption {
-	return func(c *ClientImpl) {
-		c.RESTClient.SetHeader(header, value)
-	}
-}
-
 func WithRequestMetrics(metrics metric.Metrics) ClientOption {
-	return func(c *ClientImpl) {
-		destinationName := c.DestinationName
-		if destinationName == "" {
-			destinationName = "none"
-		}
-
+	return func(c *ClientImpl) { // TODO: on success, on error, on invalid
 		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
 			var authType *string
 			if resp.Request != nil {
-				authentication, _ := auth.GetAuthentication[auth.Principal](resp.Request.Context())
-				if authentication.Principal() != nil {
+				authentication, ok := auth.GetAuthentication[auth.Principal](resp.Request.Context())
+				if ok && authentication.Principal() != nil {
 					v := string((*authentication.Principal()).Type())
 					authType = &v
 				}
 			}
 
+			destinationName := c.DestinationName
+			if destinationName == "" {
+				destinationName = "none"
+			}
+
 			metrics.With(metric.Labels{
 				"destination": destinationName,
-				"authType":    authType,
+				"auth":        authType,
 				"method":      resp.Request.Method,
 				"path":        resp.Request.RawRequest.URL.Path,
 				"code":        fmt.Sprintf("%d", resp.StatusCode()),
@@ -210,7 +220,13 @@ func WithRequestAuth[T auth.Principal](fn func(auth.Authentication[T], Request))
 	}
 }
 
-// TODO: add rest-client option which parses 401/403 or specified errors then converts to AuthErrors
+func WithRequestHeader(header, value string) ClientOption {
+	return func(c *ClientImpl) {
+		c.RESTClient.SetHeader(header, value)
+	}
+}
+
+// TODO: WithResponseCodeErrorMapping
 
 type ClientFactory struct {
 	baseOpts []ClientOption

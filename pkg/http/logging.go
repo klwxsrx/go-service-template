@@ -35,7 +35,7 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 
 			routeName := mux.CurrentRoute(r).GetName()
 			logger := getAuthFieldsLogger(result.Auth, logger)
-			logger = getRequestResponseFieldsLogger(routeName, r, result.Code, logger)
+			logger = getResponseFieldsLogger("", routeName, r, result.Code, logger)
 			switch {
 			case result.Panic != nil:
 				logger.WithField("panic", log.Fields{
@@ -70,15 +70,19 @@ func getAuthFieldsLogger(
 		principalID = (*authentication.Principal()).ID()
 	}
 
-	return logger.WithField("auth", log.Fields{
+	fields := log.Fields{
 		"type": principalType,
 		"id":   principalID,
-	})
+	}
+
+	return logger.WithField("auth", fields)
 }
 
-func getRequestFieldsLogger(
+func getResponseFieldsLogger(
+	destinationName string,
 	routeName string,
 	request *http.Request,
+	responseCode int,
 	logger log.Logger,
 ) log.Logger {
 	fields := log.Fields{
@@ -88,28 +92,23 @@ func getRequestFieldsLogger(
 		"path":     request.URL.Path,
 		"rawQuery": request.URL.RawQuery,
 	}
+	if destinationName != "" {
+		fields["destination"] = destinationName
+	}
 	if routeName != "" {
-		fields["routeName"] = routeName
+		fields["route"] = routeName
+	}
+	if responseCode != 0 {
+		fields["responseCode"] = responseCode
 	}
 
-	return logger.With(wrapFieldsWithRequestLogEntry(fields))
+	return logger.WithField("httpRequest", fields)
 }
 
-func getRequestResponseFieldsLogger(
-	routeName string,
-	request *http.Request,
-	responseCode int,
-	logger log.Logger,
-) log.Logger {
-	return getRequestFieldsLogger(routeName, request, logger).With(wrapFieldsWithRequestLogEntry(
-		log.Fields{
-			"responseCode": responseCode,
-		},
-	))
-}
-
-func wrapFieldsWithRequestLogEntry(fields log.Fields) log.Fields {
-	return log.Fields{
-		"httpRequest": fields,
+func getRouteNameFieldsLogger(routeName string, logger log.Logger) log.Logger {
+	if routeName == "" {
+		return logger
 	}
+
+	return logger.WithField("httpRequest", log.Fields{"route": routeName})
 }

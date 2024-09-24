@@ -46,7 +46,7 @@ type Logger interface {
 
 type logger struct {
 	impl   *slog.Logger
-	fields Fields
+	fields Fields // TODO: delete and simplify
 }
 
 func New(level Level) Logger {
