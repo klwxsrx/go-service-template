@@ -121,21 +121,8 @@ func WithRequestObservability(observer observability.Observer, requestIDHeaderNa
 }
 
 func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) ClientOption {
+	const httpCallLogMsg = "http call"
 	return func(c *ClientImpl) {
-		c.RESTClient.OnSuccess(func(_ *resty.Client, resp *resty.Response) {
-			authentication, _ := auth.GetAuthentication[auth.Principal](resp.Request.Context())
-			logger := getAuthFieldsLogger(authentication, logger)
-
-			routeName, _ := resp.Request.Context().Value(clientRouteName).(string)
-			logger = getResponseFieldsLogger(getDestinationNameForLogging(c), routeName, resp.Request.RawRequest, resp.StatusCode(), logger)
-
-			if resp.StatusCode() >= http.StatusInternalServerError {
-				logger.Log(resp.Request.Context(), errorLevel, "http call completed with internal error")
-			} else {
-				logger.Log(resp.Request.Context(), infoLevel, "http call completed")
-			}
-		})
-
 		c.RESTClient.OnInvalid(func(req *resty.Request, err error) {
 			authentication, _ := auth.GetAuthentication[auth.Principal](req.Context())
 			logger := getAuthFieldsLogger(authentication, logger)
@@ -149,36 +136,49 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 
 			logger.
 				WithError(err).
-				Log(req.Context(), errorLevel, "http call not executed, invalid request")
+				Log(req.Context(), errorLevel, "invalid request")
+		})
+
+		c.RESTClient.OnSuccess(func(_ *resty.Client, resp *resty.Response) {
+			authentication, _ := auth.GetAuthentication[auth.Principal](resp.Request.Context())
+			logger := getAuthFieldsLogger(authentication, logger)
+
+			routeName, _ := resp.Request.Context().Value(clientRouteName).(string)
+			logger = getResponseFieldsLogger(getDestinationNameForLogging(c), routeName, resp.Request.RawRequest, resp.StatusCode(), logger)
+
+			if resp.StatusCode() >= http.StatusInternalServerError {
+				logger.Log(resp.Request.Context(), errorLevel, httpCallLogMsg)
+			} else {
+				logger.Log(resp.Request.Context(), infoLevel, httpCallLogMsg)
+			}
 		})
 
 		c.RESTClient.OnError(func(req *resty.Request, err error) {
 			authentication, _ := auth.GetAuthentication[auth.Principal](req.Context())
 			logger := getAuthFieldsLogger(authentication, logger)
 
+			routeName, _ := req.Context().Value(clientRouteName).(string)
+
 			var respError *resty.ResponseError
 			switch {
 			case errors.As(err, &respError):
 				resp := respError.Response
-				routeName, _ := resp.Request.Context().Value(clientRouteName).(string)
 				logger = getResponseFieldsLogger(getDestinationNameForLogging(c), routeName, resp.Request.RawRequest, resp.StatusCode(), logger)
 			case req.RawRequest != nil:
-				routeName, _ := req.Context().Value(clientRouteName).(string)
 				logger = getResponseFieldsLogger(getDestinationNameForLogging(c), routeName, req.RawRequest, 0, logger)
 			default:
-				routeName, _ := req.Context().Value(clientRouteName).(string)
 				logger = getRouteNameFieldsLogger(routeName, logger)
 			}
 
 			logger.
 				WithError(err).
-				Log(req.Context(), errorLevel, "http call completed with error")
+				Log(req.Context(), errorLevel, httpCallLogMsg)
 		})
 	}
 }
 
 func WithRequestMetrics(metrics metric.Metrics) ClientOption {
-	return func(c *ClientImpl) { // TODO: on success, on error, on invalid
+	return func(c *ClientImpl) {
 		c.RESTClient.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
 			var authType *string
 			if resp.Request != nil {
@@ -194,8 +194,14 @@ func WithRequestMetrics(metrics metric.Metrics) ClientOption {
 				destinationName = "none"
 			}
 
+			routeName, _ := resp.Request.Context().Value(clientRouteName).(string)
+			if routeName == "" {
+				routeName = "none"
+			}
+
 			metrics.With(metric.Labels{
 				"destination": destinationName,
+				"route":       routeName,
 				"auth":        authType,
 				"method":      resp.Request.Method,
 				"path":        resp.Request.RawRequest.URL.Path,
