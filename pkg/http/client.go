@@ -59,6 +59,7 @@ type (
 
 	ClientImpl struct {
 		DestinationName string
+		ResponseMWs     []func(*resty.Response, error) error
 		RESTClient      *resty.Client
 		opts            []ClientOption
 	}
@@ -67,6 +68,7 @@ type (
 func NewClient(opts ...ClientOption) Client {
 	client := ClientImpl{
 		DestinationName: "",
+		ResponseMWs:     nil,
 		RESTClient:      resty.New(),
 		opts:            opts,
 	}
@@ -85,7 +87,10 @@ func (c ClientImpl) NewRequest(ctx context.Context, route Route) Request {
 	r.Method = route.Method
 	r.URL = route.URL
 
-	return restyRequestWrapper{r}
+	return restyRequestWrapper{
+		Request:     r,
+		responseMWs: c.ResponseMWs,
+	}
 }
 
 func (c ClientImpl) With(opts ...ClientOption) Client {
@@ -96,6 +101,7 @@ func (c ClientImpl) With(opts ...ClientOption) Client {
 	mergedOpts := make([]ClientOption, 0, len(c.opts)+len(opts))
 	mergedOpts = append(mergedOpts, c.opts...)
 	mergedOpts = append(mergedOpts, opts...)
+
 	return NewClient(mergedOpts...)
 }
 
@@ -220,7 +226,7 @@ func WithRequestAuth[T auth.Principal](fn func(auth.Authentication[T], Request))
 				return nil
 			}
 
-			fn(authentication, restyRequestWrapper{r})
+			fn(authentication, restyRequestWrapper{Request: r})
 			return nil
 		})
 	}
@@ -232,7 +238,26 @@ func WithRequestHeader(header, value string) ClientOption {
 	}
 }
 
-// TODO: WithResponseCodeErrorMapping
+func WithResponseCodeMapping(statusCodes map[int]error) ClientOption {
+	if len(statusCodes) == 0 {
+		return func(*ClientImpl) {}
+	}
+
+	mw := func(resp *resty.Response, err error) error {
+		if err != nil {
+			return nil
+		}
+
+		var ok bool
+		if err, ok = statusCodes[resp.StatusCode()]; ok {
+			err = fmt.Errorf("%w: response status code %d", err, resp.StatusCode())
+		}
+
+		return err
+	}
+
+	return func(c *ClientImpl) { c.ResponseMWs = append(c.ResponseMWs, mw) }
+}
 
 type ClientFactory struct {
 	baseOpts []ClientOption
@@ -268,12 +293,14 @@ func getDestinationNameForLogging(c *ClientImpl) string {
 	if c.DestinationName != "" {
 		return c.DestinationName
 	}
+
 	return "-"
 }
 
 type (
 	restyRequestWrapper struct {
 		*resty.Request
+		responseMWs []func(*resty.Response, error) error
 	}
 
 	restyResponseWrapper struct {
@@ -330,6 +357,7 @@ func (r restyRequestWrapper) SetCookies(cookies []http.Cookie) Request {
 	for _, cookie := range cookies {
 		r.Request.SetCookie(&cookie)
 	}
+
 	return r
 }
 
@@ -358,6 +386,11 @@ func (r restyRequestWrapper) Send() (Response, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	for _, mw := range r.responseMWs {
+		err = mw(resp, err)
+	}
+
 	return restyResponseWrapper{resp}, err
 }
 
@@ -367,6 +400,7 @@ func (r restyResponseWrapper) Cookies() []http.Cookie {
 	for _, cookie := range restyCookies {
 		result = append(result, *cookie)
 	}
+
 	return result
 }
 
