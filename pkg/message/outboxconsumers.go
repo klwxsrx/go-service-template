@@ -230,12 +230,13 @@ func (c *outboxConsumer) Nack(msg *ConsumerMessage) {
 	// do nothing
 }
 
-func (c *outboxConsumer) Close() {
+func (c *outboxConsumer) Close() error {
 	c.closeMutex.Lock()
 	defer c.closeMutex.Unlock()
 
 	c.isClosed = true
 	close(c.consumerCh)
+	return nil
 }
 
 func (c *outboxConsumer) processOutboxMessages(ctx context.Context) {

@@ -3,8 +3,8 @@ package message
 import "context"
 
 const (
-	ConsumptionTypeSingle ConsumptionType = "single"
-	ConsumptionTypeShared ConsumptionType = "shared"
+	ConsumptionTypeExclusive ConsumptionType = "exclusive"
+	ConsumptionTypeShared    ConsumptionType = "shared"
 )
 
 type (
@@ -18,7 +18,7 @@ type (
 		Messages() <-chan *ConsumerMessage
 		Ack(msg *ConsumerMessage)
 		Nack(msg *ConsumerMessage)
-		Close()
+		Close() error
 	}
 
 	ConsumerProvider interface {

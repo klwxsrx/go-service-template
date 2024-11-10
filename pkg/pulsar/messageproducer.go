@@ -10,6 +10,8 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
+const messageIDPropertyName = "messageID"
+
 func (b *MessageBroker) Produce(ctx context.Context, msg *message.Message) error {
 	producer, err := b.getOrCreateProducer(msg.Topic)
 	if err != nil {

@@ -76,7 +76,7 @@ func RegisterEventHandler[T event.Event](handler event.TypedHandler[T]) Register
 	}
 }
 
-func NewDomainEventTopic(domainName, aggregateName string, customTags ...string) Topic {
+func NewTopicDomainEvent(domainName, aggregateName string, customTags ...string) Topic {
 	return NewTopic(
 		"domain-event",
 		WithTopicDomainName(domainName),
@@ -85,9 +85,9 @@ func NewDomainEventTopic(domainName, aggregateName string, customTags ...string)
 	)
 }
 
-func NewDomainEventTopicSubscription(domainName, aggregateName string, customTags ...string) TopicSubscription {
+func NewTopicSubscriptionDomainEvent(domainName, aggregateName string, customTags ...string) TopicSubscription {
 	return TopicSubscription{
-		Topic:           NewDomainEventTopic(domainName, aggregateName, customTags...),
-		ConsumptionType: ConsumptionTypeSingle,
+		Topic:           NewTopicDomainEvent(domainName, aggregateName, customTags...),
+		ConsumptionType: ConsumptionTypeExclusive,
 	}
 }

@@ -25,7 +25,7 @@ const (
 )
 
 var (
-	DomainEventTopicDefinitionDuck = pkgmessage.NewDomainEventTopicSubscription(domainName, domain.AggregateNameDuck)
+	DomainEventTopicDefinitionDuck = pkgmessage.NewTopicSubscriptionDomainEvent(domainName, domain.AggregateNameDuck)
 
 	messageSubscriberNameDuck = pkgmessage.NewSubscriberServiceName(domainName)
 )

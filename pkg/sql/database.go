@@ -11,8 +11,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // postgresql driver
-
-	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
 const defaultConnectionTimeout = 10 * time.Second
@@ -55,16 +53,15 @@ type TxClient interface {
 
 type Database interface {
 	TxClient
-	Close(ctx context.Context)
+	Close() error
 }
 
 type database struct {
 	transactionalClient
-	db     *sqlx.DB
-	logger log.Logger
+	db *sqlx.DB
 }
 
-func NewDatabase(ctx context.Context, config *Config, logger log.Logger) (Database, error) {
+func NewDatabase(ctx context.Context, config *Config) (Database, error) {
 	if config.ConnectionTimeout <= 0 {
 		config.ConnectionTimeout = defaultConnectionTimeout
 	}
@@ -80,15 +77,11 @@ func NewDatabase(ctx context.Context, config *Config, logger log.Logger) (Databa
 	return &database{
 		transactionalClient: transactionalClient{db},
 		db:                  db,
-		logger:              logger,
 	}, nil
 }
 
-func (c *database) Close(ctx context.Context) {
-	err := c.db.Close()
-	if err != nil {
-		c.logger.WithError(err).Error(ctx, "failed to close sql database")
-	}
+func (c *database) Close() error {
+	return c.db.Close()
 }
 
 func openConnection(ctx context.Context, config *Config) (*sqlx.DB, error) {
@@ -104,9 +97,10 @@ func openConnection(ctx context.Context, config *Config) (*sqlx.DB, error) {
 	eb.MaxInterval = config.ConnectionTimeout / 4
 	eb.MaxElapsedTime = config.ConnectionTimeout
 
-	err = backoff.Retry(func() error {
-		return db.PingContext(ctx)
-	}, eb)
+	err = backoff.Retry(
+		func() error { return db.PingContext(ctx) },
+		backoff.WithContext(eb, ctx),
+	)
 	if err != nil {
 		_ = db.Close()
 		return nil, err

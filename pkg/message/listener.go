@@ -75,8 +75,7 @@ func (l *listener) workerImpl(ctx context.Context) error {
 				}
 				l.processMessage(msg)
 			case <-ctx.Done():
-				l.consumer.Close()
-				return nil
+				return l.consumer.Close()
 			}
 		}
 	}(ctx)

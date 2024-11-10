@@ -70,7 +70,7 @@ func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHand
 	}
 }
 
-func NewTaskQueueTopic(domainName, taskType string, customTags ...string) Topic {
+func NewTopicTaskQueue(domainName, taskType string, customTags ...string) Topic {
 	return NewTopic(
 		"task-queue",
 		WithTopicDomainName(domainName),
@@ -79,9 +79,9 @@ func NewTaskQueueTopic(domainName, taskType string, customTags ...string) Topic 
 	)
 }
 
-func NewTaskQueueTopicSubscription(domainName, taskType string, customTags ...string) TopicSubscription {
+func NewTopicSubscriptionTaskQueue(domainName, taskType string, customTags ...string) TopicSubscription {
 	return TopicSubscription{
-		Topic:           NewTaskQueueTopic(domainName, taskType, customTags...),
+		Topic:           NewTopicTaskQueue(domainName, taskType, customTags...),
 		ConsumptionType: ConsumptionTypeShared,
 	}
 }

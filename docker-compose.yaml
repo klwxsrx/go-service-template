@@ -1,4 +1,3 @@
-version: "3.9"
 services: # TODO: add apps
 
   duck-postgresql:
@@ -21,7 +20,7 @@ services: # TODO: add apps
     restart: unless-stopped
 
   duck-apache-pulsar:
-    image: apachepulsar/pulsar:3.2.2
+    image: apachepulsar/pulsar:4.0.0
     container_name: apache-pulsar
     hostname: apache-pulsar
     volumes:

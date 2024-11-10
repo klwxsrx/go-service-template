@@ -7,4 +7,4 @@ import (
 
 const domainName = "goose"
 
-var DomainEventTopicDefinitionGoose = pkgmessage.NewDomainEventTopicSubscription(domainName, goose.AggregateNameGoose)
+var DomainEventTopicDefinitionGoose = pkgmessage.NewTopicSubscriptionDomainEvent(domainName, goose.AggregateNameGoose)

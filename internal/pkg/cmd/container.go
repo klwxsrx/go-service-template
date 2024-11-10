@@ -48,7 +48,7 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 	logger := loggerProvider()
 	observer := observerProvider(logger)
 
-	db := sqlDatabaseProvider(ctx, logger)
+	db := sqlDatabaseProvider(ctx)
 	dbMigrations := sqlMigrationsProvider(ctx, db, logger)
 	sqlMessageOutboxStorage := sqlMessageOutboxStorageProvider(db, dbMigrations)
 
@@ -84,7 +84,11 @@ func (i *InfrastructureContainer) Close(ctx context.Context) {
 
 	i.MessageOutbox.IfLoaded(func(outbox message.OutboxProducer) { outbox.Close() })
 	i.messageBrokerImpl.IfLoaded(func(broker *pulsar.MessageBroker) { broker.Close() })
-	i.DB.IfLoaded(func(db sql.Database) { db.Close(ctx) })
+	i.DB.IfLoaded(func(db sql.Database) {
+		if err := db.Close(); err != nil {
+			i.Logger.MustLoad().WithError(err).Error(ctx, "failed to close postgresql database")
+		}
+	})
 }
 
 func metricsProvider() lazy.Loader[metric.Metrics] {
@@ -119,10 +123,7 @@ func observerProvider(
 	})
 }
 
-func sqlDatabaseProvider(
-	ctx context.Context,
-	logger lazy.Loader[log.Logger],
-) lazy.Loader[sql.Database] {
+func sqlDatabaseProvider(ctx context.Context) lazy.Loader[sql.Database] {
 	return lazy.New(func() (sql.Database, error) {
 		sqlConfig := &sql.Config{
 			DSN: sql.DSN{
@@ -139,7 +140,7 @@ func sqlDatabaseProvider(
 			sqlConfig.ConnectionTimeout = *sqlConnTimeout
 		}
 
-		db, err := sql.NewDatabase(ctx, sqlConfig, logger.MustLoad())
+		db, err := sql.NewDatabase(ctx, sqlConfig)
 		if err != nil {
 			panic(fmt.Errorf("open sql connection: %w", err))
 		}
@@ -213,8 +214,7 @@ func pulsarMessageBrokerProvider() lazy.Loader[*pulsar.MessageBroker] {
 			config.ConnectionTimeout = *connTimeout
 		}
 
-		stubLogger := log.New(log.LevelDisabled)
-		messageBroker, err := pulsar.NewMessageBroker(config, stubLogger)
+		messageBroker, err := pulsar.NewMessageBroker(config)
 		if err != nil {
 			panic(fmt.Errorf("open pulsar connection: %w", err))
 		}

@@ -11,6 +11,10 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
+const pulsarMessageIDContextKey contextKey = iota
+
+type contextKey int
+
 func (b *MessageBroker) Consumer(
 	topic message.Topic,
 	subscriberName message.SubscriberName,
@@ -20,7 +24,7 @@ func (b *MessageBroker) Consumer(
 	switch consumptionType {
 	case message.ConsumptionTypeShared:
 		typeOption = pulsar.Shared
-	case message.ConsumptionTypeSingle:
+	case message.ConsumptionTypeExclusive:
 		typeOption = pulsar.Failover
 	default:
 		typeOption = pulsar.Failover
@@ -41,8 +45,8 @@ func (b *MessageBroker) Consumer(
 }
 
 type messageConsumer struct {
-	name   string
-	pulsar pulsar.Consumer
+	name string
+	impl pulsar.Consumer
 
 	onceDoer *sync.Once
 	messages chan *message.ConsumerMessage
@@ -51,7 +55,7 @@ type messageConsumer struct {
 func newMessageConsumer(pulsarConsumer pulsar.Consumer, subscribedTopic message.Topic) message.Consumer {
 	return &messageConsumer{
 		name:     fmt.Sprintf("pulsar/%s/%s", pulsarConsumer.Subscription(), subscribedTopic),
-		pulsar:   pulsarConsumer,
+		impl:     pulsarConsumer,
 		onceDoer: &sync.Once{},
 		messages: make(chan *message.ConsumerMessage),
 	}
@@ -64,7 +68,7 @@ func (c *messageConsumer) Name() string {
 func (c *messageConsumer) Messages() <-chan *message.ConsumerMessage {
 	messageHandler := func() {
 		for {
-			msg, ok := <-c.pulsar.Chan()
+			msg, ok := <-c.impl.Chan()
 			if !ok {
 				close(c.messages)
 				break
@@ -105,7 +109,7 @@ func (c *messageConsumer) Ack(msg *message.ConsumerMessage) {
 	}
 
 	// single topic pulsar consumer doesn't return any errors
-	_ = c.pulsar.AckID(messageID)
+	_ = c.impl.AckID(messageID)
 }
 
 func (c *messageConsumer) Nack(msg *message.ConsumerMessage) {
@@ -114,9 +118,10 @@ func (c *messageConsumer) Nack(msg *message.ConsumerMessage) {
 		return
 	}
 
-	c.pulsar.NackID(messageID)
+	c.impl.NackID(messageID)
 }
 
-func (c *messageConsumer) Close() {
-	c.pulsar.Close()
+func (c *messageConsumer) Close() error {
+	c.impl.Close()
+	return nil
 }

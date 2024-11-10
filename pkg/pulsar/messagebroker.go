@@ -12,24 +12,24 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
-const defaultConnectionTimeout = 20 * time.Second
+const defaultConnectionTimeout = 10 * time.Second
 
 type Config struct {
 	Address           string
 	ConnectionTimeout time.Duration
 }
 
-type MessageBroker struct { // TODO: change to kafka
+type MessageBroker struct {
 	client pulsar.Client
 
 	producerMutexes *sync.Map
 	producers       map[message.Topic]pulsar.Producer
 }
 
-func NewMessageBroker(config *Config, logger log.Logger) (*MessageBroker, error) {
+func NewMessageBroker(config *Config) (*MessageBroker, error) {
 	c, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL:    fmt.Sprintf("pulsar://%s", config.Address),
-		Logger: newLoggerAdapter(logger),
+		Logger: newLoggerAdapter(log.New(log.LevelDisabled)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create pulsar client: %w", err)
