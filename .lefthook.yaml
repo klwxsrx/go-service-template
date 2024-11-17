@@ -7,7 +7,7 @@ pre-commit:
     go-tools:
       priority: 1
       run: make tools
-    go-check-codegen:
+    go-codegen:
       priority: 2
       run: make codegen && git diff --quiet
     go-checks:

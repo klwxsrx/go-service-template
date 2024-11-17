@@ -238,6 +238,13 @@ func WithRequestHeader(header, value string) ClientOption {
 	}
 }
 
+func WithAuthResponseCodeMapping() ClientOption {
+	return WithResponseCodeMapping(map[int]error{
+		http.StatusUnauthorized: auth.ErrUnauthenticated,
+		http.StatusForbidden:    auth.ErrPermissionDenied,
+	})
+}
+
 func WithResponseCodeMapping(statusCodes map[int]error) ClientOption {
 	if len(statusCodes) == 0 {
 		return func(*ClientImpl) {}
