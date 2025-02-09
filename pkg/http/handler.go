@@ -8,10 +8,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/gorilla/mux"
-
 	"github.com/klwxsrx/go-service-template/pkg/auth"
-	"github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
 const statusNotSetValue = 0
@@ -32,130 +29,6 @@ type (
 		SetJSONBody(data any) ResponseWriter
 	}
 
-	RequestDataProvider[T any] func(*http.Request) (T, error)
-
-	supportedParsingTypes interface {
-		strings.SupportedValueParsingTypes | strings.SupportedPointerParsingTypes
-	}
-)
-
-var ErrParsingError = errors.New("invalid request data")
-
-func Parse[T any](from *http.Request, data RequestDataProvider[T], lastErr error) (T, error) {
-	if lastErr != nil {
-		var result T
-		return result, lastErr
-	}
-
-	return data(from)
-}
-
-func ParseOptional[T any](from *http.Request, data RequestDataProvider[T], lastErr error) *T {
-	if lastErr != nil {
-		return nil
-	}
-
-	result, err := data(from)
-	if err != nil {
-		return nil
-	}
-
-	return &result
-}
-
-func PathParameter[T supportedParsingTypes](param string) RequestDataProvider[T] {
-	return func(r *http.Request) (T, error) {
-		params := mux.Vars(r)
-		paramValue, ok := params[param]
-		if !ok {
-			var result T
-			return result, fmt.Errorf("%w: path parameter %s not found", ErrParsingError, param)
-		}
-		return parseTypedValueImpl[T](paramValue)
-	}
-}
-
-func QueryParameter[T supportedParsingTypes](param string) RequestDataProvider[T] {
-	return func(r *http.Request) (T, error) {
-		value := r.URL.Query().Get(param)
-		if value == "" {
-			var result T
-			return result, fmt.Errorf("%w: query parameter %s not found", ErrParsingError, param)
-		}
-		return parseTypedValueImpl[T](value)
-	}
-}
-
-func QueryParameters[T supportedParsingTypes](param string) RequestDataProvider[[]T] {
-	return func(r *http.Request) ([]T, error) {
-		values, ok := r.URL.Query()[param]
-		if !ok {
-			return nil, fmt.Errorf("%w: query parameter %s not found", ErrParsingError, param)
-		}
-		result := make([]T, 0, len(values))
-		for _, value := range values {
-			concreteValue, err := parseTypedValueImpl[T](value)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, concreteValue)
-		}
-		return result, nil
-	}
-}
-
-func Header[T supportedParsingTypes](key string) RequestDataProvider[T] {
-	return func(r *http.Request) (T, error) {
-		header := r.Header.Get(key)
-		if header == "" {
-			var result T
-			return result, fmt.Errorf("%w: header with key %s not found", ErrParsingError, key)
-		}
-		return parseTypedValueImpl[T](header)
-	}
-}
-
-func Cookie(name string) RequestDataProvider[*http.Cookie] {
-	return func(r *http.Request) (*http.Cookie, error) {
-		cookie, err := r.Cookie(name)
-		if err != nil {
-			return nil, fmt.Errorf("%w: cookie with name %s not found", ErrParsingError, name)
-		}
-		return cookie, nil
-	}
-}
-
-func CookieValue[T supportedParsingTypes](name string) RequestDataProvider[T] {
-	return func(r *http.Request) (T, error) {
-		cookie, err := r.Cookie(name)
-		if err != nil {
-			var result T
-			return result, fmt.Errorf("%w: cookie with name %s not found", ErrParsingError, name)
-		}
-		return parseTypedValueImpl[T](cookie.Value)
-	}
-}
-
-func JSONBody[T any]() RequestDataProvider[T] {
-	return func(r *http.Request) (T, error) {
-		var body T
-		err := json.NewDecoder(r.Body).Decode(&body)
-		if err != nil {
-			return body, fmt.Errorf("%w: encode json body: %w", ErrParsingError, err)
-		}
-		return body, nil
-	}
-}
-
-func parseTypedValueImpl[T supportedParsingTypes](value string) (T, error) {
-	v, err := strings.ParseTypedValue[T](value)
-	if err == nil {
-		return v, nil
-	}
-	return v, fmt.Errorf("%w: %w", ErrParsingError, err)
-}
-
-type (
 	responseWriter struct {
 		deferredWriter *deferredResponseWriter
 		encodeBodyFunc func(http.Header) ([]byte, error)
@@ -234,10 +107,10 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 	w.deferredWriter.PersistWrite()
 }
 
-func (w *responseWriter) WritePanic(ctx context.Context, panic panicErr) {
+func (w *responseWriter) WritePanic(ctx context.Context, p panicErr) {
 	meta := getHandlerMetadata(ctx)
 	meta.Code = http.StatusInternalServerError
-	meta.Panic = &panic
+	meta.Panic = &p
 
 	w.deferredWriter.WriteHeader(http.StatusInternalServerError)
 	w.deferredWriter.ClearData()

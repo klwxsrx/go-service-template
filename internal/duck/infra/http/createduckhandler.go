@@ -26,8 +26,8 @@ func (h CreateDuckHandler) Path() string {
 }
 
 func (h CreateDuckHandler) Handle(w pkghttp.ResponseWriter, r *http.Request) (err error) {
-	data, err := pkghttp.Parse(r, pkghttp.JSONBody[createDuckIn](), err)
-	_ = pkghttp.ParseOptional(r, pkghttp.QueryParameter[*string]("utm"), err)
+	data, err := pkghttp.ParseRequest(r, pkghttp.JSONBody[createDuckIn](), err)
+	_ = pkghttp.ParseRequestOptional(r, pkghttp.QueryParameter[*string]("utm"), err)
 	if err != nil {
 		return err
 	}

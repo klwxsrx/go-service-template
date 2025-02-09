@@ -27,8 +27,8 @@ func (h SetDuckActiveHandler) Path() string {
 }
 
 func (h SetDuckActiveHandler) Handle(w pkghttp.ResponseWriter, r *http.Request) (err error) {
-	duckID, err := pkghttp.Parse(r, pkghttp.PathParameter[uuid.UUID]("duckID"), err)
-	isActive, err := pkghttp.Parse(r, pkghttp.PathParameter[bool]("isActive"), err)
+	duckID, err := pkghttp.ParseRequest(r, pkghttp.PathParameter[uuid.UUID]("duckID"), err)
+	isActive, err := pkghttp.ParseRequest(r, pkghttp.PathParameter[bool]("isActive"), err)
 	if err != nil {
 		return err
 	}

@@ -215,7 +215,7 @@ func migrationTableDDL() ([]Migration, error) {
 			SQL: `
 				create table if not exists migration (
 					id text primary key
-				)
+				);
 			`,
 		},
 	}, nil

@@ -46,8 +46,11 @@ type (
 		StatusCode() int
 		Header() http.Header
 		Cookies() []http.Cookie
-		Body() []byte
+		Body() io.ReadCloser
 		ContentLength() int64
+		RawRequest() *http.Request
+		RawResponse() *http.Response
+		Close()
 	}
 
 	ClientOption func(*ClientImpl)
@@ -83,7 +86,9 @@ func NewClient(opts ...ClientOption) Client {
 func (c ClientImpl) NewRequest(ctx context.Context, route Route) Request {
 	ctx = context.WithValue(ctx, clientRouteName, getRouteName(route.Method, route.URL))
 
-	r := c.RESTClient.NewRequest().SetContext(ctx)
+	r := c.RESTClient.NewRequest().
+		SetContext(ctx).
+		SetDoNotParseResponse(true)
 	r.Method = route.Method
 	r.URL = route.URL
 
@@ -411,6 +416,36 @@ func (r restyResponseWrapper) Cookies() []http.Cookie {
 	return result
 }
 
+func (r restyResponseWrapper) Body() io.ReadCloser {
+	if r.Response.RawResponse == nil {
+		return http.NoBody
+	}
+
+	return r.Response.RawResponse.Body
+}
+
 func (r restyResponseWrapper) ContentLength() int64 {
-	return r.RawResponse.ContentLength
+	if r.Response.RawResponse == nil {
+		return 0
+	}
+
+	return r.Response.RawResponse.ContentLength
+}
+
+func (r restyResponseWrapper) RawRequest() *http.Request {
+	if r.Response.Request != nil {
+		return r.Response.Request.RawRequest
+	}
+
+	return nil
+}
+
+func (r restyResponseWrapper) RawResponse() *http.Response {
+	return r.Response.RawResponse
+}
+
+func (r restyResponseWrapper) Close() {
+	if r.Response.RawResponse != nil {
+		_ = r.Response.RawResponse.Body.Close()
+	}
 }
