@@ -48,7 +48,7 @@ func (s messageOutboxStorage) GetBatch(
 		From("message_outbox").
 		Where(sq.LtOrEq{"scheduled_at": scheduledBefore}).
 		OrderBy("scheduled_at").
-		Limit(uint64(batchSize))
+		Limit(uint64(batchSize)) //nolint:gosec
 	if len(specificTopics) > 0 {
 		qb = qb.Where(sq.Eq{"topic": specificTopics})
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/klwxsrx/go-service-template/pkg/idk"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
@@ -105,6 +106,25 @@ func (l *listener) processMessage(msg *ConsumerMessage) {
 	}
 
 	l.consumer.Ack(msg)
+}
+
+func WithHandlerIdempotencyKeyErrorIgnoring() HandlerMiddleware {
+	return WithHandlerErrorMapping(func(err error) error {
+		if errors.Is(err, idk.ErrAlreadyInserted) {
+			return nil
+		}
+
+		return err
+	})
+}
+
+func WithHandlerErrorMapping(fn func(error) error) HandlerMiddleware {
+	return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+		return func(ctx context.Context, msg StructuredMessage) error {
+			err := handler(ctx, msg)
+			return fn(err)
+		}
+	}
 }
 
 func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) HandlerMiddleware {

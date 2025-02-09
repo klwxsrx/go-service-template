@@ -60,5 +60,5 @@ func getLockIDByName(name string) (int64, error) {
 		return 0, fmt.Errorf("create hash for lock with name %s: %w", name, err)
 	}
 
-	return int64(hash.Sum64()), nil
+	return int64(hash.Sum64()), nil //nolint:gosec
 }

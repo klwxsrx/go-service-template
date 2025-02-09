@@ -1,4 +1,3 @@
-//go:generate ${TOOLS_BIN}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Transaction=Transaction"
 package persistence
 
 import "context"
@@ -13,3 +12,19 @@ type (
 
 	LockOption string
 )
+
+func WithinTransactionWithResult[T any](
+	ctx context.Context,
+	tx Transaction,
+	fn func(context.Context) (T, error),
+	lockNames ...string,
+) (T, error) {
+	var result T
+	err := tx.WithinContext(ctx, func(ctx context.Context) error {
+		var err error
+		result, err = fn(ctx)
+		return err
+	}, lockNames...)
+
+	return result, err
+}

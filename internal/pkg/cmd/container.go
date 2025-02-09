@@ -7,14 +7,16 @@ import (
 	"runtime/debug"
 	"time"
 
-	commonhttp "github.com/klwxsrx/go-service-template/internal/pkg/http"
+	"github.com/klwxsrx/go-service-template/internal/pkg/auth"
+	"github.com/klwxsrx/go-service-template/internal/pkg/http"
+	pkgauth "github.com/klwxsrx/go-service-template/pkg/auth"
 	"github.com/klwxsrx/go-service-template/pkg/env"
-	"github.com/klwxsrx/go-service-template/pkg/http"
+	pkghttp "github.com/klwxsrx/go-service-template/pkg/http"
+	"github.com/klwxsrx/go-service-template/pkg/idk"
 	"github.com/klwxsrx/go-service-template/pkg/lazy"
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/message"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
-	pkgmetricstub "github.com/klwxsrx/go-service-template/pkg/metric/stub"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
@@ -29,16 +31,18 @@ var logLevelMap = map[string]log.Level{
 }
 
 type InfrastructureContainer struct {
-	HTTPServer         lazy.Loader[http.Server]
-	HTTPClientFactory  lazy.Loader[HTTPClientFactory]
-	EventDispatcher    lazy.Loader[message.EventDispatcher]
-	TaskScheduler      lazy.Loader[message.TaskScheduler]
-	MessageBusListener lazy.Loader[message.BusListener]
-	MessageOutbox      lazy.Loader[message.OutboxProducer]
-	DBMigrations       lazy.Loader[SQLMigrations]
-	DB                 lazy.Loader[sql.Database]
-	Metrics            lazy.Loader[metric.Metrics]
-	Logger             lazy.Loader[log.Logger]
+	HTTPServer             lazy.Loader[pkghttp.Server]
+	HTTPClientFactory      lazy.Loader[HTTPClientFactory]
+	EventDispatcher        lazy.Loader[message.EventDispatcher]
+	TaskScheduler          lazy.Loader[message.TaskScheduler]
+	MessageBusListener     lazy.Loader[message.BusListener]
+	MessageOutbox          lazy.Loader[message.OutboxProducer]
+	IdempotencyKeys        lazy.Loader[idk.Service]
+	IdempotencyKeysCleaner lazy.Loader[idk.Cleaner]
+	DBMigrations           lazy.Loader[SQLMigrations]
+	DB                     lazy.Loader[sql.Database]
+	Metrics                lazy.Loader[metric.Metrics]
+	Logger                 lazy.Loader[log.Logger]
 
 	messageBrokerImpl lazy.Loader[*pulsar.MessageBroker]
 }
@@ -47,28 +51,36 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 	metrics := metricsProvider()
 	logger := loggerProvider()
 	observer := observerProvider(logger)
+	auth := authProvider()
 
 	db := sqlDatabaseProvider(ctx)
 	dbMigrations := sqlMigrationsProvider(ctx, db, logger)
 	sqlMessageOutboxStorage := sqlMessageOutboxStorageProvider(db, dbMigrations)
+	sqlIDKStorage := sqlIDKStorageProvider(db, dbMigrations)
 
 	msgBrokerImpl := pulsarMessageBrokerProvider()
 	msgBroker := lazy.New(func() (message.Broker, error) { return msgBrokerImpl.Load() })
 
 	msgBusProducer := messageBusProducerProvider(sqlMessageOutboxStorage, observer, metrics, logger)
 
+	idkServiceImpl := idkServiceProvider(sqlIDKStorage)
+	idkService := lazy.New(func() (idk.Service, error) { return idkServiceImpl.Load() })
+	idkCleaner := lazy.New(func() (idk.Cleaner, error) { return idkServiceImpl.Load() })
+
 	return &InfrastructureContainer{
-		HTTPServer:         httpServerProvider(observer, metrics, logger),
-		HTTPClientFactory:  httpClientFactoryProvider(observer, metrics, logger),
-		EventDispatcher:    eventDispatcherProvider(msgBusProducer),
-		TaskScheduler:      taskSchedulerProvider(msgBusProducer),
-		MessageBusListener: messageBusListenerProvider(msgBroker, observer, metrics, logger),
-		MessageOutbox:      messageOutboxProducerProvider(sqlMessageOutboxStorage, msgBroker, metrics, logger),
-		DBMigrations:       dbMigrations,
-		DB:                 db,
-		Metrics:            metrics,
-		Logger:             logger,
-		messageBrokerImpl:  msgBrokerImpl,
+		HTTPServer:             httpServerProvider(observer, metrics, logger, auth),
+		HTTPClientFactory:      httpClientFactoryProvider(observer, metrics, logger),
+		EventDispatcher:        eventDispatcherProvider(msgBusProducer),
+		TaskScheduler:          taskSchedulerProvider(msgBusProducer),
+		MessageBusListener:     messageBusListenerProvider(msgBroker, observer, metrics, logger),
+		MessageOutbox:          messageOutboxProducerProvider(sqlMessageOutboxStorage, msgBroker, metrics, logger),
+		IdempotencyKeys:        idkService,
+		IdempotencyKeysCleaner: idkCleaner,
+		DBMigrations:           dbMigrations,
+		DB:                     db,
+		Metrics:                metrics,
+		Logger:                 logger,
+		messageBrokerImpl:      msgBrokerImpl,
 	}
 }
 
@@ -93,7 +105,7 @@ func (i *InfrastructureContainer) Close(ctx context.Context) {
 
 func metricsProvider() lazy.Loader[metric.Metrics] {
 	return lazy.New(func() (metric.Metrics, error) {
-		return pkgmetricstub.NewMetrics(), nil
+		return metric.NewMetricsStub(), nil
 	})
 }
 
@@ -120,6 +132,12 @@ func observerProvider(
 		return observability.New(
 			observability.WithFieldsLogging(logger.MustLoad(), observability.LogFieldRequestID),
 		), nil
+	})
+}
+
+func authProvider() lazy.Loader[pkgauth.Provider[auth.Principal]] {
+	return lazy.New(func() (pkgauth.Provider[auth.Principal], error) {
+		return auth.NewProvider(), nil
 	})
 }
 
@@ -164,8 +182,18 @@ func sqlMessageOutboxStorageProvider(
 	dbMigrations lazy.Loader[SQLMigrations],
 ) lazy.Loader[message.OutboxStorage] {
 	return lazy.New(func() (message.OutboxStorage, error) {
-		dbMigrations.MustLoad().MustRegisterSource(sql.MessageOutboxMigrations)
+		dbMigrations.MustLoad().MustRegister(sql.MessageOutboxMigrations)
 		return sql.NewMessageOutboxStorage(db.MustLoad()), nil
+	})
+}
+
+func sqlIDKStorageProvider(
+	db lazy.Loader[sql.Database],
+	dbMigrations lazy.Loader[SQLMigrations],
+) lazy.Loader[idk.Storage] {
+	return lazy.New(func() (idk.Storage, error) {
+		dbMigrations.MustLoad().MustRegister(sql.IdempotencyKeyMigrations)
+		return sql.NewIdempotencyKeyStorage(db.MustLoad()), nil
 	})
 }
 
@@ -173,19 +201,26 @@ func httpServerProvider(
 	observer lazy.Loader[observability.Observer],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[http.Server] {
-	return lazy.New(func() (http.Server, error) {
-		return http.NewServer(
-			http.DefaultServerAddress,
-			http.WithHealthCheck(nil),
-			http.WithCORSHandler(),
-			http.WithObservability(
+	auth lazy.Loader[pkgauth.Provider[auth.Principal]],
+) lazy.Loader[pkghttp.Server] {
+	return lazy.New(func() (pkghttp.Server, error) {
+		return pkghttp.NewServer(
+			env.Must(env.Parse[string]("SERVICE_ADDRESS")),
+			pkghttp.WithHealthCheck(nil),
+			pkghttp.WithCORSHandler(),
+			pkghttp.WithObservability(
 				observer.MustLoad(),
-				http.NewHTTPHeaderRequestIDExtractor(commonhttp.RequestIDHeader),
-				http.NewRandomUUIDRequestIDExtractor(),
+				pkghttp.NewHTTPHeaderRequestIDExtractor(http.HeaderRequestID),
+				pkghttp.NewRandomUUIDRequestIDExtractor(),
 			),
-			http.WithMetrics(metrics.MustLoad()),
-			http.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
+			pkghttp.WithMetrics(metrics.MustLoad()),
+			pkghttp.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
+			pkghttp.WithAuth(
+				auth.MustLoad(),
+				http.UserIDTokenProvider,
+				http.AdminUserIDTokenProvider,
+				http.ServiceNameTokenProvider,
+			),
 		), nil
 	})
 }
@@ -197,9 +232,9 @@ func httpClientFactoryProvider(
 ) lazy.Loader[HTTPClientFactory] {
 	return lazy.New(func() (HTTPClientFactory, error) {
 		return NewHTTPClientFactory(
-			http.WithRequestObservability(observer.MustLoad(), commonhttp.RequestIDHeader),
-			http.WithRequestMetrics(metrics.MustLoad()),
-			http.WithRequestLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
+			pkghttp.WithRequestObservability(observer.MustLoad(), http.HeaderRequestID),
+			pkghttp.WithRequestMetrics(metrics.MustLoad()),
+			pkghttp.WithRequestLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
 		), nil
 	})
 }
@@ -235,6 +270,7 @@ func messageBusListenerProvider(
 			message.WithHandlerObservability(observer.MustLoad()),
 			message.WithHandlerMetrics(metrics.MustLoad()),
 			message.WithHandlerLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
+			message.WithHandlerIdempotencyKeyErrorIgnoring(),
 		), nil
 	})
 }
@@ -252,6 +288,12 @@ func messageBusProducerProvider(
 			message.WithMetrics(metrics.MustLoad()),
 			message.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
 		), nil
+	})
+}
+
+func idkServiceProvider(idkStorage lazy.Loader[idk.Storage]) lazy.Loader[idk.ServiceImpl] {
+	return lazy.New(func() (idk.ServiceImpl, error) {
+		return idk.NewService(idkStorage.MustLoad()), nil
 	})
 }
 

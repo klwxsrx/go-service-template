@@ -11,20 +11,20 @@ var ErrPermissionDenied = errors.New("permission denied")
 type (
 	PermissionService[T Principal] interface {
 		Check(context.Context, Permission[T]) error
-		Filter(context.Context, UntypedFilterPermission[T]) (any, error)
+		Filter(context.Context, UntypedPermissionFilter[T]) (any, error)
 	}
 
 	Permission[T Principal]                func(Authentication[T]) (bool, error)
-	FilterPermission[T1 any, T2 Principal] func(Authentication[T2]) (T1, error)
-	UntypedFilterPermission[T Principal]   FilterPermission[any, T]
+	PermissionFilter[T1 any, T2 Principal] func(Authentication[T2]) (T1, error)
+	UntypedPermissionFilter[T Principal]   PermissionFilter[any, T]
 
 	permissionService[T Principal] struct{}
 )
 
 func FilterByPermissions[T1 any, T2 Principal](
 	ctx context.Context,
-	filter FilterPermission[T1, T2],
 	service PermissionService[T2],
+	filter PermissionFilter[T1, T2],
 ) (T1, error) {
 	untypedResult, err := service.Filter(ctx, func(auth Authentication[T2]) (any, error) { return filter(auth) })
 	if err != nil {
@@ -56,7 +56,7 @@ func (p permissionService[T]) Check(ctx context.Context, permission Permission[T
 	return nil
 }
 
-func (p permissionService[T]) Filter(ctx context.Context, filter UntypedFilterPermission[T]) (any, error) {
+func (p permissionService[T]) Filter(ctx context.Context, filter UntypedPermissionFilter[T]) (any, error) {
 	auth, ok := GetAuthentication[T](ctx)
 	if !ok {
 		return nil, errors.New("authentication not found")

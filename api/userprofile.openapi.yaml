@@ -1,0 +1,103 @@
+openapi: 3.0.3
+info:
+  title: User Profile
+  description: |-
+    An example of a service
+  version: 1.0.0
+tags:
+  - name: user-profile
+    description: User profile
+paths:
+  /profile/{userID}:
+    get:
+      operationId: getUserProfile
+      summary: "Get user profile by user id"
+      parameters:
+        - name: userID
+          in: path
+          schema:
+            $ref: "#/components/schemas/UserID"
+          required: true
+      responses:
+        200:
+          description: "Success"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetUserProfileOut"
+        400:
+          description: "Invalid data"
+        401:
+          description: "Not authenticated"
+        403:
+          description: "Permission denied"
+        404:
+          description: "User profile not found"
+      tags:
+        - user-profile
+    put:
+      operationId: updateUserProfile
+      summary: "Update user profile by user id"
+      parameters:
+        - name: userID
+          in: path
+          schema:
+            $ref: "#/components/schemas/UserID"
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserProfileIn"
+      responses:
+        200:
+          description: "Success"
+        400:
+          description: "Invalid data"
+        401:
+          description: "Not authenticated"
+        403:
+          description: "Permission denied"
+        404:
+          description: "User not found"
+      tags:
+        - user-profile
+security:
+  - UserInternalAuth: [ ]
+  - AdminUserInternalAuth: [ ]
+  - ServiceInternalAuth: [ ]
+components:
+  headers:
+    X-Auth-User-ID:
+      schema:
+        $ref: "#/components/schemas/UserID"
+  schemas:
+    GetUserProfileOut:
+      $ref: "#/components/schemas/UserProfile"
+    UpdateUserProfileIn:
+      $ref: "#/components/schemas/UserProfile"
+    UserProfile:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+        lastName:
+          type: string
+          minLength: 1
+      required:
+        - firstName
+        - lastName
+    UserID:
+      type: string
+      format: uuid
+  securitySchemes:
+    UserInternalAuth:
+      type: apiKey
+      name: X-Auth-User-ID
+      in: header
+    AdminUserInternalAuth:
+      type: apiKey
+      name: X-Auth-AdminUser-ID
+      in: header

@@ -12,7 +12,6 @@ import (
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
-	pkgmetricstub "github.com/klwxsrx/go-service-template/pkg/metric/stub"
 )
 
 const (
@@ -75,7 +74,7 @@ func NewOutboxConsumerProvider(storage OutboxStorage, opts ...OutboxConsumerOpti
 		msgConsumingTimeout: defaultMessageConsumingTimeout,
 		storage:             storage,
 		topicConsumers:      make(map[Topic]*outboxConsumer),
-		metrics:             pkgmetricstub.NewMetrics(),
+		metrics:             metric.NewMetricsStub(),
 		logger:              log.New(log.LevelDisabled),
 	}
 

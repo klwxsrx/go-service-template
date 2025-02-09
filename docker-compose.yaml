@@ -1,11 +1,80 @@
-services: # TODO: add apps
+services:
 
-  duck-postgresql:
+  user-service:
+    build:
+      dockerfile: docker/user-service/Dockerfile
+      context: .
+    container_name: go-service-template-user-service
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - SQL_ADDRESS=postgresql:5432
+      - PULSAR_ADDRESS=apache-pulsar:6650
+
+  user-profile-service:
+    build:
+      dockerfile: docker/user-profile-service/Dockerfile
+      context: .
+    container_name: go-service-template-user-profile-service
+    depends_on:
+      user-service:
+        condition: service_started
+      postgresql:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+    env_file:
+      - .env
+    environment:
+      - SQL_ADDRESS=postgresql:5432
+      - PULSAR_ADDRESS=apache-pulsar:6650
+      - USER_SERVICE_URL=http://user-service:8080
+
+  user-profile-worker:
+    build:
+      dockerfile: docker/user-profile-worker/Dockerfile
+      context: .
+    container_name: go-service-template-user-profile-worker
+    depends_on:
+      user-service:
+        condition: service_started
+      postgresql:
+        condition: service_healthy
+      apache-pulsar:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - SQL_ADDRESS=postgresql:5432
+      - PULSAR_ADDRESS=apache-pulsar:6650
+      - USER_SERVICE_URL=http://user-service:8080
+
+  message-outbox-worker:
+    build:
+      dockerfile: docker/message-outbox-worker/Dockerfile
+      context: .
+    container_name: go-service-template-message-outbox-worker
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      apache-pulsar:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - SQL_ADDRESS=postgresql:5432
+      - PULSAR_ADDRESS=apache-pulsar:6650
+
+  postgresql:
     image: postgres:16
-    container_name: postgresql
-    hostname: postgresql
+    container_name: go-service-template-postgresql
     volumes:
-      - duck-postgresql-data:/var/lib/postgresql/data:rw
+      - postgresql-data:/var/lib/postgresql/data:rw
     ports:
       - "5432:5432"
     environment:
@@ -19,12 +88,11 @@ services: # TODO: add apps
       retries: 6
     restart: unless-stopped
 
-  duck-apache-pulsar:
+  apache-pulsar:
     image: apachepulsar/pulsar:4.0.0
-    container_name: apache-pulsar
-    hostname: apache-pulsar
+    container_name: go-service-template-apache-pulsar
     volumes:
-      - duck-apache-pulsar-data:/pulsar/data:rw
+      - apache-pulsar-data:/pulsar/data:rw
     ports:
       - "6650:6650"
     entrypoint: [ "bin/pulsar", "standalone" ]
@@ -36,5 +104,7 @@ services: # TODO: add apps
     restart: unless-stopped
 
 volumes:
-  duck-postgresql-data:
-  duck-apache-pulsar-data:
+  postgresql-data:
+    name: go-service-template-postgresql-data
+  apache-pulsar-data:
+    name: go-service-template-apache-pulsar-data

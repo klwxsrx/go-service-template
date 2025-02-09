@@ -1,4 +1,3 @@
-//go:generate ${TOOLS_BIN}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Task=Task,Scheduler=Scheduler"
 package task
 
 import (
@@ -8,16 +7,16 @@ import (
 	"github.com/google/uuid"
 )
 
-type Task interface {
-	ID() uuid.UUID
-	Type() string
-}
-
 type (
+	Task interface {
+		ID() uuid.UUID
+		Type() string
+	}
+
+	Scheduler interface {
+		Schedule(ctx context.Context, at time.Time, tasks ...Task) error
+	}
+
 	TypedHandler[T Task] func(ctx context.Context, task T) error
 	Handler              TypedHandler[Task]
 )
-
-type Scheduler interface {
-	Schedule(ctx context.Context, at time.Time, tasks ...Task) error
-}

@@ -29,7 +29,7 @@ func WrapJobError(job ErrorJob, logger log.Logger) Job {
 		if err != nil {
 			logger.
 				WithError(err).
-				Error(ctx, "periodically running process completed with error")
+				Error(ctx, "process completed with error")
 		}
 	}
 }

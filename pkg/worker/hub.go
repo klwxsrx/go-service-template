@@ -27,7 +27,7 @@ func RunHub(ctx context.Context, logger log.Logger, process ErrorJob, processes 
 				return errProcessCompleted
 			}
 
-			logger.WithError(err).Error(ctx, "running process completed with error")
+			logger.WithError(err).Error(ctx, "process completed with error")
 			return err
 		}
 	}

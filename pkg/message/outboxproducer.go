@@ -11,7 +11,6 @@ import (
 
 	"github.com/klwxsrx/go-service-template/pkg/log"
 	"github.com/klwxsrx/go-service-template/pkg/metric"
-	pkgmetricstub "github.com/klwxsrx/go-service-template/pkg/metric/stub"
 )
 
 const (
@@ -66,7 +65,7 @@ func NewOutboxProducer(
 		storage:     storage,
 		out:         out,
 		retry:       retry,
-		metrics:     pkgmetricstub.NewMetrics(),
+		metrics:     metric.NewMetricsStub(),
 		logger:      log.New(log.LevelDisabled),
 		processChan: make(chan struct{}, 1),
 		stopChan:    make(chan struct{}),

@@ -10,7 +10,7 @@ import (
 
 type (
 	SQLMigrations interface {
-		MustRegisterSource(sources ...sql.MigrationSource)
+		MustRegister(sources ...sql.MigrationSource)
 	}
 
 	sqlMigrations struct {
@@ -32,7 +32,7 @@ func NewSQLMigrations(
 	}
 }
 
-func (s *sqlMigrations) MustRegisterSource(sources ...sql.MigrationSource) {
+func (s *sqlMigrations) MustRegister(sources ...sql.MigrationSource) {
 	if len(sources) == 0 {
 		return
 	}

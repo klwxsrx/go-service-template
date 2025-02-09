@@ -56,12 +56,16 @@ jobs:
     strategy:
       matrix:
         include:
-          - application: duck
-            image-file: duck.image.tar
-          - application: duckhandler
-            image-file: duckhandler.image.tar
-          - application: messageoutbox
-            image-file: messageoutbox.image.tar
+          - application: user-service
+            image-file: user-service.image.tar
+          - application: user-profile-service
+            image-file: user-profile-service.image.tar
+          - application: user-profile-worker
+            image-file: user-profile-worker.image.tar
+          - application: message-outbox-worker
+            image-file: message-outbox-worker.image.tar
+          - application: idk-cleaner-task
+            image-file: idk-cleaner-task.image.tar
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -94,12 +98,16 @@ jobs:
     strategy:
       matrix:
         include:
-          - image-tag: klwxsrx/duck-service
-            image-file: duck.image.tar
-          - image-tag: klwxsrx/duck-message-handler
-            image-file: duckhandler.image.tar
-          - image-tag: klwxsrx/duck-message-outbox
-            image-file: messageoutbox.image.tar
+          - image-tag: klwxsrx/go-service-template-user-service
+            image-file: user-service.image.tar
+          - image-tag: klwxsrx/go-service-template-user-profile-service
+            image-file: user-profile-service.image.tar
+          - image-tag: klwxsrx/go-service-template-user-profile-worker
+            image-file: user-profile-worker.image.tar
+          - image-tag: klwxsrx/go-service-template-message-outbox-worker
+            image-file: message-outbox-worker.image.tar
+          - image-tag: klwxsrx/go-service-template-idk-cleaner-task
+            image-file: idk-cleaner-task.image.tar
     steps:
       - name: Setup Docker
         uses: docker/setup-buildx-action@v2

@@ -1,4 +1,3 @@
-//go:generate ${TOOLS_BIN}/mockgen -source ${GOFILE} -destination mock/${GOFILE} -package mock -mock_names "Event=Event,Dispatcher=Dispatcher"
 package event
 
 import (
@@ -8,26 +7,26 @@ import (
 	"github.com/google/uuid"
 )
 
-type Event interface {
-	ID() uuid.UUID
-	AggregateID() uuid.UUID
-	Type() string
-}
-
 type (
+	Event interface {
+		ID() uuid.UUID
+		Type() string
+		AggregateID() uuid.UUID
+	}
+
+	Dispatcher interface {
+		Dispatch(ctx context.Context, events ...Event) error
+	}
+
 	TypedHandler[T Event] func(ctx context.Context, event T) error
 	Handler               TypedHandler[Event]
 
 	RegisterHandlerFunc func() (eventType string, handler Handler, err error)
+
+	dispatcher struct {
+		handlers map[string]Handler
+	}
 )
-
-type Dispatcher interface {
-	Dispatch(ctx context.Context, events ...Event) error
-}
-
-type dispatcher struct {
-	handlers map[string]Handler
-}
 
 func NewDispatcher(handler RegisterHandlerFunc, handlers ...RegisterHandlerFunc) (Dispatcher, error) {
 	handlers = append([]RegisterHandlerFunc{handler}, handlers...)

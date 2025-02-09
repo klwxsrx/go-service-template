@@ -223,7 +223,7 @@ func WithRequestMetrics(metrics metric.Metrics) ClientOption {
 	}
 }
 
-func WithRequestAuth[T auth.Principal](fn func(auth.Authentication[T], Request)) ClientOption {
+func WithRequestDataFromAuth[T auth.Principal](fn func(auth.Authentication[T], Request)) ClientOption {
 	return func(c *ClientImpl) {
 		c.RESTClient.OnBeforeRequest(func(_ *resty.Client, r *resty.Request) error {
 			authentication, ok := auth.GetAuthentication[T](r.Context())

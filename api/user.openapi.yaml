@@ -1,0 +1,229 @@
+openapi: 3.0.3
+info:
+  title: User
+  description: |-
+    An example of a service
+  version: 1.0.0
+tags:
+  - name: auth
+    description: User authentication
+  - name: user
+    description: User management
+paths:
+  /auth:
+    post:
+      operationId: authenticate
+      summary: "Authenticate user"
+      security: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthenticateIn"
+      responses:
+        200:
+          description: "User has been authenticated"
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/UserSessionCookie"
+        401:
+          description: "Unauthenticated"
+      tags:
+        - auth
+  /auth/verification:
+    post:
+      operationId: verifyAuthentication
+      summary: "Verify user authentication"
+      security:
+        - UserExternalAuth: [ ]
+      responses:
+        200:
+          description: "User is authenticated"
+          headers:
+            X-Auth-User-ID:
+              $ref: "#/components/headers/X-Auth-User-ID"
+            Set-Cookie:
+              $ref: "#/components/headers/UserSessionCookie"
+        401:
+          description: "Unauthenticated"
+      tags:
+        - auth
+  /current-user:
+    get:
+      operationId: getCurrentUser
+      summary: "Get current user"
+      security:
+        - UserInternalAuth: [ ]
+      responses:
+        200:
+          description: "Success"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetCurrentUserOut"
+        401:
+          description: "Not authenticated"
+      tags:
+        - user
+  /users:
+    post:
+      operationId: registerUser
+      summary: "Register user"
+      security: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterUserIn"
+      responses:
+        201:
+          description: "User registered"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterUserOut"
+        400:
+          description: "Invalid user data"
+        403:
+          description: "Permission denied"
+        409:
+          description: "User with specified login already registered"
+      tags:
+        - user
+  /users/{userID}:
+    get:
+      operationId: getUserByID
+      summary: "Get user by id"
+      parameters:
+        - name: userID
+          in: path
+          schema:
+            $ref: "#/components/schemas/UserID"
+          required: true
+      responses:
+        200:
+          description: "Success"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetUserOut"
+        400:
+          description: "Invalid data"
+        401:
+          description: "Not authenticated"
+        403:
+          description: "Permission denied"
+        404:
+          description: "User not found"
+      tags:
+        - user
+    delete:
+      operationId: deleteUserByID
+      summary: "Delete user by id"
+      security:
+        - UserInternalAuth: [ ]
+        - AdminUserInternalAuth: [ ]
+      parameters:
+        - name: userID
+          in: path
+          schema:
+            $ref: "#/components/schemas/UserID"
+          required: true
+      responses:
+        200:
+          description: "Success"
+        400:
+          description: "Invalid data"
+        401:
+          description: "Not authenticated"
+        403:
+          description: "Permission denied"
+      tags:
+        - user
+security:
+  - UserInternalAuth: [ ]
+  - AdminUserInternalAuth: [ ]
+  - ServiceInternalAuth: [ ]
+components:
+  headers:
+    X-Auth-User-ID:
+      schema:
+        $ref: "#/components/schemas/UserID"
+    UserSessionCookie:
+      schema:
+        type: string
+        description: "Sets the user session cookie"
+        example: ust=YWJjZGUxMjM0NQ==; Path=/; HttpOnly
+  schemas:
+    AuthenticateIn:
+      type: object
+      properties:
+        login:
+          $ref: "#/components/schemas/UserLogin"
+        password:
+          $ref: "#/components/schemas/UserPassword"
+      required:
+        - login
+        - password
+    RegisterUserIn:
+      type: object
+      properties:
+        login:
+          $ref: "#/components/schemas/UserLogin"
+        password:
+          $ref: "#/components/schemas/UserPassword"
+      required:
+        - login
+        - password
+    RegisterUserOut:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UserID"
+      required:
+        - id
+    GetCurrentUserOut:
+      $ref: "#/components/schemas/User"
+    GetUserOut:
+      $ref: "#/components/schemas/User"
+    User:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UserID"
+        login:
+          $ref: "#/components/schemas/UserLogin"
+        deletedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - login
+    UserLogin:
+      type: string
+      minLength: 1
+    UserPassword:
+      type: string
+      minLength: 1
+    UserID:
+      type: string
+      format: uuid
+  securitySchemes:
+    UserExternalAuth:
+      type: apiKey
+      name: ust
+      in: cookie
+    UserInternalAuth:
+      type: apiKey
+      name: X-Auth-User-ID
+      in: header
+    AdminUserInternalAuth:
+      type: apiKey
+      name: X-Auth-AdminUser-ID
+      in: header
+    ServiceInternalAuth:
+      type: apiKey
+      name: X-Auth-Service-Name
+      in: header

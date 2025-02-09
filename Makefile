@@ -6,7 +6,7 @@ all: check build-clean build
 
 check: lint arch test
 
-build: bin/duck bin/duckhandler bin/messageoutbox
+build: codegen bin/user-service bin/user-profile-service bin/user-profile-worker bin/message-outbox-worker bin/idk-cleaner-task
 
 build-clean:
 	rm -rf bin/*
@@ -18,7 +18,7 @@ codegen: tools codegen-clean
 	go generate ./...
 
 codegen-clean:
-	find . -type f \( -path "*/mock/*" -o -path "*/generated/*" \) -exec rm -f "{}" \;
+	find . -type f \( -path "*/generated/*" \) -exec rm -f "{}" \;
 
 lint: tools codegen
 	tools/bin/golangci-lint --color=always run ./...
@@ -27,13 +27,13 @@ lint-fix: tools codegen
 	tools/bin/golangci-lint --color=always run --fix ./...
 
 arch: tools
-	tools/bin/go-cleanarch -application app -domain domain -infrastructure infra
+	tools/bin/go-cleanarch -interfaces api -application app -domain domain -infrastructure infra
 
 test: codegen
 	go test ./...
 
 tools: tools-invalidate git-hooks-invalidate \
-	tools/bin/mockgen tools/bin/golangci-lint tools/bin/go-cleanarch tools/bin/goverter tools/bin/lefthook \
+	tools/bin/golangci-lint tools/bin/go-cleanarch tools/bin/goverter tools/bin/lefthook \
 	tools/bin/.go-mod.checksum tools/bin/.git-hooks.checksum
 
 tools-invalidate:
@@ -41,9 +41,6 @@ tools-invalidate:
 
 tools-clean:
 	rm -rf ./tools/bin/* && rm -f ./tools/bin/.go-mod.checksum
-
-tools/bin/mockgen:
-	go build -modfile ./tools/go.mod -o ./tools/bin/mockgen go.uber.org/mock/mockgen
 
 tools/bin/golangci-lint:
 	go build -modfile ./tools/go.mod -o ./tools/bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
