@@ -103,11 +103,8 @@ func (r userRepository) buildFindQuery(ctx context.Context, spec domain.FindUser
 	if len(spec.Logins) > 0 {
 		qb = qb.Where(sq.Eq{"login": spec.Logins})
 	}
-	if ok, _ := pkgsql.IsLockRequested(ctx); ok {
-		qb = qb.Suffix("for update")
-	}
 
-	return qb
+	return pkgsql.PrepareUpdateLockQuery(ctx, qb)
 }
 
 type SqlxUser struct {

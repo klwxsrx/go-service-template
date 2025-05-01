@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/klwxsrx/go-service-template/pkg/persistence"
@@ -24,6 +25,11 @@ type (
 		client   TxClient
 		onCommit func()
 	}
+
+	updateLock struct {
+		forUpdate  bool
+		skipLocked bool
+	}
 )
 
 func NewTransaction(client TxClient, instanceName string, onCommit func()) persistence.Transaction {
@@ -33,7 +39,7 @@ func NewTransaction(client TxClient, instanceName string, onCommit func()) persi
 func (t transaction) WithinContext(
 	ctx context.Context,
 	fn func(ctx context.Context) error,
-	lockNames ...string,
+	locks ...persistence.Lock,
 ) error {
 	var err error
 	storedTx, ok := ctx.Value(dbTransactionContextKey).(txData)
@@ -62,9 +68,18 @@ func (t transaction) WithinContext(
 		ctx = context.WithValue(ctx, dbTransactionContextKey, storedTx)
 	}
 
-	slices.Sort(lockNames)
-	for _, lockName := range lockNames {
-		err = withTransactionLevelLock(ctx, lockName, storedTx.ClientTx)
+	slices.SortFunc(locks, func(a, b persistence.Lock) int {
+		switch {
+		case a.Key < b.Key:
+			return -1
+		case a.Key > b.Key:
+			return 1
+		default:
+			return 0
+		}
+	})
+	for _, lock := range locks {
+		err = withTransactionLevelLock(ctx, lock.Key, lock.Shared, storedTx.ClientTx)
 		if err != nil {
 			return err
 		}
@@ -90,8 +105,8 @@ func (t transaction) WithinContext(
 	return nil
 }
 
-func (t transaction) WithLock(ctx context.Context, opts ...persistence.LockOption) context.Context {
-	hasSkipLockedFn := func(opts []persistence.LockOption) bool {
+func (t transaction) LockUpdate(ctx context.Context, exclusively bool, opts ...persistence.LockUpdateOption) context.Context {
+	hasSkipLockedFn := func(opts []persistence.LockUpdateOption) bool {
 		for _, opt := range opts {
 			if opt == persistence.SkipAlreadyLockedData {
 				return true
@@ -104,26 +119,47 @@ func (t transaction) WithLock(ctx context.Context, opts ...persistence.LockOptio
 		return ctx
 	}
 
-	lockRequested, skipLocked := IsLockRequested(ctx)
-	if lockRequested && skipLocked {
+	skipLocked := hasSkipLockedFn(opts)
+	lockRequested, hadExclusively, hadSkipLocked := IsUpdateLockRequested(ctx)
+	if lockRequested && hadExclusively == exclusively && hadSkipLocked == skipLocked {
 		return ctx
 	}
 
-	hasSkipLocked := hasSkipLockedFn(opts)
-	if lockRequested && !hasSkipLocked {
-		return ctx
-	}
-
-	return context.WithValue(ctx, dbTransactionLockContextKey, hasSkipLocked)
+	return context.WithValue(ctx, dbTransactionLockContextKey, updateLock{
+		forUpdate:  exclusively,
+		skipLocked: skipLocked,
+	})
 }
 
 func HasTransaction(ctx context.Context) bool {
 	return ctx.Value(dbTransactionContextKey) != nil
 }
 
-func IsLockRequested(ctx context.Context) (lockRequested, skipLocked bool) {
-	skipLocked, lockRequested = ctx.Value(dbTransactionLockContextKey).(bool)
-	return
+func IsUpdateLockRequested(ctx context.Context) (lockRequested, forUpdate, skipLocked bool) {
+	lock, ok := ctx.Value(dbTransactionLockContextKey).(updateLock)
+	if !ok {
+		return
+	}
+
+	return true, lock.forUpdate, lock.skipLocked
+}
+
+func PrepareUpdateLockQuery(ctx context.Context, qb sq.SelectBuilder) sq.SelectBuilder {
+	ok, forUpdate, skipLocked := IsUpdateLockRequested(ctx)
+	if !ok {
+		return qb
+	}
+
+	if forUpdate {
+		qb = qb.Suffix("FOR UPDATE")
+	} else {
+		qb = qb.Suffix("FOR SHARE")
+	}
+	if skipLocked {
+		qb = qb.Suffix("SKIP LOCKED")
+	}
+
+	return qb
 }
 
 type (

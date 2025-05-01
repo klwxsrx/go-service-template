@@ -20,9 +20,9 @@ var (
 	ErrUserNotFound           = errors.New("user not found")
 	ErrUserIsAlreadyDeleted   = errors.New("user is already deleted")
 	ErrUserAlreadyExists      = errors.New("user with specified login already exists")
-)
 
-const updateUsersLockName = "update_users"
+	updateUsersLock = persistence.Lock{Key: "update_users", Shared: false}
+)
 
 type (
 	User interface {
@@ -148,7 +148,7 @@ func (s *userService) Register(ctx context.Context, credentials UserCredentials)
 		return user.ID, nil
 	}
 
-	return persistence.WithinTransactionWithResult(ctx, s.transaction, registerUserImpl, updateUsersLockName)
+	return persistence.WithinTransactionWithResult(ctx, s.transaction, registerUserImpl, updateUsersLock)
 }
 
 func (s *userService) Delete(ctx context.Context, userID domain.UserID) error {
@@ -157,7 +157,10 @@ func (s *userService) Delete(ctx context.Context, userID domain.UserID) error {
 	}
 
 	return s.transaction.WithinContext(ctx, func(ctx context.Context) error {
-		user, err := s.userRepo.FindOne(s.transaction.WithLock(ctx), domain.FindUserSpecification{IDs: []domain.UserID{userID}})
+		user, err := s.userRepo.FindOne(
+			s.transaction.LockUpdate(ctx, true),
+			domain.FindUserSpecification{IDs: []domain.UserID{userID}},
+		)
 		if errors.Is(err, domain.ErrUserNotFound) {
 			return nil
 		}

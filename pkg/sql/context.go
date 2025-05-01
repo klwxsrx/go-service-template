@@ -3,7 +3,7 @@ package sql
 type contextKey int
 
 const (
-	dbTransactionContextKey contextKey = iota
+	dbConnectionContextKey contextKey = iota
+	dbTransactionContextKey
 	dbTransactionLockContextKey
-	dbConnectionContextKey
 )

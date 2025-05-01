@@ -10,10 +10,10 @@ func NewTransactionStub() Transaction {
 	return &transactionStub{}
 }
 
-func (s transactionStub) WithinContext(ctx context.Context, fn func(ctx context.Context) error, _ ...string) error {
+func (s transactionStub) WithinContext(ctx context.Context, fn func(ctx context.Context) error, _ ...Lock) error {
 	return fn(ctx)
 }
 
-func (s transactionStub) WithLock(ctx context.Context, _ ...LockOption) context.Context {
+func (s transactionStub) LockUpdate(ctx context.Context, _ bool, _ ...LockUpdateOption) context.Context {
 	return ctx
 }

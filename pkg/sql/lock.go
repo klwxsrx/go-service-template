@@ -39,13 +39,18 @@ func withSessionLevelLock(ctx context.Context, name string, client Client) (conn
 	}, nil
 }
 
-func withTransactionLevelLock(ctx context.Context, name string, tx ClientTx) error {
+func withTransactionLevelLock(ctx context.Context, name string, shared bool, tx ClientTx) error {
 	lockID, err := getLockIDByName(name)
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.ExecContext(ctx, "select pg_advisory_xact_lock($1)", lockID)
+	lockQuery := "select pg_advisory_xact_lock($1)"
+	if shared {
+		lockQuery = "select pg_advisory_xact_lock_shared($1)"
+	}
+
+	_, err = tx.ExecContext(ctx, lockQuery, lockID)
 	if err != nil {
 		return fmt.Errorf("get lock for %s: %w", name, err)
 	}
