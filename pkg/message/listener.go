@@ -179,26 +179,31 @@ func WithHandlerMetrics(metrics metric.Metrics) HandlerMiddleware {
 	}
 }
 
-func WithHandlerObservability(observer observability.Observer) HandlerMiddleware {
+func WithHandlerObservability(observer observability.Observer, fields ...observability.Field) HandlerMiddleware {
+	if len(fields) == 0 {
+		return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+			return func(ctx context.Context, msg StructuredMessage) error {
+				return handler(ctx, msg)
+			}
+		}
+	}
+
 	return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
 		return func(ctx context.Context, msg StructuredMessage) error {
 			meta := getHandlerMetadata(ctx)
-			requestID := getRequestIDFromMetadata(meta.MessageMetadata)
-			if requestID == nil {
+			observabilityValues, ok := meta.MessageMetadata[observabilityMetadataKey].(map[string]any)
+			if !ok {
 				return handler(ctx, msg)
 			}
 
-			ctx = observer.WithRequestID(ctx, *requestID)
+			for _, field := range fields {
+				value, ok := observabilityValues[string(field)].(string)
+				if ok && value != "" {
+					ctx = observer.WithField(ctx, field, value)
+				}
+			}
+
 			return handler(ctx, msg)
 		}
 	}
-}
-
-func getRequestIDFromMetadata(data Metadata) *string {
-	requestID, ok := data[requestIDMetadataKey].(string)
-	if !ok {
-		return nil
-	}
-
-	return &requestID
 }

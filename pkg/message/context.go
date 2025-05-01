@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const requestIDMetadataKey = "requestID"
+const observabilityMetadataKey = "observability"
 
 const handlerMetaContextKey contextKey = iota
 

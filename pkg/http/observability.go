@@ -8,55 +8,40 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/observability"
 )
 
-const (
-	DefaultRequestIDHeader = "X-Request-ID"
+type (
+	ObservabilityFieldExtractor  func(*http.Request) string
+	ObservabilityFieldExtractors map[observability.Field][]ObservabilityFieldExtractor
 )
-
-type RequestIDExtractor func(r *http.Request) (string, bool)
 
 func WithObservability(
 	observer observability.Observer,
-	extractor RequestIDExtractor, fallbacks ...RequestIDExtractor,
+	fields ObservabilityFieldExtractors,
 ) ServerOption {
-	extractors := append([]RequestIDExtractor{extractor}, fallbacks...)
-	findRequestID := func(r *http.Request) (string, bool) {
-		for _, ext := range extractors {
-			requestID, ok := ext(r)
-			if ok {
-				return requestID, true
-			}
-		}
-		return "", false
-	}
-
 	return WithMW(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			requestID, ok := findRequestID(r)
-			if !ok {
-				handler.ServeHTTP(w, r)
-				return
+			for field, extractors := range fields {
+				for _, extractor := range extractors {
+					if value := extractor(r); value != "" {
+						ctx := observer.WithField(r.Context(), field, value)
+						r = r.WithContext(ctx)
+						break
+					}
+				}
 			}
-
-			ctx := observer.WithRequestID(r.Context(), requestID)
-			r = r.WithContext(ctx)
 
 			handler.ServeHTTP(w, r)
 		})
 	})
 }
 
-func NewHTTPHeaderRequestIDExtractor(header string) RequestIDExtractor {
-	return func(r *http.Request) (string, bool) {
-		value := r.Header.Get(header)
-		if len(value) > 0 {
-			return value, true
-		}
-		return "", false
+func ObservabilityFieldHeaderExtractor(header string) ObservabilityFieldExtractor {
+	return func(r *http.Request) string {
+		return r.Header.Get(header)
 	}
 }
 
-func NewRandomUUIDRequestIDExtractor() RequestIDExtractor {
-	return func(_ *http.Request) (string, bool) {
-		return uuid.New().String(), true
+func ObservabilityFieldRandomUUIDExtractor() ObservabilityFieldExtractor {
+	return func(_ *http.Request) string {
+		return uuid.New().String()
 	}
 }

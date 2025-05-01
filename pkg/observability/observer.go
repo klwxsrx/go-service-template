@@ -6,32 +6,22 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
-type (
-	LogField string
-
-	contextKey int
-)
-
-const (
-	LogFieldRequestID LogField = "requestID"
-)
-
-const (
-	requestIDContextKey contextKey = iota
-)
+const FieldRequestID Field = "requestID"
 
 type (
 	Observer interface {
-		RequestID(context.Context) (string, bool)
-		WithRequestID(context.Context, string) context.Context
+		Field(context.Context, Field) string
+		WithField(context.Context, Field, string) context.Context
 	}
 
 	ObserverOption func(*observer)
+
+	Field string
 )
 
 type observer struct {
 	logger        log.Logger
-	loggingFields map[LogField]struct{}
+	loggingFields map[Field]struct{}
 }
 
 func New(opts ...ObserverOption) Observer {
@@ -43,31 +33,30 @@ func New(opts ...ObserverOption) Observer {
 	return o
 }
 
-func (o observer) RequestID(ctx context.Context) (string, bool) {
-	requestID, ok := ctx.Value(requestIDContextKey).(string)
-	if !ok || len(requestID) == 0 {
-		return "", false
-	}
-
-	return requestID, true
+func (o observer) Field(ctx context.Context, field Field) string {
+	value, _ := ctx.Value(field).(string)
+	return value
 }
 
-func (o observer) WithRequestID(ctx context.Context, id string) context.Context {
-	ctx = context.WithValue(ctx, requestIDContextKey, id)
+func (o observer) WithField(ctx context.Context, field Field, value string) context.Context {
+	if value == "" {
+		return ctx
+	}
 
-	if _, ok := o.loggingFields[LogFieldRequestID]; ok {
+	ctx = context.WithValue(ctx, field, value)
+	if _, ok := o.loggingFields[field]; ok {
 		ctx = o.logger.WithContext(ctx, log.Fields{
-			string(LogFieldRequestID): id,
+			string(field): value,
 		})
 	}
 
 	return ctx
 }
 
-func WithFieldsLogging(logger log.Logger, fields ...LogField) ObserverOption {
+func WithFieldsLogging(logger log.Logger, fields ...Field) ObserverOption {
 	return func(o *observer) {
 		o.logger = logger
-		o.loggingFields = make(map[LogField]struct{}, len(fields))
+		o.loggingFields = make(map[Field]struct{}, len(fields))
 		for _, field := range fields {
 			o.loggingFields[field] = struct{}{}
 		}

@@ -20,6 +20,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/observability"
 	"github.com/klwxsrx/go-service-template/pkg/pulsar"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
+	pkgtime "github.com/klwxsrx/go-service-template/pkg/time"
 )
 
 var logLevelMap = map[string]log.Level{
@@ -41,6 +42,7 @@ type InfrastructureContainer struct {
 	IdempotencyKeysCleaner lazy.Loader[idk.Cleaner]
 	DBMigrations           lazy.Loader[SQLMigrations]
 	DB                     lazy.Loader[sql.Database]
+	Clock                  lazy.Loader[pkgtime.Clock]
 	Metrics                lazy.Loader[metric.Metrics]
 	Logger                 lazy.Loader[log.Logger]
 
@@ -52,6 +54,7 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 	logger := loggerProvider()
 	observer := observerProvider(logger)
 	auth := authProvider()
+	clock := clockProvider()
 
 	db := sqlDatabaseProvider(ctx)
 	dbMigrations := sqlMigrationsProvider(ctx, db, logger)
@@ -78,6 +81,7 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 		IdempotencyKeysCleaner: idkCleaner,
 		DBMigrations:           dbMigrations,
 		DB:                     db,
+		Clock:                  clock,
 		Metrics:                metrics,
 		Logger:                 logger,
 		messageBrokerImpl:      msgBrokerImpl,
@@ -130,7 +134,7 @@ func observerProvider(
 ) lazy.Loader[observability.Observer] {
 	return lazy.New(func() (observability.Observer, error) {
 		return observability.New(
-			observability.WithFieldsLogging(logger.MustLoad(), observability.LogFieldRequestID),
+			observability.WithFieldsLogging(logger.MustLoad(), observability.FieldRequestID),
 		), nil
 	})
 }
@@ -138,6 +142,12 @@ func observerProvider(
 func authProvider() lazy.Loader[pkgauth.Provider[auth.Principal]] {
 	return lazy.New(func() (pkgauth.Provider[auth.Principal], error) {
 		return auth.NewProvider(), nil
+	})
+}
+
+func clockProvider() lazy.Loader[pkgtime.Clock] {
+	return lazy.New(func() (pkgtime.Clock, error) {
+		return pkgtime.NewAdjustableClock(), nil
 	})
 }
 
@@ -208,11 +218,12 @@ func httpServerProvider(
 			env.Must(env.Parse[string]("SERVICE_ADDRESS")),
 			pkghttp.WithHealthCheck(nil),
 			pkghttp.WithCORSHandler(),
-			pkghttp.WithObservability(
-				observer.MustLoad(),
-				pkghttp.NewHTTPHeaderRequestIDExtractor(http.HeaderRequestID),
-				pkghttp.NewRandomUUIDRequestIDExtractor(),
-			),
+			pkghttp.WithObservability(observer.MustLoad(), pkghttp.ObservabilityFieldExtractors{
+				observability.FieldRequestID: []pkghttp.ObservabilityFieldExtractor{
+					pkghttp.ObservabilityFieldHeaderExtractor(http.HeaderRequestID),
+					pkghttp.ObservabilityFieldRandomUUIDExtractor(),
+				},
+			}),
 			pkghttp.WithMetrics(metrics.MustLoad()),
 			pkghttp.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
 			pkghttp.WithAuth(
@@ -232,7 +243,9 @@ func httpClientFactoryProvider(
 ) lazy.Loader[HTTPClientFactory] {
 	return lazy.New(func() (HTTPClientFactory, error) {
 		return NewHTTPClientFactory(
-			pkghttp.WithRequestObservability(observer.MustLoad(), http.HeaderRequestID),
+			pkghttp.WithRequestObservability(observer.MustLoad(), pkghttp.ObservabilityFieldHeaders{
+				observability.FieldRequestID: http.HeaderRequestID,
+			}),
 			pkghttp.WithRequestMetrics(metrics.MustLoad()),
 			pkghttp.WithRequestLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
 		), nil
@@ -267,7 +280,7 @@ func messageBusListenerProvider(
 	return lazy.New(func() (message.BusListener, error) {
 		return message.NewBusListener(
 			msgBroker.MustLoad(),
-			message.WithHandlerObservability(observer.MustLoad()),
+			message.WithHandlerObservability(observer.MustLoad(), observability.FieldRequestID),
 			message.WithHandlerMetrics(metrics.MustLoad()),
 			message.WithHandlerLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
 			message.WithHandlerIdempotencyKeyErrorIgnoring(),
@@ -284,7 +297,7 @@ func messageBusProducerProvider(
 	return lazy.New(func() (message.BusProducer, error) {
 		return message.NewBusProducer(
 			outboxStorage.MustLoad(),
-			message.WithObservability(observer.MustLoad()),
+			message.WithObservability(observer.MustLoad(), observability.FieldRequestID),
 			message.WithMetrics(metrics.MustLoad()),
 			message.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
 		), nil

@@ -59,10 +59,10 @@ func ParseTypedValue[T SupportedValueParsingTypes | SupportedPointerParsingTypes
 	default:
 		return blank, fmt.Errorf("unsupported value type %T", blank)
 	}
-
 	if err != nil {
 		return blank, fmt.Errorf("convert to type %T: %w", blank, err)
 	}
+
 	return v.(T), nil
 }
 
@@ -99,5 +99,6 @@ func wrapWithPointer[T any](v T, err error) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &v, nil
 }

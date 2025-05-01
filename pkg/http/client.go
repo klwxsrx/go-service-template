@@ -66,6 +66,8 @@ type (
 		RESTClient      *resty.Client
 		opts            []ClientOption
 	}
+
+	ObservabilityFieldHeaders map[observability.Field]string
 )
 
 func NewClient(opts ...ClientOption) Client {
@@ -117,15 +119,19 @@ func WithClientDestination(name, url string) ClientOption {
 	}
 }
 
-func WithRequestObservability(observer observability.Observer, requestIDHeaderName string) ClientOption {
+func WithRequestObservability(
+	observer observability.Observer,
+	headers ObservabilityFieldHeaders,
+) ClientOption {
 	return func(c *ClientImpl) {
 		c.RESTClient.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
-			id, ok := observer.RequestID(req.Context())
-			if !ok {
-				return nil
+			for field, header := range headers {
+				value := observer.Field(req.Context(), field)
+				if value != "" {
+					req.SetHeader(header, value)
+				}
 			}
 
-			req.SetHeader(requestIDHeaderName, id)
 			return nil
 		})
 	}

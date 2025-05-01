@@ -175,14 +175,24 @@ func newBusProducerImpl(
 	}
 }
 
-func WithObservability(observer observability.Observer) BusOption {
+func WithObservability(observer observability.Observer, fields ...observability.Field) BusOption {
+	if len(fields) == 0 {
+		return func() (BusProducerMW, MetadataBuilderFunc) { return nil, nil }
+	}
+
 	observabilityMetadataBuilder := func(ctx context.Context) (Metadata, error) { // nolint:unparam
-		requestID, ok := observer.RequestID(ctx)
-		if !ok {
+		observabilityValues := make(map[observability.Field]string, len(fields))
+		for _, field := range fields {
+			value := observer.Field(ctx, field)
+			if value != "" {
+				observabilityValues[field] = value
+			}
+		}
+		if len(observabilityValues) == 0 {
 			return nil, nil
 		}
 
-		return Metadata{requestIDMetadataKey: requestID}, nil
+		return Metadata{observabilityMetadataKey: observabilityValues}, nil
 	}
 
 	return func() (BusProducerMW, MetadataBuilderFunc) {
