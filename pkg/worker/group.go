@@ -20,6 +20,7 @@ type group struct {
 	errChan   chan error
 	errResult error
 	pool      Pool
+	wg        *sync.WaitGroup
 
 	onceCloser *sync.Once
 }
@@ -34,6 +35,7 @@ func WithinFailFastGroup(ctx context.Context, pool Pool) Group {
 		errChan:             make(chan error, 1),
 		errResult:           nil,
 		pool:                pool,
+		wg:                  &sync.WaitGroup{},
 		onceCloser:          &sync.Once{},
 	}
 }
@@ -48,6 +50,7 @@ func WithinFailSafeGroup(ctx context.Context, pool Pool) Group {
 		errChan:             make(chan error, 1),
 		errResult:           nil,
 		pool:                pool,
+		wg:                  &sync.WaitGroup{},
 		onceCloser:          &sync.Once{},
 	}
 }
@@ -81,13 +84,15 @@ func (g *group) Do(job ErrorJob) {
 		}
 	}
 
+	g.wg.Add(1)
 	g.pool.Do(g.ctx, func(ctx context.Context) {
 		handleErr(job(ctx))
+		g.wg.Done()
 	})
 }
 
 func (g *group) Wait() error {
-	g.pool.Wait()
+	g.wg.Wait()
 	g.onceCloser.Do(func() {
 		g.ctxCancel()
 
