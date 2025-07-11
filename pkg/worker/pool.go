@@ -31,6 +31,7 @@ func NewPool(maxWorkers int) Pool {
 	if maxWorkers <= MaxWorkersCountNumCPU {
 		maxWorkers = runtime.NumCPU()
 	}
+
 	return &pool{
 		jobCompleted:    &sync.WaitGroup{},
 		workerAvailable: sync.NewCond(&sync.Mutex{}),

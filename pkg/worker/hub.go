@@ -20,7 +20,7 @@ func RunHub(ctx context.Context, logger log.Logger, process ErrorJob, processes 
 	loggingWrapper := func(process ErrorJob, logger log.Logger) ErrorJob {
 		return func(ctx context.Context) error {
 			err := process(ctx)
-			if errors.Is(err, context.Canceled) {
+			if errors.Is(err, context.Canceled) { // TODO: check errors.Is(ctx.Err(), context.Canceled) to split context cancellation and business logic
 				return err
 			}
 			if err == nil {

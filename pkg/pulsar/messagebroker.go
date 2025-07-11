@@ -61,12 +61,13 @@ func (b *MessageBroker) Close() {
 }
 
 func (b *MessageBroker) testCreateProducer(connTimeout time.Duration) error {
-	eb := backoff.NewExponentialBackOff()
-	eb.InitialInterval = time.Second
-	eb.RandomizationFactor = 0
-	eb.Multiplier = 2
-	eb.MaxInterval = connTimeout / 4
-	eb.MaxElapsedTime = connTimeout
+	eb := backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(time.Second),
+		backoff.WithRandomizationFactor(0),
+		backoff.WithMultiplier(2),
+		backoff.WithMaxInterval(connTimeout/4),
+		backoff.WithMaxElapsedTime(connTimeout),
+	)
 
 	return backoff.Retry(func() error {
 		p, err := b.client.CreateProducer(pulsar.ProducerOptions{

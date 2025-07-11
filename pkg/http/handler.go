@@ -31,7 +31,7 @@ type (
 
 	responseWriter struct {
 		deferredWriter *deferredResponseWriter
-		encodeBodyFunc func(http.Header) ([]byte, error)
+		bodyEncoder    func(http.Header) ([]byte, error)
 	}
 
 	deferredResponseWriter struct {
@@ -58,7 +58,7 @@ func (w *responseWriter) SetCookie(cookie *http.Cookie) ResponseWriter {
 }
 
 func (w *responseWriter) SetJSONBody(data any) ResponseWriter {
-	w.encodeBodyFunc = func(header http.Header) ([]byte, error) {
+	w.bodyEncoder = func(header http.Header) ([]byte, error) {
 		bodyEncoded, err := json.Marshal(data)
 		if err != nil {
 			return nil, fmt.Errorf("encode body: %w", err)
@@ -86,9 +86,9 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 	}
 
 	var bodyEncoded []byte
-	if w.encodeBodyFunc != nil {
+	if w.bodyEncoder != nil {
 		var encodingErr error
-		bodyEncoded, encodingErr = w.encodeBodyFunc(w.deferredWriter.Header())
+		bodyEncoded, encodingErr = w.bodyEncoder(w.deferredWriter.Header())
 		if encodingErr != nil {
 			w.deferredWriter.WriteHeader(http.StatusInternalServerError)
 			if err == nil {
@@ -188,7 +188,7 @@ func httpHandlerWrapper(handler HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		respWriter := &responseWriter{
 			deferredWriter: newDeferredResponseWriter(w, r),
-			encodeBodyFunc: nil,
+			bodyEncoder:    nil,
 		}
 
 		defer recoverPanic(r, respWriter)

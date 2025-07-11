@@ -24,7 +24,7 @@ type (
 		ConsumptionType ConsumptionType
 	}
 
-	RegisterHandlerFunc func() (StructuredMessage, DeserializerFunc, TypedHandler[StructuredMessage])
+	RegisterHandlerFunc func() (StructuredMessage, Deserializer, TypedHandler[StructuredMessage])
 )
 
 type busListener struct {

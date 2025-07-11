@@ -3,13 +3,13 @@ package message
 import (
 	"fmt"
 
-	"github.com/iancoleman/strcase"
+	"github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
 type SubscriberName string
 
 func NewSubscriberName(name string) SubscriberName {
-	name = strcase.ToKebab(name)
+	name = strings.ToKebabCase(name)
 	return SubscriberName(name)
 }
 

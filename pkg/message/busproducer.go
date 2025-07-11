@@ -27,10 +27,10 @@ type (
 	RegisterMessageFunc func() (StructuredMessage, KeyBuilderFunc)
 	KeyBuilderFunc      func(StructuredMessage) string
 
-	BusOption           func() (BusProducerMW, MetadataBuilderFunc)
-	BusProducerMW       func(BusProducerFunc) BusProducerFunc
-	BusProducerFunc     func(context.Context, []StructuredMessage, time.Time) error
-	MetadataBuilderFunc func(context.Context) (Metadata, error)
+	BusOption       func() (BusProducerMW, MetadataBuilder)
+	BusProducerMW   func(BusProducerFunc) BusProducerFunc
+	BusProducerFunc func(context.Context, []StructuredMessage, time.Time) error
+	MetadataBuilder func(context.Context) (Metadata, error)
 )
 
 type busProducer struct {
@@ -44,7 +44,7 @@ func NewBusProducer(
 	opts ...BusOption,
 ) BusProducer {
 	producerMWs := make([]BusProducerMW, 0, len(opts))
-	metadataBuilders := make([]MetadataBuilderFunc, 0)
+	metadataBuilders := make([]MetadataBuilder, 0)
 	for _, opt := range opts {
 		producerMW, metaBuilder := opt()
 		if producerMW != nil {
@@ -125,7 +125,7 @@ func (b busProducer) RegisterMessages(topicMessages TopicMessagesMap) error {
 func newBusProducerImpl(
 	topicSerializers map[Topic]jsonSerializer,
 	messageTopics map[reflect.Type][]Topic,
-	metadataBuilders []MetadataBuilderFunc,
+	metadataBuilders []MetadataBuilder,
 	storage OutboxStorage,
 ) BusProducerFunc {
 	serializeImpl := func(ctx context.Context, msg StructuredMessage, serializer jsonSerializer) (*Message, error) {
@@ -177,7 +177,7 @@ func newBusProducerImpl(
 
 func WithObservability(observer observability.Observer, fields ...observability.Field) BusOption {
 	if len(fields) == 0 {
-		return func() (BusProducerMW, MetadataBuilderFunc) { return nil, nil }
+		return func() (BusProducerMW, MetadataBuilder) { return nil, nil }
 	}
 
 	observabilityMetadataBuilder := func(ctx context.Context) (Metadata, error) { // nolint:unparam
@@ -195,7 +195,7 @@ func WithObservability(observer observability.Observer, fields ...observability.
 		return Metadata{observabilityMetadataKey: observabilityValues}, nil
 	}
 
-	return func() (BusProducerMW, MetadataBuilderFunc) {
+	return func() (BusProducerMW, MetadataBuilder) {
 		return nil, observabilityMetadataBuilder
 	}
 }
@@ -210,7 +210,7 @@ func WithMetrics(metrics metric.Metrics) BusOption {
 		}
 	}
 
-	return func() (BusProducerMW, MetadataBuilderFunc) {
+	return func() (BusProducerMW, MetadataBuilder) {
 		return metricsMW, nil
 	}
 }
@@ -242,7 +242,7 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusOption {
 		}
 	}
 
-	return func() (BusProducerMW, MetadataBuilderFunc) {
+	return func() (BusProducerMW, MetadataBuilder) {
 		return loggingMW, nil
 	}
 }

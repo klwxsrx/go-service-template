@@ -63,7 +63,7 @@ func RegisterEvent[T event.Event]() RegisterMessageFunc {
 }
 
 func RegisterEventHandler[T event.Event](handler event.TypedHandler[T]) RegisterHandlerFunc {
-	return func() (StructuredMessage, DeserializerFunc, TypedHandler[StructuredMessage]) {
+	return func() (StructuredMessage, Deserializer, TypedHandler[StructuredMessage]) {
 		var blank T
 		return blank, TypedJSONDeserializer[T](), func(ctx context.Context, msg StructuredMessage) error {
 			evt, ok := msg.(T)

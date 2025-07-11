@@ -90,12 +90,13 @@ func openConnection(ctx context.Context, config *Config) (*sqlx.DB, error) {
 		return nil, err
 	}
 
-	eb := backoff.NewExponentialBackOff()
-	eb.InitialInterval = time.Second
-	eb.RandomizationFactor = 0
-	eb.Multiplier = 2
-	eb.MaxInterval = config.ConnectionTimeout / 4
-	eb.MaxElapsedTime = config.ConnectionTimeout
+	eb := backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(time.Second),
+		backoff.WithRandomizationFactor(0),
+		backoff.WithMultiplier(2),
+		backoff.WithMaxInterval(config.ConnectionTimeout/4),
+		backoff.WithMaxElapsedTime(config.ConnectionTimeout),
+	)
 
 	err = backoff.Retry(
 		func() error { return db.PingContext(ctx) },

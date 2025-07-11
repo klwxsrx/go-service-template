@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/iancoleman/strcase"
+	pkgstrings "github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
 type (
@@ -44,21 +44,21 @@ func (b *topicBuilder) Build() Topic {
 }
 
 func WithTopicDomainName(name string) TopicBuilderOption {
-	name = strcase.ToKebab(name)
+	name = pkgstrings.ToKebabCase(name)
 	return func(builder *topicBuilder) {
 		builder.domain = fmt.Sprintf("%s-domain", name)
 	}
 }
 
 func WithTopicAggregateName(name string) TopicBuilderOption {
-	name = strcase.ToKebab(name)
+	name = pkgstrings.ToKebabCase(name)
 	return func(builder *topicBuilder) {
 		builder.aggregate = fmt.Sprintf("%s-aggregate", name)
 	}
 }
 
 func WithTopicMessageType(msgType string) TopicBuilderOption {
-	msgType = strcase.ToKebab(msgType)
+	msgType = pkgstrings.ToKebabCase(msgType)
 	return func(builder *topicBuilder) {
 		builder.messageType = fmt.Sprintf("%s-type", msgType)
 	}
@@ -66,7 +66,7 @@ func WithTopicMessageType(msgType string) TopicBuilderOption {
 
 func WithTopicCustomTags(tags ...string) TopicBuilderOption {
 	for i := range tags {
-		tags[i] = strcase.ToKebab(tags[i])
+		tags[i] = pkgstrings.ToKebabCase(tags[i])
 	}
 
 	return func(builder *topicBuilder) {
@@ -75,7 +75,7 @@ func WithTopicCustomTags(tags ...string) TopicBuilderOption {
 }
 
 func NewTopic(baseName string, opts ...TopicBuilderOption) Topic {
-	builder := topicBuilder{baseName: strcase.ToKebab(baseName)}
+	builder := topicBuilder{baseName: pkgstrings.ToKebabCase(baseName)}
 	for _, opt := range opts {
 		opt(&builder)
 	}

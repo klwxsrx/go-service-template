@@ -12,20 +12,20 @@ var (
 )
 
 type (
-	DeserializerFunc func(payload []byte) (StructuredMessage, error)
+	Deserializer func(payload []byte) (StructuredMessage, error)
 
 	jsonDeserializer struct {
-		deserializers map[string]DeserializerFunc
+		deserializers map[string]Deserializer
 	}
 )
 
 func newJSONDeserializer() jsonDeserializer {
 	return jsonDeserializer{
-		deserializers: make(map[string]DeserializerFunc),
+		deserializers: make(map[string]Deserializer),
 	}
 }
 
-func (d jsonDeserializer) Register(messageType string, deserializer DeserializerFunc) error {
+func (d jsonDeserializer) Register(messageType string, deserializer Deserializer) error {
 	if _, ok := d.deserializers[messageType]; ok {
 		return fmt.Errorf("deserializer for %v already exists", messageType)
 	}
@@ -54,7 +54,7 @@ func (d jsonDeserializer) Deserialize(payload []byte) (StructuredMessage, Metada
 	return message, messagePayload.Meta, nil
 }
 
-func TypedJSONDeserializer[T StructuredMessage]() DeserializerFunc {
+func TypedJSONDeserializer[T StructuredMessage]() Deserializer {
 	return func(payload []byte) (StructuredMessage, error) {
 		var result T
 		err := json.Unmarshal(payload, &result)

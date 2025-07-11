@@ -57,7 +57,7 @@ func RegisterTask[T task.Task]() RegisterMessageFunc {
 }
 
 func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHandlerFunc {
-	return func() (StructuredMessage, DeserializerFunc, TypedHandler[StructuredMessage]) {
+	return func() (StructuredMessage, Deserializer, TypedHandler[StructuredMessage]) {
 		var blank T
 		return blank, TypedJSONDeserializer[T](), func(ctx context.Context, msg StructuredMessage) error {
 			tsk, ok := msg.(T)
