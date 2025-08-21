@@ -6,17 +6,17 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/strings"
 )
 
-type SubscriberName string
+type Subscriber string
 
-func NewSubscriberName(name string) SubscriberName {
+func NewSubscriberService(name string) Subscriber {
+	return NewSubscriberCustom(name, "service")
+}
+
+func NewSubscriberCustom(name, custom string) Subscriber {
+	return NewSubscriber(fmt.Sprintf("%s-%s", name, custom))
+}
+
+func NewSubscriber(name string) Subscriber {
 	name = strings.ToKebabCase(name)
-	return SubscriberName(name)
-}
-
-func NewSubscriberServiceName(name string) SubscriberName {
-	return NewSubscriberName(fmt.Sprintf("%s-service", name))
-}
-
-func NewSubscriberCustomName(name, custom string) SubscriberName {
-	return NewSubscriberName(fmt.Sprintf("%s-%s", name, custom))
+	return Subscriber(name)
 }

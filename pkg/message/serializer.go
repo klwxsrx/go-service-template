@@ -2,77 +2,94 @@ package message
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
-type jsonSerializer struct {
-	topic       Topic
-	serializers map[string]serializerHelper
-}
+var ErrDeserializeUnknownMessage = errors.New("unknown message")
 
-func newJSONSerializer(topic Topic) jsonSerializer {
-	return jsonSerializer{
-		topic:       topic,
-		serializers: make(map[string]serializerHelper),
+type (
+	Serializer interface {
+		Serialize(StructuredMessage, Metadata) ([]byte, error)
+	}
+
+	Deserializer interface {
+		Deserialize([]byte) (StructuredMessage, Metadata, error)
+		RegisterDeserializer(msgType string, _ PayloadDeserializer) error
+	}
+
+	JSONSerializer struct {
+		deserializers map[string]PayloadDeserializer
+	}
+
+	PayloadDeserializer func([]byte) (StructuredMessage, error)
+
+	jsonMessage struct {
+		Type    string   `json:"type"`
+		Payload string   `json:"payload"`
+		Meta    Metadata `json:"meta,omitempty"`
+	}
+)
+
+func NewJSONSerializer() *JSONSerializer {
+	return &JSONSerializer{
+		deserializers: make(map[string]PayloadDeserializer),
 	}
 }
 
-func (s jsonSerializer) RegisterSerializer(messageType string, keyBuilder KeyBuilderFunc) error {
-	if _, ok := s.serializers[messageType]; ok {
-		return fmt.Errorf("serializer for %v already exists", messageType)
-	}
-
-	s.serializers[messageType] = serializerHelper{
-		Key: keyBuilder,
-	}
-
-	return nil
-}
-
-func (s jsonSerializer) Serialize(
-	msg StructuredMessage,
-	meta Metadata,
-) (*Message, error) {
-	serializerHelper, ok := s.serializers[msg.Type()]
-	if !ok {
-		return nil, fmt.Errorf("unknown message type %s", msg.Type())
-	}
-
-	keyBuilder := func(_ StructuredMessage) string { return "" }
-	if serializerHelper.Key != nil {
-		keyBuilder = serializerHelper.Key
-	}
-
-	messageEncoded, err := json.Marshal(msg)
+func (s *JSONSerializer) Serialize(msg StructuredMessage, meta Metadata) ([]byte, error) {
+	payload, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("encode message %v %s: %w", msg.ID(), msg.Type(), err)
 	}
 
-	payload, err := json.Marshal(jsonPayload{
-		Type: msg.Type(),
-		Data: string(messageEncoded),
-		Meta: meta,
+	msgData, err := json.Marshal(jsonMessage{
+		Type:    msg.Type(),
+		Payload: string(payload),
+		Meta:    meta,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("encode message payload for %s: %w", msg.Type(), err)
+		return nil, fmt.Errorf("encode message data for %s: %w", msg.Type(), err)
 	}
 
-	return &Message{
-		ID:      msg.ID(),
-		Topic:   s.topic,
-		Key:     keyBuilder(msg),
-		Payload: payload,
-	}, nil
+	return msgData, nil
 }
 
-type (
-	serializerHelper struct {
-		Key KeyBuilderFunc
+func (s *JSONSerializer) Deserialize(data []byte) (StructuredMessage, Metadata, error) {
+	var msgData jsonMessage
+	err := json.Unmarshal(data, &msgData)
+	if err != nil {
+		return nil, nil, ErrDeserializeUnknownMessage
 	}
 
-	jsonPayload struct {
-		Type string   `json:"type"`
-		Data string   `json:"data"`
-		Meta Metadata `json:"meta,omitempty"`
+	deserializer, ok := s.deserializers[msgData.Type]
+	if !ok {
+		return nil, nil, fmt.Errorf("%w %s", ErrDeserializeUnknownMessage, msgData.Type)
 	}
-)
+
+	msg, err := deserializer([]byte(msgData.Payload))
+	if err != nil {
+		return nil, nil, fmt.Errorf("deserialize message: %w", err)
+	}
+
+	return msg, msgData.Meta, nil
+}
+
+func (s *JSONSerializer) RegisterDeserializer(msgType string, deserializer PayloadDeserializer) error {
+	if _, ok := s.deserializers[msgType]; ok {
+		return fmt.Errorf("deserializer for %v already exists", msgType)
+	}
+
+	s.deserializers[msgType] = deserializer
+	return nil
+}
+
+func PayloadDeserializerImpl[T StructuredMessage](payload []byte) (StructuredMessage, error) {
+	var msg T
+	err := json.Unmarshal(payload, &msg)
+	if err != nil {
+		return nil, fmt.Errorf("json decode %T: %w", msg, err)
+	}
+
+	return msg, nil
+}

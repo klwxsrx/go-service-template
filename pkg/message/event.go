@@ -3,7 +3,6 @@ package message
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/klwxsrx/go-service-template/pkg/event"
 )
@@ -11,7 +10,7 @@ import (
 type (
 	EventDispatcher interface {
 		event.Dispatcher
-		ProducerRegistry
+		Registry
 	}
 
 	eventDispatcher struct {
@@ -35,7 +34,7 @@ func (d eventDispatcher) Dispatch(ctx context.Context, events ...event.Event) er
 		msgs = append(msgs, StructuredMessage(evt))
 	}
 
-	err := d.bus.Produce(ctx, msgs, time.Now())
+	err := d.bus.Produce(ctx, msgs...)
 	if err != nil {
 		return fmt.Errorf("dispatch event: %w", err)
 	}
@@ -43,36 +42,42 @@ func (d eventDispatcher) Dispatch(ctx context.Context, events ...event.Event) er
 	return nil
 }
 
-func (d eventDispatcher) RegisterMessages(messagesMap TopicMessagesMap) error {
-	return d.bus.RegisterMessages(messagesMap)
+func (d eventDispatcher) Register(messages TopicMessages, opts ...BusProducerOption) error {
+	return d.bus.Register(messages, opts...)
 }
 
 func RegisterEvent[T event.Event]() RegisterMessageFunc {
-	return func() (StructuredMessage, KeyBuilderFunc) {
-		var blank T
-		return blank,
-			func(msg StructuredMessage) string {
-				evt, ok := msg.(T)
-				if !ok {
-					return ""
-				}
-
-				return evt.AggregateID().String()
+	return func() (StructuredMessage, KeyBuilder) {
+		keyBuilder := func(msg StructuredMessage) string {
+			evt, ok := msg.(T)
+			if !ok {
+				return ""
 			}
+
+			return evt.AggregateID().String()
+		}
+
+		var blank T
+		return blank, keyBuilder
 	}
 }
 
-func RegisterEventHandler[T event.Event](handler event.TypedHandler[T]) RegisterHandlerFunc {
-	return func() (StructuredMessage, Deserializer, TypedHandler[StructuredMessage]) {
-		var blank T
-		return blank, TypedJSONDeserializer[T](), func(ctx context.Context, msg StructuredMessage) error {
-			evt, ok := msg.(T)
-			if !ok {
-				return fmt.Errorf("invalid event struct type %T for messageID %v, expected %T", msg, msg.ID(), evt)
-			}
+func RegisterEventHandlers[T event.Event](handlers ...event.TypedHandler[T]) RegisterHandlersFunc {
+	return func() (StructuredMessage, PayloadDeserializer, []TypedHandler[StructuredMessage]) {
+		handlersImpl := make([]TypedHandler[StructuredMessage], 0, len(handlers))
+		for _, handler := range handlers {
+			handlersImpl = append(handlersImpl, func(ctx context.Context, msg StructuredMessage) error {
+				evt, ok := msg.(T)
+				if !ok {
+					return fmt.Errorf("invalid event struct type %T for messageID %v, expected %T", msg, msg.ID(), evt)
+				}
 
-			return handler(ctx, evt)
+				return handler(ctx, evt)
+			})
 		}
+
+		var blank T
+		return blank, PayloadDeserializerImpl[T], handlersImpl
 	}
 }
 
@@ -83,11 +88,4 @@ func NewTopicDomainEvent(domainName, aggregateName string, customTags ...string)
 		WithTopicAggregateName(aggregateName),
 		WithTopicCustomTags(customTags...),
 	)
-}
-
-func NewTopicSubscriptionDomainEvent(domainName, aggregateName string, customTags ...string) TopicSubscription {
-	return TopicSubscription{
-		Topic:           NewTopicDomainEvent(domainName, aggregateName, customTags...),
-		ConsumptionType: ConsumptionTypeExclusive,
-	}
 }

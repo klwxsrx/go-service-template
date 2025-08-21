@@ -97,8 +97,8 @@ func (c *DependencyContainer) MustRegisterHTTPHandlers(registry pkghttp.HandlerR
 func eventDispatcherProvider(messagingEventDispatcher lazy.Loader[pkgmessage.EventDispatcher]) lazy.Loader[event.Dispatcher] {
 	return lazy.New(func() (event.Dispatcher, error) {
 		eventDispatcher := messagingEventDispatcher.MustLoad()
-		err := eventDispatcher.RegisterMessages(pkgmessage.TopicMessagesMap{
-			message.TopicDomainEventUser.Topic: {
+		err := eventDispatcher.Register(pkgmessage.TopicMessages{
+			message.TopicDomainEventUser: {
 				pkgmessage.RegisterEvent[domain.EventUserDeleted](),
 			},
 		})

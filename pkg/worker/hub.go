@@ -8,7 +8,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
-func MustRunHub(ctx context.Context, logger log.Logger, process ErrorJob, processes ...ErrorJob) {
+func MustRunHub(ctx context.Context, logger log.Logger, process ErrorJob, processes ...ErrorJob) { // TODO: PeriodicJob, PeriodicErrorJob, PeriodicAction, Run, MustRun, process -> job
 	err := RunHub(ctx, logger, process, processes...)
 	if err != nil {
 		panic(fmt.Errorf("process completed with error: %w", err))

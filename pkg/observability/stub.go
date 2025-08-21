@@ -8,7 +8,7 @@ func NewStub() Observer {
 	return observerStub{}
 }
 
-func (s observerStub) Field(_ context.Context, _ Field) string {
+func (s observerStub) Field(context.Context, Field) string {
 	return ""
 }
 

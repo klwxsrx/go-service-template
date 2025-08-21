@@ -82,9 +82,9 @@ func (c *DependencyContainer) MustRegisterHTTPHandlers(registry pkghttp.HandlerR
 }
 
 func (c *DependencyContainer) MustRegisterMessageHandlers(registry pkgmessage.HandlerRegistry) {
-	err := registry.RegisterMessageHandlers(message.SubscriberName, pkgmessage.TopicHandlersMap{
+	err := registry.RegisterHandlers(message.SubscriberName, pkgmessage.TopicHandlers{
 		userapi.TopicDomainEventUser: {
-			pkgmessage.RegisterEventHandler[user.EventUserDeleted](c.UserProfileService.MustLoad().HandleUserDeleted),
+			pkgmessage.RegisterEventHandlers[user.EventUserDeleted](c.UserProfileService.MustLoad().HandleUserDeleted),
 		},
 	})
 	if err != nil {

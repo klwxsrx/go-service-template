@@ -41,7 +41,7 @@ func ObservabilityFieldHeaderExtractor(header string) ObservabilityFieldExtracto
 }
 
 func ObservabilityFieldRandomUUIDExtractor() ObservabilityFieldExtractor {
-	return func(_ *http.Request) string {
+	return func(*http.Request) string {
 		return uuid.New().String()
 	}
 }

@@ -15,8 +15,9 @@ import (
 const (
 	DefaultServerAddress = ":8080"
 
-	defaultReadTimeout       = 10 * time.Second
 	defaultReadHeaderTimeout = 5 * time.Second
+	defaultReadTimeout       = 10 * time.Second
+	defaultShutdownTimeout   = 20 * time.Second
 )
 
 type (
@@ -40,7 +41,7 @@ type server struct {
 
 func NewServer(
 	address string,
-	opts ...ServerOption,
+	opts ...ServerOption, // TODO: use opts for the server timeouts and address
 ) Server {
 	router := withHandlerMetadata(mux.NewRouter())
 	for _, opt := range opts {
@@ -62,7 +63,10 @@ func NewServer(
 
 func (s server) Listener(ctx context.Context) error {
 	shutdown := func() error {
-		err := s.srv.Shutdown(context.Background())
+		ctx, ctxCancel := context.WithTimeout(context.Background(), defaultShutdownTimeout)
+		defer ctxCancel()
+
+		err := s.srv.Shutdown(ctx)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("shutdown: %w", err)
 		}

@@ -2,37 +2,46 @@ package message
 
 import "context"
 
-const (
-	ConsumptionTypeExclusive ConsumptionType = "exclusive"
-	ConsumptionTypeShared    ConsumptionType = "shared"
-)
-
 type (
 	ConsumerMessage struct {
 		Context context.Context
 		Message Message
 	}
 
-	Consumer interface {
-		Name() string
+	Consumer[S AcknowledgeStrategy] interface {
+		Topic() Topic
+		Subscriber() Subscriber
 		Messages() <-chan *ConsumerMessage
-		Ack(msg *ConsumerMessage)
-		Nack(msg *ConsumerMessage)
+		Acknowledge() S
 		Close() error
 	}
 
-	ConsumerProvider interface {
-		Consumer(Topic, SubscriberName, ConsumptionType) (Consumer, error)
+	ConsumerProvider[S AcknowledgeStrategy] interface {
+		Consumer(Topic, Subscriber) (Consumer[S], error)
 	}
 
 	Producer interface {
-		Produce(ctx context.Context, msg *Message) error
+		Produce(context.Context, *Message) error
 	}
 
-	Broker interface {
-		ConsumerProvider
+	Broker[S AcknowledgeStrategy] interface {
+		ConsumerProvider[S]
 		Producer
+		Close() error
 	}
 
-	ConsumptionType string
+	CommitOffsetStrategy interface {
+		CommitOffset(context.Context, *ConsumerMessage) error
+	}
+
+	AckStrategy interface {
+		Ack(context.Context, *ConsumerMessage) error
+	}
+
+	AckNackStrategy interface {
+		AckStrategy
+		Nack(context.Context, *ConsumerMessage) error
+	}
+
+	AcknowledgeStrategy any
 )

@@ -14,11 +14,11 @@ func main() {
 	infra := cmd.NewInfrastructureContainer(ctx)
 	defer infra.Close(ctx)
 
+	msgOutbox := infra.MessageOutbox.MustLoad()
+
 	worker.MustRunHub(ctx, infra.Logger.MustLoad(),
 		pkgcmd.TermSignalAwaiter,
-		worker.PeriodicRunner(
-			infra.MessageOutbox.MustLoad().Process,
-			time.Second,
-		),
+		msgOutbox.Worker,
+		worker.PeriodicRunner(func(context.Context) { msgOutbox.Process() }, time.Second),
 	)
 }

@@ -53,17 +53,18 @@ func NewMessageBroker(config *Config) (*MessageBroker, error) {
 	return conn, nil
 }
 
-func (b *MessageBroker) Close() {
+func (b *MessageBroker) Close() error {
 	for _, producer := range b.producers {
 		producer.Close()
 	}
+
 	b.client.Close()
+	return nil
 }
 
 func (b *MessageBroker) testCreateProducer(connTimeout time.Duration) error {
 	eb := backoff.NewExponentialBackOff(
 		backoff.WithInitialInterval(time.Second),
-		backoff.WithRandomizationFactor(0),
 		backoff.WithMultiplier(2),
 		backoff.WithMaxInterval(connTimeout/4),
 		backoff.WithMaxElapsedTime(connTimeout),

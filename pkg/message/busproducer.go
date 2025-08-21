@@ -12,109 +12,123 @@ import (
 )
 
 type (
-	TopicMessagesMap map[Topic]TopicMessages
-	TopicMessages    []RegisterMessageFunc
-
-	ProducerRegistry interface {
-		RegisterMessages(TopicMessagesMap) error
+	Registry interface {
+		Register(TopicMessages, ...BusProducerOption) error
 	}
 
 	BusProducer interface {
-		Produce(context.Context, []StructuredMessage, time.Time) error
-		ProducerRegistry
+		Registry
+		Produce(context.Context, ...StructuredMessage) error
 	}
 
-	RegisterMessageFunc func() (StructuredMessage, KeyBuilderFunc)
-	KeyBuilderFunc      func(StructuredMessage) string
+	BusScheduledProducer interface {
+		BusProducer
+		Schedule(context.Context, time.Time, ...StructuredMessage) error
+	}
 
-	BusOption       func() (BusProducerMW, MetadataBuilder)
-	BusProducerMW   func(BusProducerFunc) BusProducerFunc
-	BusProducerFunc func(context.Context, []StructuredMessage, time.Time) error
-	MetadataBuilder func(context.Context) (Metadata, error)
+	TopicMessages map[Topic][]RegisterMessageFunc
+
+	BusProducerOption func(*BusProducerConfig)
+	BusProducerConfig struct {
+		Middlewares      []BusProducerMiddleware
+		MetadataBuilders []MetadataBuilder
+	}
+	BusProducerMiddleware func(BusProduce) BusProduce
+	MetadataBuilder       func(context.Context) (Metadata, error)
+	BusProduce            func(context.Context, Topic, StructuredMessage, *time.Time) error
+
+	busProducerImpl struct {
+		producerImpl  producerImpl
+		serializer    Serializer
+		messageTopics map[reflect.Type][]Topic
+		producers     map[producerKey]BusProduce
+		topicMessages map[Topic]map[string]struct{}
+		baseConfig    BusProducerConfig
+	}
+
+	producerKey struct {
+		Topic   Topic
+		Message reflect.Type
+	}
+
+	producerImpl func(context.Context, *Message, *time.Time) error
 )
 
-type busProducer struct {
-	topicSerializers map[Topic]jsonSerializer
-	messageTopics    map[reflect.Type][]Topic
-	producerImpl     BusProducerFunc
-}
-
 func NewBusProducer(
-	storage OutboxStorage,
-	opts ...BusOption,
+	producer Producer,
+	serializer Serializer,
+	opts ...BusProducerOption,
 ) BusProducer {
-	producerMWs := make([]BusProducerMW, 0, len(opts))
-	metadataBuilders := make([]MetadataBuilder, 0)
+	config := BusProducerConfig{
+		Middlewares:      nil,
+		MetadataBuilders: nil,
+	}
 	for _, opt := range opts {
-		producerMW, metaBuilder := opt()
-		if producerMW != nil {
-			producerMWs = append(producerMWs, producerMW)
-		}
-		if metaBuilder != nil {
-			metadataBuilders = append(metadataBuilders, metaBuilder)
-		}
+		opt(&config)
 	}
 
-	topicSerializers := make(map[Topic]jsonSerializer)
-	messageTopics := make(map[reflect.Type][]Topic)
-
-	producerImpl := newBusProducerImpl(topicSerializers, messageTopics, metadataBuilders, storage)
-	for i := len(producerMWs) - 1; i >= 0; i-- {
-		producerImpl = producerMWs[i](producerImpl)
-	}
-
-	return busProducer{
-		topicSerializers: topicSerializers,
-		messageTopics:    messageTopics,
-		producerImpl:     producerImpl,
-	}
-}
-
-func (b busProducer) Produce(ctx context.Context, msgs []StructuredMessage, scheduleAt time.Time) error {
-	if len(msgs) == 0 {
-		return nil
-	}
-
-	now := time.Now()
-	if scheduleAt.Before(now) {
-		scheduleAt = now
-	}
-
-	return b.producerImpl(
-		ctx,
-		msgs,
-		scheduleAt,
-	)
-}
-
-func (b busProducer) RegisterMessages(topicMessages TopicMessagesMap) error {
-	for topic, msgs := range topicMessages {
-		for _, registerFunc := range msgs {
-			msgSchema, keyBuilder := registerFunc()
-			msgSchemaType := reflect.TypeOf(msgSchema)
-
-			topics, ok := b.messageTopics[msgSchemaType]
-			if !ok {
-				topics = make([]Topic, 0, 1)
-			}
-
-			topics = append(topics, topic)
-			b.messageTopics[msgSchemaType] = topics
-
-			serializer, ok := b.topicSerializers[topic]
-			if !ok {
-				serializer = newJSONSerializer(topic)
-				b.topicSerializers[topic] = serializer
-			}
-
-			messageType := msgSchema.Type()
-			if messageType == "" {
-				return fmt.Errorf("get message type for %T: blank message must return const value", msgSchema)
-			}
-
-			err := serializer.RegisterSerializer(messageType, keyBuilder)
+	return &busProducerImpl{
+		producerImpl: func(ctx context.Context, message *Message, _ *time.Time) error {
+			err := producer.Produce(ctx, message)
 			if err != nil {
-				return fmt.Errorf("register message serializer for type %s: %w", messageType, err)
+				return fmt.Errorf("produce message: %w", err)
+			}
+
+			return nil
+		},
+		serializer:    serializer,
+		messageTopics: make(map[reflect.Type][]Topic),
+		producers:     make(map[producerKey]BusProduce),
+		topicMessages: make(map[Topic]map[string]struct{}),
+		baseConfig:    config,
+	}
+}
+
+func NewBusScheduledProducer(
+	storage Storage,
+	serializer Serializer,
+	opts ...BusProducerOption,
+) BusScheduledProducer {
+	config := BusProducerConfig{
+		Middlewares:      nil,
+		MetadataBuilders: nil,
+	}
+	for _, opt := range opts {
+		opt(&config)
+	}
+
+	return &busProducerImpl{
+		producerImpl: func(ctx context.Context, message *Message, at *time.Time) error {
+			scheduleAt := time.Now()
+			if at != nil {
+				scheduleAt = *at
+			}
+
+			err := storage.Store(ctx, scheduleAt, *message)
+			if err != nil {
+				return fmt.Errorf("store message: %w", err)
+			}
+
+			return nil
+		},
+		serializer:    serializer,
+		messageTopics: make(map[reflect.Type][]Topic),
+		producers:     make(map[producerKey]BusProduce),
+		topicMessages: make(map[Topic]map[string]struct{}),
+		baseConfig:    config,
+	}
+}
+
+func (p *busProducerImpl) Register(msgs TopicMessages, opts ...BusProducerOption) error {
+	config := p.createFromBaseConfig()
+	for _, opt := range opts {
+		opt(&config)
+	}
+
+	for topic, funcs := range msgs {
+		for _, fn := range funcs {
+			if err := p.registerImpl(topic, fn, config); err != nil {
+				return fmt.Errorf("register for topic %s: %w", topic, err)
 			}
 		}
 	}
@@ -122,13 +136,51 @@ func (b busProducer) RegisterMessages(topicMessages TopicMessagesMap) error {
 	return nil
 }
 
-func newBusProducerImpl(
-	topicSerializers map[Topic]jsonSerializer,
-	messageTopics map[reflect.Type][]Topic,
-	metadataBuilders []MetadataBuilder,
-	storage OutboxStorage,
-) BusProducerFunc {
-	serializeImpl := func(ctx context.Context, msg StructuredMessage, serializer jsonSerializer) (*Message, error) {
+func (p *busProducerImpl) Produce(ctx context.Context, msgs ...StructuredMessage) error {
+	return p.scheduleImpl(ctx, nil, msgs...)
+}
+
+func (p *busProducerImpl) Schedule(ctx context.Context, at time.Time, msgs ...StructuredMessage) error {
+	return p.scheduleImpl(ctx, &at, msgs...)
+}
+
+func (p *busProducerImpl) createFromBaseConfig() BusProducerConfig {
+	config := BusProducerConfig{
+		Middlewares:      make([]BusProducerMiddleware, 0, len(p.baseConfig.Middlewares)),
+		MetadataBuilders: make([]MetadataBuilder, 0, len(p.baseConfig.MetadataBuilders)),
+	}
+
+	config.Middlewares = append(config.Middlewares, p.baseConfig.Middlewares...)
+	config.MetadataBuilders = append(config.MetadataBuilders, p.baseConfig.MetadataBuilders...)
+	return config
+}
+
+func (p *busProducerImpl) registerImpl(topic Topic, msg RegisterMessageFunc, config BusProducerConfig) error {
+	schema, keyBuilder := msg()
+	msgType := schema.Type()
+	if msgType == "" {
+		return fmt.Errorf("blank message %T must return const value of type", schema)
+	}
+
+	if existedTypes, ok := p.topicMessages[topic]; ok {
+		if _, ok := existedTypes[msgType]; ok {
+			return fmt.Errorf("message type %s already registered in topic", msgType)
+		}
+	} else {
+		p.topicMessages[topic] = make(map[string]struct{})
+	}
+
+	msgReflectType := reflect.TypeOf(schema)
+	p.producers[producerKey{Topic: topic, Message: msgReflectType}] = p.buildProducer(config, keyBuilder)
+	p.messageTopics[msgReflectType] = append(p.messageTopics[msgReflectType], topic)
+	p.topicMessages[topic][msgType] = struct{}{}
+
+	return nil
+}
+
+func (p *busProducerImpl) buildProducer(config BusProducerConfig, keyBuilder KeyBuilder) BusProduce {
+	metadataBuilders := config.MetadataBuilders
+	serializePayloadImpl := func(ctx context.Context, msg StructuredMessage) ([]byte, error) {
 		meta := make(Metadata, len(metadataBuilders))
 		for _, metaBuilder := range metadataBuilders {
 			tmpMeta, err := metaBuilder(ctx)
@@ -140,109 +192,162 @@ func newBusProducerImpl(
 			}
 		}
 
-		serializedMsg, err := serializer.Serialize(msg, meta)
+		payload, err := p.serializer.Serialize(msg, meta)
 		if err != nil {
 			return nil, fmt.Errorf("serialize message %T: %w", msg, err)
 		}
 
-		return serializedMsg, nil
+		return payload, nil
 	}
 
-	return func(ctx context.Context, msgs []StructuredMessage, scheduleAt time.Time) error {
-		serializedMsgs := make([]Message, 0, len(msgs))
-		for _, msg := range msgs {
-			topics, ok := messageTopics[reflect.TypeOf(msg)]
+	if keyBuilder == nil {
+		keyBuilder = func(StructuredMessage) string { return "" }
+	}
+
+	produce := func(ctx context.Context, topic Topic, msg StructuredMessage, at *time.Time) error {
+		payload, err := serializePayloadImpl(ctx, msg)
+		if err != nil {
+			return fmt.Errorf("serialize message %T: %w", msg, err)
+		}
+
+		rawMsg := &Message{
+			ID:      msg.ID(),
+			Topic:   topic,
+			Key:     keyBuilder(msg),
+			Payload: payload,
+		}
+
+		err = p.producerImpl(ctx, rawMsg, at)
+		if err != nil {
+			return fmt.Errorf("produce message: %w", err)
+		}
+
+		return nil
+	}
+	for i := len(config.Middlewares) - 1; i >= 0; i-- {
+		produce = config.Middlewares[i](produce)
+	}
+
+	return produce
+}
+
+func (p *busProducerImpl) scheduleImpl(ctx context.Context, at *time.Time, msgs ...StructuredMessage) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
+	messageTopics := make(map[reflect.Type][]Topic, len(msgs))
+	messageProducers := make(map[producerKey]BusProduce, len(messageTopics))
+	for _, msg := range msgs {
+		msgType := reflect.TypeOf(msg)
+
+		topics, ok := p.messageTopics[msgType]
+		if !ok {
+			return fmt.Errorf("unknown message type %T", msg)
+		}
+
+		messageTopics[msgType] = append(messageTopics[msgType], topics...)
+
+		for _, topic := range topics {
+			key := producerKey{topic, msgType}
+			producer, ok := p.producers[key]
 			if !ok {
 				return fmt.Errorf("unknown message type %T", msg)
 			}
 
-			for _, topic := range topics {
-				serializer, ok := topicSerializers[topic]
-				if !ok {
-					return fmt.Errorf("serializer for topic %s not found", topic)
-				}
+			messageProducers[key] = producer
+		}
+	}
 
-				serializedMsg, err := serializeImpl(ctx, msg, serializer)
-				if err != nil {
-					return err
-				}
+	for _, msg := range msgs {
+		msgType := reflect.TypeOf(msg)
+		topics := messageTopics[msgType]
 
-				serializedMsgs = append(serializedMsgs, *serializedMsg)
+		for _, topic := range topics {
+			producerImpl := p.producers[producerKey{topic, msgType}]
+			err := producerImpl(ctx, topic, msg, at)
+			if err != nil {
+				return err
 			}
 		}
-
-		return storage.Store(ctx, serializedMsgs, scheduleAt)
 	}
+
+	return nil
 }
 
-func WithObservability(observer observability.Observer, fields ...observability.Field) BusOption {
+func WithBusProducerObservability(observer observability.Observer, fields ...observability.Field) BusProducerOption {
 	if len(fields) == 0 {
-		return func() (BusProducerMW, MetadataBuilder) { return nil, nil }
+		return func(*BusProducerConfig) {}
 	}
 
-	observabilityMetadataBuilder := func(ctx context.Context) (Metadata, error) { // nolint:unparam
-		observabilityValues := make(map[observability.Field]string, len(fields))
+	metadataBuilder := func(ctx context.Context) (Metadata, error) { //nolint:unparam
+		values := make(map[observability.Field]string, len(fields))
 		for _, field := range fields {
 			value := observer.Field(ctx, field)
 			if value != "" {
-				observabilityValues[field] = value
+				values[field] = value
 			}
 		}
-		if len(observabilityValues) == 0 {
+		if len(values) == 0 {
 			return nil, nil
 		}
 
-		return Metadata{observabilityMetadataKey: observabilityValues}, nil
+		data := make(Metadata, len(values))
+		for key, value := range values {
+			data[fmt.Sprintf("%s%s", observabilityMetaKeyPrefix, key)] = value
+		}
+
+		return data, nil
 	}
 
-	return func() (BusProducerMW, MetadataBuilder) {
-		return nil, observabilityMetadataBuilder
+	return func(config *BusProducerConfig) {
+		config.MetadataBuilders = append(config.MetadataBuilders, metadataBuilder)
 	}
 }
 
-func WithMetrics(metrics metric.Metrics) BusOption {
-	metricsMW := func(impl BusProducerFunc) BusProducerFunc {
-		return func(ctx context.Context, msgs []StructuredMessage, scheduleAt time.Time) error {
-			err := impl(ctx, msgs, scheduleAt)
+func WithBusProducerMetrics(metrics metric.Metrics) BusProducerOption {
+	mw := func(impl BusProduce) BusProduce {
+		return func(ctx context.Context, topic Topic, msg StructuredMessage, scheduleAt *time.Time) error {
+			err := impl(ctx, topic, msg, scheduleAt)
 
-			metrics.WithLabel("success", err == nil).Count("msg_store_attempts_total", len(msgs))
+			metrics.With(metric.Labels{
+				"topic":   topic,
+				"type":    msg.Type(),
+				"success": err == nil,
+			}).Increment("msg_produce_attempts_total")
 			return err
 		}
 	}
 
-	return func() (BusProducerMW, MetadataBuilder) {
-		return metricsMW, nil
+	return func(config *BusProducerConfig) {
+		config.Middlewares = append(config.Middlewares, mw)
 	}
 }
 
-func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusOption {
-	loggingMW := func(impl BusProducerFunc) BusProducerFunc {
-		return func(ctx context.Context, msgs []StructuredMessage, scheduleAt time.Time) error {
-			messageIDTypes := make([]log.Fields, 0, len(msgs))
-			for _, msg := range msgs {
-				messageIDTypes = append(messageIDTypes, log.Fields{
-					"id":   msg.ID(),
-					"type": msg.Type(),
-				})
-			}
-
+func WithBusProducerLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusProducerOption {
+	mw := func(impl BusProduce) BusProduce {
+		return func(ctx context.Context, topic Topic, msg StructuredMessage, scheduleAt *time.Time) error {
 			loggerWithFields := logger.With(log.Fields{
-				"messageIDType": messageIDTypes,
-				"scheduleAt":    scheduleAt,
+				"topic":       topic,
+				"messageID":   msg.ID(),
+				"messageType": msg.Type(),
+				"scheduleAt":  scheduleAt,
 			})
 
-			err := impl(ctx, msgs, scheduleAt)
+			err := impl(ctx, topic, msg, scheduleAt)
 			if err != nil {
-				loggerWithFields.WithError(err).Log(ctx, errorLevel, "messages didn't stored to outbox storage due error")
+				loggerWithFields.
+					WithError(err).
+					Log(ctx, errorLevel, "message producing failed")
 			} else {
-				loggerWithFields.Log(ctx, infoLevel, "messages stored to outbox storage")
+				loggerWithFields.Log(ctx, infoLevel, "message successfully produced")
 			}
 
 			return err
 		}
 	}
 
-	return func() (BusProducerMW, MetadataBuilder) {
-		return loggingMW, nil
+	return func(config *BusProducerConfig) {
+		config.Middlewares = append(config.Middlewares, mw)
 	}
 }

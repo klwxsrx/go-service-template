@@ -32,6 +32,7 @@ arch: tools
 test: codegen
 	go test ./...
 
+# TODO: use go tool
 tools: tools-invalidate git-hooks-invalidate \
 	tools/bin/golangci-lint tools/bin/go-cleanarch tools/bin/goverter tools/bin/lefthook \
 	tools/bin/.go-mod.checksum tools/bin/.git-hooks.checksum

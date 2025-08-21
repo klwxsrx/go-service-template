@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-
-	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 type (
@@ -22,39 +20,18 @@ type (
 		Type() string
 	}
 
-	TypedHandler[M any] func(ctx context.Context, msg M) error
+	TypedHandler[T StructuredMessage] func(context.Context, T) error
+
+	KeyBuilder func(StructuredMessage) string
+
+	RegisterMessageFunc func() (
+		StructuredMessage,
+		KeyBuilder,
+	)
+
+	RegisterHandlersFunc func() (
+		StructuredMessage,
+		PayloadDeserializer,
+		[]TypedHandler[StructuredMessage],
+	)
 )
-
-func NewCompositeHandler[M any](handlers []TypedHandler[M], optionalPool worker.Pool) TypedHandler[M] {
-	if len(handlers) == 0 {
-		return func(_ context.Context, _ M) error { return nil }
-	}
-
-	if len(handlers) == 1 {
-		return handlers[0]
-	}
-
-	if optionalPool == nil {
-		return func(ctx context.Context, msg M) error {
-			for _, handler := range handlers {
-				err := handler(ctx, msg)
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
-		}
-	}
-
-	return func(ctx context.Context, msg M) error {
-		group := worker.WithinFailSafeGroup(ctx, optionalPool)
-		for _, handler := range handlers {
-			group.Do(func(ctx context.Context) error {
-				return handler(ctx, msg)
-			})
-		}
-
-		return group.Wait()
-	}
-}

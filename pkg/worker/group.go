@@ -5,6 +5,7 @@ import (
 	"sync"
 )
 
+// TODO: use func() error without context; context could be placed outside; if group context passed, job will work failfast
 type ErrorJob func(context.Context) error
 
 type Group interface {

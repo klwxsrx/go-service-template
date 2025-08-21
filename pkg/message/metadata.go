@@ -6,21 +6,21 @@ import (
 	"github.com/google/uuid"
 )
 
-const observabilityMetadataKey = "observability"
-
 const handlerMetaContextKey contextKey = iota
 
-type (
-	Metadata map[string]any
+const observabilityMetaKeyPrefix = "observability/"
 
-	handlerMetadata struct {
+type (
+	Metadata map[string]string
+
+	HandlerMetadata struct {
 		MessageID       uuid.UUID
 		MessageTopic    Topic
 		MessageMetadata Metadata
-		Panic           *panicErr
+		Panic           *PanicErr
 	}
 
-	panicErr struct {
+	PanicErr struct {
 		Message    string
 		Stacktrace []byte
 	}
@@ -33,18 +33,18 @@ func withHandlerMetadata(ctx context.Context, msg *Message, data Metadata) conte
 		data = make(Metadata)
 	}
 
-	return context.WithValue(ctx, handlerMetaContextKey, &handlerMetadata{
+	return context.WithValue(ctx, handlerMetaContextKey, &HandlerMetadata{
 		MessageID:       msg.ID,
 		MessageTopic:    msg.Topic,
 		MessageMetadata: data,
 	})
 }
 
-func getHandlerMetadata(ctx context.Context) *handlerMetadata {
-	meta, ok := ctx.Value(handlerMetaContextKey).(*handlerMetadata)
+func GetHandlerMetadata(ctx context.Context) *HandlerMetadata {
+	meta, ok := ctx.Value(handlerMetaContextKey).(*HandlerMetadata)
 	if ok {
 		return meta
 	}
 
-	return &handlerMetadata{}
+	return &HandlerMetadata{MessageMetadata: make(Metadata)}
 }

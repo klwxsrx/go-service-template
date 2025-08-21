@@ -17,52 +17,46 @@ type contextKey int
 
 func (b *MessageBroker) Consumer(
 	topic message.Topic,
-	subscriberName message.SubscriberName,
-	consumptionType message.ConsumptionType,
-) (message.Consumer, error) {
-	var typeOption pulsar.SubscriptionType
-	switch consumptionType {
-	case message.ConsumptionTypeShared:
-		typeOption = pulsar.Shared
-	case message.ConsumptionTypeExclusive:
-		typeOption = pulsar.Failover
-	default:
-		typeOption = pulsar.Failover
-	}
-
+	subscriber message.Subscriber,
+) (message.Consumer[message.AckNackStrategy], error) {
 	opts := pulsar.ConsumerOptions{
 		Topic:            string(topic),
-		SubscriptionName: string(subscriberName),
-		Type:             typeOption,
+		SubscriptionName: string(subscriber),
 	}
 
 	cons, err := b.client.Subscribe(opts)
 	if err != nil {
-		return nil, fmt.Errorf("subscribe to topic %s by %s subscriber", topic, subscriberName)
+		return nil, fmt.Errorf("subscribe to topic %s by %s subscriber", topic, subscriber)
 	}
 
 	return newMessageConsumer(cons, topic), nil
 }
 
 type messageConsumer struct {
-	name string
-	impl pulsar.Consumer
+	topic      message.Topic
+	subscriber message.Subscriber
+	impl       pulsar.Consumer
 
 	onceDoer *sync.Once
 	messages chan *message.ConsumerMessage
 }
 
-func newMessageConsumer(pulsarConsumer pulsar.Consumer, subscribedTopic message.Topic) message.Consumer {
+func newMessageConsumer(pulsarConsumer pulsar.Consumer, subscribedTopic message.Topic) message.Consumer[message.AckNackStrategy] {
 	return &messageConsumer{
-		name:     fmt.Sprintf("pulsar/%s/%s", pulsarConsumer.Subscription(), subscribedTopic),
-		impl:     pulsarConsumer,
-		onceDoer: &sync.Once{},
-		messages: make(chan *message.ConsumerMessage),
+		topic:      subscribedTopic,
+		subscriber: message.Subscriber(pulsarConsumer.Subscription()),
+		impl:       pulsarConsumer,
+		onceDoer:   &sync.Once{},
+		messages:   make(chan *message.ConsumerMessage),
 	}
 }
 
-func (c *messageConsumer) Name() string {
-	return c.name
+func (c *messageConsumer) Topic() message.Topic {
+	return c.topic
+}
+
+func (c *messageConsumer) Subscriber() message.Subscriber {
+	return c.subscriber
 }
 
 func (c *messageConsumer) Messages() <-chan *message.ConsumerMessage {
@@ -102,23 +96,32 @@ func (c *messageConsumer) Messages() <-chan *message.ConsumerMessage {
 	return c.messages
 }
 
-func (c *messageConsumer) Ack(msg *message.ConsumerMessage) {
-	messageID, ok := msg.Context.Value(pulsarMessageIDContextKey).(pulsar.MessageID)
-	if !ok {
-		return
-	}
-
-	// single topic pulsar consumer doesn't return any errors
-	_ = c.impl.AckID(messageID)
+func (c *messageConsumer) Acknowledge() message.AckNackStrategy {
+	return c
 }
 
-func (c *messageConsumer) Nack(msg *message.ConsumerMessage) {
+func (c *messageConsumer) Ack(_ context.Context, msg *message.ConsumerMessage) error {
 	messageID, ok := msg.Context.Value(pulsarMessageIDContextKey).(pulsar.MessageID)
 	if !ok {
-		return
+		return nil
+	}
+
+	err := c.impl.AckID(messageID)
+	if err != nil {
+		return fmt.Errorf("ack pulsar message id %v: %w", messageID, err)
+	}
+
+	return nil
+}
+
+func (c *messageConsumer) Nack(_ context.Context, msg *message.ConsumerMessage) error {
+	messageID, ok := msg.Context.Value(pulsarMessageIDContextKey).(pulsar.MessageID)
+	if !ok {
+		return nil
 	}
 
 	c.impl.NackID(messageID)
+	return nil
 }
 
 func (c *messageConsumer) Close() error {

@@ -92,7 +92,6 @@ func openConnection(ctx context.Context, config *Config) (*sqlx.DB, error) {
 
 	eb := backoff.NewExponentialBackOff(
 		backoff.WithInitialInterval(time.Second),
-		backoff.WithRandomizationFactor(0),
 		backoff.WithMultiplier(2),
 		backoff.WithMaxInterval(config.ConnectionTimeout/4),
 		backoff.WithMaxElapsedTime(config.ConnectionTimeout),

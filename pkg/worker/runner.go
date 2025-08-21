@@ -17,7 +17,7 @@ func PeriodicRunner(job Job, every time.Duration) ErrorJob {
 			case <-ticker.C:
 				job(ctx)
 			case <-ctx.Done():
-				return nil
+				return ctx.Err()
 			}
 		}
 	}

@@ -1,17 +1,15 @@
 package message
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 type (
-	TopicHandlersMap map[TopicSubscription]TopicHandlers
-	TopicHandlers    []RegisterHandlerFunc
-
 	HandlerRegistry interface {
-		RegisterMessageHandlers(SubscriberName, TopicHandlersMap) error
+		RegisterHandlers(Subscriber, TopicHandlers, ...ListenerOption) error
 	}
 
 	BusListener interface {
@@ -19,126 +17,114 @@ type (
 		Workers() []worker.ErrorJob
 	}
 
-	TopicSubscription struct {
-		Topic           Topic
-		ConsumptionType ConsumptionType
+	TopicHandlers map[Topic][]RegisterHandlersFunc
+
+	busListener[S AcknowledgeStrategy] struct {
+		consumers    ConsumerProvider[S]
+		queue        ListenerQueueBuilder[S]
+		deserializer func() Deserializer
+		listeners    map[subscriberKey]listenerData[S]
+		opts         []ListenerOption
 	}
 
-	RegisterHandlerFunc func() (StructuredMessage, Deserializer, TypedHandler[StructuredMessage])
+	listenerData[S AcknowledgeStrategy] struct {
+		Consumer     Consumer[S]
+		Deserializer Deserializer
+		Handlers     map[string][]TypedHandler[StructuredMessage]
+		ExtraOpts    []ListenerOption
+	}
+
+	subscriberKey struct {
+		Subscriber Subscriber
+		Topic      Topic
+	}
 )
 
-type busListener struct {
-	consumers     ConsumerProvider
-	middlewares   []HandlerMiddleware
-	consumersData map[string]consumerData
-}
-
-func NewBusListener(
-	consumers ConsumerProvider,
-	handlerMiddlewares ...HandlerMiddleware,
+func NewBusListener[S AcknowledgeStrategy](
+	consumers ConsumerProvider[S],
+	processingQueue ListenerQueueBuilder[S],
+	deserializer func() Deserializer,
+	opts ...ListenerOption,
 ) BusListener {
-	return &busListener{
-		middlewares:   handlerMiddlewares,
-		consumers:     consumers,
-		consumersData: make(map[string]consumerData),
+	return &busListener[S]{
+		consumers:    consumers,
+		queue:        processingQueue,
+		deserializer: deserializer,
+		listeners:    make(map[subscriberKey]listenerData[S]),
+		opts:         opts,
 	}
 }
 
-func (l *busListener) RegisterMessageHandlers(subscriber SubscriberName, topicHandlers TopicHandlersMap) error {
-	for topicSubscription, handlers := range topicHandlers {
-		for _, registerFunc := range handlers {
-			var err error
-			l.consumersData, err = l.registerHandlerFuncImpl(
-				subscriber,
-				topicSubscription,
-				registerFunc,
-				l.consumersData,
-			)
-			if err != nil {
-				return fmt.Errorf("register handler func: %w", err)
-			}
+func (b *busListener[S]) RegisterHandlers(subscriber Subscriber, handlers TopicHandlers, opts ...ListenerOption) error {
+	for topic, funcs := range handlers {
+		if err := b.registerTopicHandlers(subscriber, topic, funcs, opts...); err != nil {
+			return fmt.Errorf("register handler for topic %s by %s: %w", topic, subscriber, err)
 		}
 	}
 
 	return nil
 }
 
-func (l *busListener) Workers() []worker.ErrorJob {
-	workerPool := worker.NewPool(worker.MaxWorkersCountUnlimited)
-	listeners := make([]worker.ErrorJob, 0, len(l.consumersData))
-	for _, data := range l.consumersData {
-		listeners = append(listeners,
-			newListener(
-				data.Consumer,
-				data.Deserializer,
-				NewCompositeHandler(data.MessageHandlers, workerPool),
-				l.middlewares...,
-			),
-		)
+func (b *busListener[S]) Workers() []worker.ErrorJob {
+	listeners := make([]worker.ErrorJob, 0, len(b.listeners))
+	for _, data := range b.listeners {
+		listeners = append(listeners, NewListener[S](
+			data.Consumer,
+			data.Handlers,
+			b.queue,
+			data.Deserializer,
+			append(b.opts, data.ExtraOpts...)...,
+		))
 	}
 
 	return listeners
 }
 
-func (l *busListener) registerHandlerFuncImpl(
-	subscriber SubscriberName,
-	subscription TopicSubscription,
-	handler RegisterHandlerFunc,
-	consumersData map[string]consumerData,
-) (map[string]consumerData, error) {
-	consumerKey := fmt.Sprintf("%s/%s", subscriber, subscription.Topic)
-	data, ok := consumersData[consumerKey]
-	if ok && data.ConsumptionType != subscription.ConsumptionType {
-		return nil, fmt.Errorf(
-			"register handler for topic %v and consumption type %v: topic already registered with another consumptionType %v",
-			subscription.Topic,
-			subscription.ConsumptionType,
-			data.ConsumptionType,
-		)
+func (b *busListener[S]) registerTopicHandlers(
+	subscriber Subscriber,
+	topic Topic,
+	funcs []RegisterHandlersFunc,
+	opts ...ListenerOption,
+) error {
+	key := subscriberKey{subscriber, topic}
+	if _, ok := b.listeners[key]; ok {
+		return errors.New("handlers already registered")
 	}
 
-	if !ok {
-		consumer, err := l.consumers.Consumer(subscription.Topic, subscriber, subscription.ConsumptionType)
+	deserializer := b.deserializer()
+	topicMessageTypes := make(map[string]struct{}, len(funcs))
+	handlers := make(map[string][]TypedHandler[StructuredMessage], len(funcs))
+	for _, fn := range funcs {
+		msgSchema, msgDeserializer, msgHandlers := fn()
+		msgType := msgSchema.Type()
+		if msgType == "" {
+			return fmt.Errorf("blank message %T must return message type const value", msgSchema)
+		}
+
+		if _, ok := topicMessageTypes[msgType]; ok {
+			return fmt.Errorf("message type %s already registered", msgType)
+		}
+		topicMessageTypes[msgType] = struct{}{}
+
+		err := deserializer.RegisterDeserializer(msgType, msgDeserializer)
 		if err != nil {
-			return nil, fmt.Errorf(
-				"register consumer for topic %s: provide consumer: %w",
-				subscription.Topic,
-				err,
-			)
+			return fmt.Errorf("register deserializer for %T: %w", msgSchema, err)
 		}
 
-		data = consumerData{
-			Consumer:        consumer,
-			ConsumptionType: subscription.ConsumptionType,
-			Deserializer:    newJSONDeserializer(),
-			MessageHandlers: make([]TypedHandler[StructuredMessage], 0, 1),
-		}
+		handlers[msgType] = msgHandlers
 	}
 
-	messageSchema, deserializerFunc, messageHandler := handler()
-	messageType := messageSchema.Type()
-	if messageType == "" {
-		return nil, fmt.Errorf("get message type for %T: blank message must return const value", messageSchema)
-	}
-
-	err := data.Deserializer.Register(messageType, deserializerFunc)
+	consumer, err := b.consumers.Consumer(topic, subscriber)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"register consumer for topic %s: register deserializer: %w",
-			subscription.Topic,
-			err,
-		)
+		return fmt.Errorf("get consumer: %w", err)
 	}
 
-	data.MessageHandlers = append(data.MessageHandlers, messageHandler)
-	l.consumersData[consumerKey] = data
+	b.listeners[key] = listenerData[S]{
+		Consumer:     consumer,
+		Deserializer: deserializer,
+		Handlers:     handlers,
+		ExtraOpts:    opts,
+	}
 
-	return l.consumersData, nil
-}
-
-type consumerData struct {
-	Consumer        Consumer
-	ConsumptionType ConsumptionType
-	Deserializer    jsonDeserializer
-	MessageHandlers []TypedHandler[StructuredMessage]
+	return nil
 }

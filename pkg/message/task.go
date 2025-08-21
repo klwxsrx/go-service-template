@@ -11,16 +11,16 @@ import (
 type (
 	TaskScheduler interface {
 		task.Scheduler
-		ProducerRegistry
+		Registry
 	}
 
 	taskScheduler struct {
-		bus BusProducer
+		bus BusScheduledProducer
 	}
 )
 
 func NewTaskScheduler(
-	bus BusProducer,
+	bus BusScheduledProducer,
 ) TaskScheduler {
 	return taskScheduler{
 		bus: bus,
@@ -37,7 +37,7 @@ func (s taskScheduler) Schedule(ctx context.Context, at time.Time, tasks ...task
 		msgs = append(msgs, StructuredMessage(tsk))
 	}
 
-	err := s.bus.Produce(ctx, msgs, at)
+	err := s.bus.Schedule(ctx, at, msgs...)
 	if err != nil {
 		return fmt.Errorf("publish task: %w", err)
 	}
@@ -45,28 +45,33 @@ func (s taskScheduler) Schedule(ctx context.Context, at time.Time, tasks ...task
 	return nil
 }
 
-func (s taskScheduler) RegisterMessages(messagesMap TopicMessagesMap) error {
-	return s.bus.RegisterMessages(messagesMap)
+func (s taskScheduler) Register(messages TopicMessages, opts ...BusProducerOption) error {
+	return s.bus.Register(messages, opts...)
 }
 
 func RegisterTask[T task.Task]() RegisterMessageFunc {
-	return func() (StructuredMessage, KeyBuilderFunc) {
+	return func() (StructuredMessage, KeyBuilder) {
 		var blank T
 		return blank, nil
 	}
 }
 
-func RegisterTaskHandler[T task.Task](handler task.TypedHandler[T]) RegisterHandlerFunc {
-	return func() (StructuredMessage, Deserializer, TypedHandler[StructuredMessage]) {
-		var blank T
-		return blank, TypedJSONDeserializer[T](), func(ctx context.Context, msg StructuredMessage) error {
-			tsk, ok := msg.(T)
-			if !ok {
-				return fmt.Errorf("invalid task struct type %T for messageID %v, expected %T", msg, msg.ID(), tsk)
-			}
+func RegisterTaskHandlers[T task.Task](handlers ...task.TypedHandler[T]) RegisterHandlersFunc {
+	return func() (StructuredMessage, PayloadDeserializer, []TypedHandler[StructuredMessage]) {
+		handlersImpl := make([]TypedHandler[StructuredMessage], 0, len(handlers))
+		for _, handler := range handlers {
+			handlersImpl = append(handlersImpl, func(ctx context.Context, msg StructuredMessage) error {
+				tsk, ok := msg.(T)
+				if !ok {
+					return fmt.Errorf("invalid task struct type %T for messageID %v, expected %T", msg, msg.ID(), tsk)
+				}
 
-			return handler(ctx, tsk)
+				return handler(ctx, tsk)
+			})
 		}
+
+		var blank T
+		return blank, PayloadDeserializerImpl[T], handlersImpl
 	}
 }
 
@@ -77,11 +82,4 @@ func NewTopicTaskQueue(domainName, taskType string, customTags ...string) Topic 
 		WithTopicMessageType(taskType),
 		WithTopicCustomTags(customTags...),
 	)
-}
-
-func NewTopicSubscriptionTaskQueue(domainName, taskType string, customTags ...string) TopicSubscription {
-	return TopicSubscription{
-		Topic:           NewTopicTaskQueue(domainName, taskType, customTags...),
-		ConsumptionType: ConsumptionTypeShared,
-	}
 }

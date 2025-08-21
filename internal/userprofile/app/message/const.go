@@ -5,4 +5,4 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/message"
 )
 
-var SubscriberName = message.NewSubscriberServiceName(domain.Name)
+var SubscriberName = message.NewSubscriberService(domain.Name)

@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/klwxsrx/go-service-template/internal/pkg/auth"
+	internalauth "github.com/klwxsrx/go-service-template/internal/pkg/auth"
 	"github.com/klwxsrx/go-service-template/internal/pkg/http"
 	pkgauth "github.com/klwxsrx/go-service-template/pkg/auth"
 	"github.com/klwxsrx/go-service-template/pkg/env"
@@ -37,16 +37,15 @@ type InfrastructureContainer struct {
 	EventDispatcher        lazy.Loader[message.EventDispatcher]
 	TaskScheduler          lazy.Loader[message.TaskScheduler]
 	MessageBusListener     lazy.Loader[message.BusListener]
-	MessageOutbox          lazy.Loader[message.OutboxProducer]
+	MessageOutbox          lazy.Loader[message.Outbox]
 	IdempotencyKeys        lazy.Loader[idk.Service]
 	IdempotencyKeysCleaner lazy.Loader[idk.Cleaner]
+	MessageBroker          lazy.Loader[message.Broker[message.AckNackStrategy]]
 	DBMigrations           lazy.Loader[SQLMigrations]
 	DB                     lazy.Loader[sql.Database]
 	Clock                  lazy.Loader[pkgtime.Clock]
 	Metrics                lazy.Loader[metric.Metrics]
 	Logger                 lazy.Loader[log.Logger]
-
-	messageBrokerImpl lazy.Loader[*pulsar.MessageBroker]
 }
 
 func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
@@ -58,15 +57,13 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 
 	db := sqlDatabaseProvider(ctx)
 	dbMigrations := sqlMigrationsProvider(ctx, db, logger)
-	sqlMessageOutboxStorage := sqlMessageOutboxStorageProvider(db, dbMigrations)
-	sqlIDKStorage := sqlIDKStorageProvider(db, dbMigrations)
+	msgStorage := sqlMessageStorageProvider(db, dbMigrations)
+	idkStorage := sqlIDKStorageProvider(db, dbMigrations)
 
-	msgBrokerImpl := pulsarMessageBrokerProvider()
-	msgBroker := lazy.New(func() (message.Broker, error) { return msgBrokerImpl.Load() })
+	msgBroker := pulsarMessageBrokerProvider()
 
-	msgBusProducer := messageBusProducerProvider(sqlMessageOutboxStorage, observer, metrics, logger)
-
-	idkServiceImpl := idkServiceProvider(sqlIDKStorage)
+	msgBusProducer := messageBusProducerProvider(msgStorage, observer, metrics, logger)
+	idkServiceImpl := idkServiceProvider(idkStorage)
 	idkService := lazy.New(func() (idk.Service, error) { return idkServiceImpl.Load() })
 	idkCleaner := lazy.New(func() (idk.Cleaner, error) { return idkServiceImpl.Load() })
 
@@ -76,15 +73,15 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 		EventDispatcher:        eventDispatcherProvider(msgBusProducer),
 		TaskScheduler:          taskSchedulerProvider(msgBusProducer),
 		MessageBusListener:     messageBusListenerProvider(msgBroker, observer, metrics, logger),
-		MessageOutbox:          messageOutboxProducerProvider(sqlMessageOutboxStorage, msgBroker, metrics, logger),
+		MessageOutbox:          messageOutboxProvider(msgStorage, msgBroker, metrics, logger),
 		IdempotencyKeys:        idkService,
 		IdempotencyKeysCleaner: idkCleaner,
+		MessageBroker:          msgBroker,
 		DBMigrations:           dbMigrations,
 		DB:                     db,
 		Clock:                  clock,
 		Metrics:                metrics,
 		Logger:                 logger,
-		messageBrokerImpl:      msgBrokerImpl,
 	}
 }
 
@@ -98,8 +95,11 @@ func (i *InfrastructureContainer) Close(ctx context.Context) {
 		defer os.Exit(1)
 	}
 
-	i.MessageOutbox.IfLoaded(func(outbox message.OutboxProducer) { outbox.Close() })
-	i.messageBrokerImpl.IfLoaded(func(broker *pulsar.MessageBroker) { broker.Close() })
+	i.MessageBroker.IfLoaded(func(broker message.Broker[message.AckNackStrategy]) {
+		if err := broker.Close(); err != nil {
+			i.Logger.MustLoad().WithError(err).Error(ctx, "failed to close pulsar message broker")
+		}
+	})
 	i.DB.IfLoaded(func(db sql.Database) {
 		if err := db.Close(); err != nil {
 			i.Logger.MustLoad().WithError(err).Error(ctx, "failed to close postgresql database")
@@ -139,9 +139,9 @@ func observerProvider(
 	})
 }
 
-func authProvider() lazy.Loader[pkgauth.Provider[auth.Principal]] {
-	return lazy.New(func() (pkgauth.Provider[auth.Principal], error) {
-		return auth.NewProvider(), nil
+func authProvider() lazy.Loader[pkgauth.Provider[internalauth.Principal]] {
+	return lazy.New(func() (pkgauth.Provider[internalauth.Principal], error) {
+		return internalauth.NewProvider(), nil
 	})
 }
 
@@ -187,13 +187,13 @@ func sqlMigrationsProvider(
 	})
 }
 
-func sqlMessageOutboxStorageProvider(
+func sqlMessageStorageProvider(
 	db lazy.Loader[sql.Database],
 	dbMigrations lazy.Loader[SQLMigrations],
-) lazy.Loader[message.OutboxStorage] {
-	return lazy.New(func() (message.OutboxStorage, error) {
-		dbMigrations.MustLoad().MustRegister(sql.MessageOutboxMigrations)
-		return sql.NewMessageOutboxStorage(db.MustLoad()), nil
+) lazy.Loader[message.Storage] {
+	return lazy.New(func() (message.Storage, error) {
+		dbMigrations.MustLoad().MustRegister(sql.MessageStorageMigrations)
+		return sql.NewMessageStorage(db.MustLoad()), nil
 	})
 }
 
@@ -211,7 +211,7 @@ func httpServerProvider(
 	observer lazy.Loader[observability.Observer],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
-	auth lazy.Loader[pkgauth.Provider[auth.Principal]],
+	auth lazy.Loader[pkgauth.Provider[internalauth.Principal]],
 ) lazy.Loader[pkghttp.Server] {
 	return lazy.New(func() (pkghttp.Server, error) {
 		return pkghttp.NewServer(
@@ -252,8 +252,8 @@ func httpClientFactoryProvider(
 	})
 }
 
-func pulsarMessageBrokerProvider() lazy.Loader[*pulsar.MessageBroker] {
-	return lazy.New(func() (*pulsar.MessageBroker, error) {
+func pulsarMessageBrokerProvider() lazy.Loader[message.Broker[message.AckNackStrategy]] {
+	return lazy.New(func() (message.Broker[message.AckNackStrategy], error) {
 		config := &pulsar.Config{
 			Address: env.Must(env.Parse[string]("PULSAR_ADDRESS")),
 		}
@@ -272,7 +272,7 @@ func pulsarMessageBrokerProvider() lazy.Loader[*pulsar.MessageBroker] {
 }
 
 func messageBusListenerProvider(
-	msgBroker lazy.Loader[message.Broker],
+	msgBroker lazy.Loader[message.Broker[message.AckNackStrategy]],
 	observer lazy.Loader[observability.Observer],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
@@ -280,6 +280,8 @@ func messageBusListenerProvider(
 	return lazy.New(func() (message.BusListener, error) {
 		return message.NewBusListener(
 			msgBroker.MustLoad(),
+			message.NewAckNackQueue,
+			func() message.Deserializer { return message.NewJSONSerializer() },
 			message.WithHandlerObservability(observer.MustLoad(), observability.FieldRequestID),
 			message.WithHandlerMetrics(metrics.MustLoad()),
 			message.WithHandlerLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
@@ -289,17 +291,18 @@ func messageBusListenerProvider(
 }
 
 func messageBusProducerProvider(
-	outboxStorage lazy.Loader[message.OutboxStorage],
+	messageStorage lazy.Loader[message.Storage],
 	observer lazy.Loader[observability.Observer],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[message.BusProducer] {
-	return lazy.New(func() (message.BusProducer, error) {
-		return message.NewBusProducer(
-			outboxStorage.MustLoad(),
-			message.WithObservability(observer.MustLoad(), observability.FieldRequestID),
-			message.WithMetrics(metrics.MustLoad()),
-			message.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
+) lazy.Loader[message.BusScheduledProducer] {
+	return lazy.New(func() (message.BusScheduledProducer, error) {
+		return message.NewBusScheduledProducer(
+			messageStorage.MustLoad(),
+			message.NewJSONSerializer(),
+			message.WithBusProducerObservability(observer.MustLoad(), observability.FieldRequestID),
+			message.WithBusProducerMetrics(metrics.MustLoad()),
+			message.WithBusProducerLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
 		), nil
 	})
 }
@@ -310,30 +313,30 @@ func idkServiceProvider(idkStorage lazy.Loader[idk.Storage]) lazy.Loader[idk.Ser
 	})
 }
 
-func eventDispatcherProvider(busProducer lazy.Loader[message.BusProducer]) lazy.Loader[message.EventDispatcher] {
+func eventDispatcherProvider(busProducer lazy.Loader[message.BusScheduledProducer]) lazy.Loader[message.EventDispatcher] {
 	return lazy.New(func() (message.EventDispatcher, error) {
 		return message.NewEventDispatcher(busProducer.MustLoad()), nil
 	})
 }
 
-func taskSchedulerProvider(busProducer lazy.Loader[message.BusProducer]) lazy.Loader[message.TaskScheduler] {
+func taskSchedulerProvider(busProducer lazy.Loader[message.BusScheduledProducer]) lazy.Loader[message.TaskScheduler] {
 	return lazy.New(func() (message.TaskScheduler, error) {
 		return message.NewTaskScheduler(busProducer.MustLoad()), nil
 	})
 }
 
-func messageOutboxProducerProvider(
-	outboxStorage lazy.Loader[message.OutboxStorage],
-	msgBroker lazy.Loader[message.Broker],
+func messageOutboxProvider(
+	outboxStorage lazy.Loader[message.Storage],
+	msgBroker lazy.Loader[message.Broker[message.AckNackStrategy]],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[message.OutboxProducer] {
-	return lazy.New(func() (message.OutboxProducer, error) {
-		return message.NewOutboxProducer(
+) lazy.Loader[message.Outbox] {
+	return lazy.New(func() (message.Outbox, error) {
+		return message.NewOutbox(
 			outboxStorage.MustLoad(),
 			msgBroker.MustLoad(),
-			message.WithOutboxProducerMetrics(metrics.MustLoad()),
-			message.WithOutboxProducerLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
+			message.WithOutboxMetrics(metrics.MustLoad()),
+			message.WithOutboxLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
 		), nil
 	})
 }

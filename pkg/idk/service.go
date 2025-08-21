@@ -47,7 +47,7 @@ func (s ServiceImpl) Insert(ctx context.Context, key uuid.UUID, extraKeys ...str
 	return s.storage.Insert(ctx, key, extraKey)
 }
 
-func (s ServiceImpl) InsertString(ctx context.Context, key string, extraKeys ...string) error {
+func (s ServiceImpl) InsertString(ctx context.Context, key string, extraKeys ...string) error { // TODO: optimize using uuid_v5 - idk, key, extra_key - columns
 	if len(extraKeys) > 0 {
 		key = fmt.Sprintf("%s_%s", key, strings.Join(extraKeys, "_"))
 	}

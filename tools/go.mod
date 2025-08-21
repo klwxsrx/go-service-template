@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/evilmartians/lefthook v1.10.10
 	github.com/golangci/golangci-lint v1.63.4
-	github.com/jmattheis/goverter v1.7.0
+	github.com/jmattheis/goverter v1.7.0 // TODO: delete
 	github.com/roblaszczak/go-cleanarch v1.2.1
 )
 

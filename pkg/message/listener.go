@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"runtime/debug"
+	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 
 	"github.com/klwxsrx/go-service-template/pkg/idk"
@@ -16,35 +19,96 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
-type HandlerMiddleware func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage]
+const defaultWorkersCount = 1
 
-type listener struct {
-	consumer     Consumer
-	deserializer jsonDeserializer
-	handler      TypedHandler[StructuredMessage]
-}
+type (
+	ListenerImpl struct {
+		// MaxProcessedMessages is the max number of simultaneously processed messages
+		MaxProcessedMessages     int
+		Middlewares              []HandlerMiddleware
+		HandlerRetry             backoff.BackOff
+		Workers                  worker.Pool
+		OnHandlerNotFound        []func(context.Context, *Message)
+		OnBeforeHandleMessage    []func(context.Context, *Message) context.Context
+		OnHandlerResult          []func(context.Context, *Message, error)
+		OnAcknowledgeResult      []func(_ context.Context, _ *Message, handlerResult error, ackErr error)
+		OnDeserializedUnknownMsg []func(context.Context, *Message, error)
+		OnDeserializedError      []func(context.Context, *Message, error)
 
-func newListener(
-	consumer Consumer,
-	messageDeserializer jsonDeserializer,
-	handler TypedHandler[StructuredMessage],
-	mws ...HandlerMiddleware,
+		consumer     Consumer[any]
+		handlers     map[string][]TypedHandler[StructuredMessage]
+		deserializer Deserializer
+		queue        ListenerProcessingQueue
+		queueRetry   backoff.BackOff
+	}
+
+	ListenerQueueBuilder[S AcknowledgeStrategy] func(ackStrategy S, queueSize int) ListenerProcessingQueue
+
+	ListenerOption    func(*ListenerImpl)
+	HandlerMiddleware func(TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage]
+)
+
+func NewListener[S AcknowledgeStrategy](
+	consumer Consumer[S],
+	messageHandlers map[string][]TypedHandler[StructuredMessage],
+	processingQueue ListenerQueueBuilder[S],
+	deserializer Deserializer,
+	opts ...ListenerOption,
 ) worker.ErrorJob {
-	l := &listener{
-		consumer:     consumer,
-		deserializer: messageDeserializer,
-		handler:      handler,
+	defaultHandlerRetry := backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(100*time.Millisecond),
+		backoff.WithMultiplier(2),
+		backoff.WithMaxInterval(5*time.Minute),
+		backoff.WithMaxElapsedTime(0),
+	)
+
+	defaultQueueRetry := backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(100*time.Millisecond),
+		backoff.WithMultiplier(2),
+		backoff.WithMaxInterval(time.Minute),
+		backoff.WithMaxElapsedTime(0),
+	)
+
+	impl := &ListenerImpl{
+		MaxProcessedMessages:     defaultWorkersCount,
+		Middlewares:              nil,
+		HandlerRetry:             defaultHandlerRetry,
+		Workers:                  worker.NewPool(defaultWorkersCount),
+		OnHandlerNotFound:        nil,
+		OnBeforeHandleMessage:    nil,
+		OnHandlerResult:          nil,
+		OnAcknowledgeResult:      nil,
+		OnDeserializedUnknownMsg: nil,
+		OnDeserializedError:      nil,
+
+		consumer:     consumerAdapter[S]{consumer},
+		handlers:     messageHandlers,
+		deserializer: deserializer,
+		queueRetry:   defaultQueueRetry,
+	}
+	for _, opt := range opts {
+		opt(impl)
 	}
 
-	l.handler = l.wrapWithPanicHandler(l.handler)
-	for i := len(mws) - 1; i >= 0; i-- {
-		l.handler = mws[i](l.handler)
+	for msgType, handlers := range impl.handlers {
+		for i := range handlers {
+			handlers[i] = impl.wrapWithPanicHandler(handlers[i])
+			for j := len(impl.Middlewares) - 1; j >= 0; j-- {
+				handlers[i] = impl.Middlewares[j](handlers[i])
+			}
+		}
+		impl.handlers[msgType] = handlers
 	}
 
-	return l.workerImpl
+	impl.queue = processingQueue(
+		consumer.Acknowledge(),
+		impl.MaxProcessedMessages,
+	)
+
+	return impl.consumerWorker
 }
 
-func (l *listener) wrapWithPanicHandler(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+func (l *ListenerImpl) wrapWithPanicHandler(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
 	return func(ctx context.Context, msg StructuredMessage) (err error) {
 		recoverPanic := func(ctx context.Context) {
 			panicMsg := recover()
@@ -52,8 +116,8 @@ func (l *listener) wrapWithPanicHandler(handler TypedHandler[StructuredMessage])
 				return
 			}
 
-			meta := getHandlerMetadata(ctx)
-			meta.Panic = &panicErr{
+			meta := GetHandlerMetadata(ctx)
+			meta.Panic = &PanicErr{
 				Message:    fmt.Sprintf("%v", panicMsg),
 				Stacktrace: debug.Stack(),
 			}
@@ -66,49 +130,138 @@ func (l *listener) wrapWithPanicHandler(handler TypedHandler[StructuredMessage])
 	}
 }
 
-func (l *listener) workerImpl(ctx context.Context) error {
-	err := func(ctx context.Context) error {
+func (l *ListenerImpl) consumerWorker(ctx context.Context) error {
+	err := func() error {
+		wg := &sync.WaitGroup{}
+		defer wg.Wait()
+
 		for {
+			select {
+			case <-l.queue.ProcessingTokens():
+			case <-ctx.Done():
+				return l.consumer.Close()
+			}
+
 			select {
 			case msg, ok := <-l.consumer.Messages():
 				if !ok {
 					return errors.New("consumer closed messages channel")
 				}
-				l.processMessage(msg)
+				if err := l.queue.AddProcessing(msg); err != nil {
+					return fmt.Errorf("add to processing internal error: %w", err)
+				}
+
+				wg.Add(1)
+				go l.processMessage(ctx, msg, wg)
 			case <-ctx.Done():
 				return l.consumer.Close()
 			}
 		}
-	}(ctx)
+	}()
 	if err != nil {
-		return fmt.Errorf("message listener %s: %w", l.consumer.Name(), err)
+		return fmt.Errorf("message listener %s/%s: %w", l.consumer.Subscriber(), l.consumer.Topic(), err)
 	}
 
 	return nil
 }
 
-func (l *listener) processMessage(msg *ConsumerMessage) {
-	deserializedMsg, meta, err := l.deserializer.Deserialize(msg.Message.Payload)
-	if errors.Is(err, errDeserializeNotValidMessage) || errors.Is(err, errDeserializeUnknownMessage) {
-		l.consumer.Ack(msg)
+func (l *ListenerImpl) processMessage(ctx context.Context, msg *ConsumerMessage, processing *sync.WaitGroup) {
+	skipAndAckMessage := func(ctx context.Context, msg *ConsumerMessage) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			if err := l.acknowledgeMessage(ctx, ctx, msg, nil); err == nil {
+				break
+			}
+		}
+	}
+
+	defer processing.Done()
+
+	msgImpl, meta, err := l.deserializer.Deserialize(msg.Message.Payload)
+	if errors.Is(err, ErrDeserializeUnknownMessage) {
+		for _, fn := range l.OnDeserializedUnknownMsg {
+			fn(ctx, &msg.Message, err)
+		}
+		skipAndAckMessage(ctx, msg)
 		return
 	}
 	if err != nil {
-		l.consumer.Nack(msg)
+		for _, fn := range l.OnDeserializedError {
+			fn(ctx, &msg.Message, err)
+		}
+		skipAndAckMessage(ctx, msg)
 		return
 	}
 
-	ctx := withHandlerMetadata(msg.Context, &msg.Message, meta)
-	err = l.handler(ctx, deserializedMsg)
-	if err != nil {
-		l.consumer.Nack(msg)
+	handlers, ok := l.handlers[msgImpl.Type()]
+	if !ok {
+		for _, fn := range l.OnHandlerNotFound {
+			fn(ctx, &msg.Message)
+		}
+		skipAndAckMessage(ctx, msg)
 		return
 	}
 
-	l.consumer.Ack(msg)
+	msgCtx := withHandlerMetadata(msg.Context, &msg.Message, meta)
+	for _, fn := range l.OnBeforeHandleMessage {
+		msgCtx = fn(msgCtx, &msg.Message)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		handlersGroup := worker.WithinFailSafeGroup(msgCtx, l.Workers)
+		for _, handler := range handlers {
+			handlersGroup.Do(func(msgCtx context.Context) error {
+				return backoff.Retry(
+					func() error { return handler(msgCtx, msgImpl) },
+					backoff.WithContext(l.HandlerRetry, ctx),
+				)
+			})
+		}
+
+		handlerErr := handlersGroup.Wait()
+		for _, fn := range l.OnHandlerResult {
+			fn(msgCtx, &msg.Message, handlerErr)
+		}
+
+		if err = l.acknowledgeMessage(ctx, msgCtx, msg, handlerErr); err == nil {
+			break
+		}
+	}
 }
 
-func WithHandlerIdempotencyKeyErrorIgnoring() HandlerMiddleware {
+func (l *ListenerImpl) acknowledgeMessage(ctx, msgCtx context.Context, msg *ConsumerMessage, handlerErr error) error {
+	return backoff.Retry(
+		func() error {
+			if handlerErr != nil && errors.Is(handlerErr, ctx.Err()) {
+				return ctx.Err()
+			}
+
+			err := l.queue.AcknowledgeResult(ctx, msg, handlerErr)
+			for _, fn := range l.OnAcknowledgeResult {
+				fn(msgCtx, &msg.Message, handlerErr, err)
+			}
+			if errors.Is(err, ErrNegativeAckNotSupported) {
+				return backoff.Permanent(err)
+			}
+
+			return err
+		},
+		backoff.WithContext(l.queueRetry, ctx),
+	)
+}
+
+func WithHandlerIdempotencyKeyErrorIgnoring() ListenerOption {
 	return WithHandlerErrorMapping(func(err error) error {
 		if errors.Is(err, idk.ErrAlreadyInserted) {
 			return nil
@@ -118,25 +271,29 @@ func WithHandlerIdempotencyKeyErrorIgnoring() HandlerMiddleware {
 	})
 }
 
-func WithHandlerErrorMapping(fn func(error) error) HandlerMiddleware {
-	return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+func WithHandlerErrorMapping(fn func(error) error) ListenerOption {
+	mw := func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
 		return func(ctx context.Context, msg StructuredMessage) error {
 			err := handler(ctx, msg)
 			return fn(err)
 		}
 	}
+
+	return func(l *ListenerImpl) {
+		l.Middlewares = append(l.Middlewares, mw)
+	}
 }
 
-func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) HandlerMiddleware {
-	return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) ListenerOption {
+	mw := func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
 		return func(ctx context.Context, msg StructuredMessage) error {
-			meta := getHandlerMetadata(ctx)
+			meta := GetHandlerMetadata(ctx)
 			ctx = logger.WithContext(ctx, log.Fields{
 				"consumerMessage": log.Fields{
-					"correlationID": uuid.New(),
-					"topic":         meta.MessageTopic,
-					"messageID":     meta.MessageID,
-					"messageType":   msg.Type(),
+					"correlation": uuid.New(),
+					"topic":       meta.MessageTopic,
+					"messageID":   meta.MessageID,
+					"messageType": msg.Type(),
 				},
 			})
 
@@ -157,47 +314,102 @@ func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) Hand
 			return nil
 		}
 	}
+
+	return func(l *ListenerImpl) {
+		l.Middlewares = append(l.Middlewares, mw)
+
+		l.OnHandlerNotFound = append(l.OnHandlerNotFound, func(ctx context.Context, msg *Message) {
+			logger.With(log.Fields{
+				"messageID": msg.ID,
+				"topic":     msg.Topic,
+			}).Log(ctx, errorLevel, "message handler not found")
+		})
+
+		l.OnBeforeHandleMessage = append(l.OnBeforeHandleMessage, func(ctx context.Context, _ *Message) context.Context {
+			return logger.WithContext(ctx, log.Fields{"handlerCorrelation": uuid.New().String()})
+		})
+
+		l.OnAcknowledgeResult = append(l.OnAcknowledgeResult, func(ctx context.Context, msg *Message, handlerResult, err error) {
+			if err == nil {
+				return
+			}
+
+			var handlerResultStr *string
+			if handlerResult != nil {
+				v := handlerResult.Error()
+				handlerResultStr = &v
+			}
+
+			logger.
+				With(log.Fields{
+					"messageID":    msg.ID,
+					"topic":        msg.Topic,
+					"handleResult": handlerResultStr,
+				}).
+				WithError(err).
+				Log(ctx, errorLevel, "failed to acknowledge handled message")
+		})
+
+		l.OnDeserializedUnknownMsg = append(l.OnDeserializedUnknownMsg, func(ctx context.Context, msg *Message, err error) {
+			logger.
+				With(log.Fields{
+					"messageID": msg.ID,
+					"topic":     msg.Topic,
+				}).
+				WithError(err).
+				Log(ctx, errorLevel, "failed to deserialize message")
+		})
+
+		l.OnDeserializedError = append(l.OnDeserializedError, func(ctx context.Context, msg *Message, err error) {
+			logger.
+				With(log.Fields{
+					"messageID": msg.ID,
+					"topic":     msg.Topic,
+				}).
+				WithError(err).
+				Log(ctx, errorLevel, "failed to deserialize message")
+		})
+	}
 }
 
-func WithHandlerMetrics(metrics metric.Metrics) HandlerMiddleware {
-	return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+func WithHandlerMetrics(metrics metric.Metrics) ListenerOption {
+	mw := func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
 		return func(ctx context.Context, msg StructuredMessage) error {
 			started := time.Now()
 
 			err := handler(ctx, msg)
-			meta := getHandlerMetadata(ctx)
+			meta := GetHandlerMetadata(ctx)
 			if meta.Panic != nil {
-				metrics.WithLabel("topic", meta.MessageTopic).Increment("msg_handle_panics_total")
+				metrics.With(metric.Labels{
+					"topic": meta.MessageTopic,
+					"type":  msg.Type(),
+				}).Increment("msg_handle_panics_total")
 			}
 
 			metrics.With(metric.Labels{
 				"topic":   meta.MessageTopic,
+				"type":    msg.Type(),
 				"success": err == nil,
 			}).Duration("msg_handle_duration_seconds", time.Since(started))
 			return err
 		}
 	}
+
+	return func(l *ListenerImpl) {
+		l.Middlewares = append(l.Middlewares, mw)
+	}
 }
 
-func WithHandlerObservability(observer observability.Observer, fields ...observability.Field) HandlerMiddleware {
+func WithHandlerObservability(observer observability.Observer, fields ...observability.Field) ListenerOption {
 	if len(fields) == 0 {
-		return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
-			return func(ctx context.Context, msg StructuredMessage) error {
-				return handler(ctx, msg)
-			}
-		}
+		return func(*ListenerImpl) {}
 	}
 
-	return func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
+	mw := func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
 		return func(ctx context.Context, msg StructuredMessage) error {
-			meta := getHandlerMetadata(ctx)
-			observabilityValues, ok := meta.MessageMetadata[observabilityMetadataKey].(map[string]any)
-			if !ok {
-				return handler(ctx, msg)
-			}
-
+			metadata := GetHandlerMetadata(ctx).MessageMetadata
 			for _, field := range fields {
-				value, ok := observabilityValues[string(field)].(string)
+				value, ok := metadata[fmt.Sprintf("%s%s", observabilityMetaKeyPrefix, field)]
 				if ok && value != "" {
 					ctx = observer.WithField(ctx, field, value)
 				}
@@ -206,4 +418,43 @@ func WithHandlerObservability(observer observability.Observer, fields ...observa
 			return handler(ctx, msg)
 		}
 	}
+
+	return func(l *ListenerImpl) {
+		l.Middlewares = append(l.Middlewares, mw)
+	}
+}
+
+func WithHandlerMultipleWorkers(workersCount int) ListenerOption {
+	if workersCount <= worker.MaxWorkersCountNumCPU {
+		workersCount = runtime.NumCPU()
+	}
+	if workersCount == 0 {
+		workersCount = 1
+	}
+
+	return func(l *ListenerImpl) {
+		l.Workers = worker.NewPool(workersCount)
+		l.MaxProcessedMessages = workersCount
+	}
+}
+
+func WithHandlerWorkerPool(pool worker.Pool, maxProcessedMessagesLimit int) ListenerOption {
+	return func(l *ListenerImpl) {
+		l.Workers = pool
+		l.MaxProcessedMessages = maxProcessedMessagesLimit
+	}
+}
+
+func WithHandlerRetry(retry backoff.BackOff) ListenerOption {
+	return func(l *ListenerImpl) {
+		l.HandlerRetry = retry
+	}
+}
+
+type consumerAdapter[S AcknowledgeStrategy] struct {
+	Consumer[S]
+}
+
+func (a consumerAdapter[S]) Acknowledge() any {
+	return nil
 }
