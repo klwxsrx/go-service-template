@@ -215,7 +215,7 @@ func (c *storageConsumer) consumeStorageMessages(ctx context.Context) {
 }
 
 func (c *storageConsumer) consumeStorageMessagesBatch(ctx context.Context) (allProcessed bool, processedCount int, err error) {
-	ctx, releaseLock, err := c.storage.Lock(ctx, "topic", string(c.topic))
+	_, releaseLock, err := c.storage.Lock(ctx, "topic", string(c.topic))
 	if err != nil {
 		return false, 0, fmt.Errorf("get topic lock: %w", err)
 	}

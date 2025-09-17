@@ -6,7 +6,7 @@ all: check build-clean build
 
 check: lint arch test
 
-build: codegen bin/user-service bin/user-profile-service bin/user-profile-worker bin/message-outbox-worker bin/idk-cleaner-task
+build: codegen bin/user-service bin/user-profile-service bin/message-handler-worker bin/idk-cleaner-task
 
 build-clean:
 	rm -rf bin/*

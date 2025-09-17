@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/klwxsrx/go-service-template/internal/pkg/cmd"
 	"github.com/klwxsrx/go-service-template/internal/userprofile"
@@ -14,7 +15,7 @@ func main() {
 	infra := cmd.NewInfrastructureContainer(ctx)
 	defer infra.Close(ctx)
 
-	container := userprofile.NewDependencyContainer(
+	userProfile := userprofile.NewDependencyContainer(
 		infra.DB,
 		infra.DBMigrations,
 		infra.HTTPClientFactory,
@@ -22,10 +23,15 @@ func main() {
 	)
 
 	messageBus := infra.MessageBusListener.MustLoad()
-	container.MustRegisterMessageHandlers(messageBus)
+	userProfile.MustRegisterMessageHandlers(messageBus)
 
+	messageStorageConsumers := infra.MessageStorageConsumers.MustLoad()
+	messageHandlerWorkers := append(messageStorageConsumers.Workers(), messageBus.Workers()...)
 	worker.MustRunHub(ctx, infra.Logger.MustLoad(),
 		pkgcmd.TermSignalAwaiter,
-		messageBus.Workers()...,
+		append(
+			messageHandlerWorkers,
+			worker.PeriodicRunner(func(context.Context) { messageStorageConsumers.Process() }, time.Second),
+		)...,
 	)
 }

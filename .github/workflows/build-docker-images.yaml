@@ -64,10 +64,8 @@ jobs:
             image-file: user-service.image.tar
           - application: user-profile-service
             image-file: user-profile-service.image.tar
-          - application: user-profile-worker
-            image-file: user-profile-worker.image.tar
-          - application: message-outbox-worker
-            image-file: message-outbox-worker.image.tar
+          - application: message-handler-worker
+            image-file: message-handler-worker.image.tar
           - application: idk-cleaner-task
             image-file: idk-cleaner-task.image.tar
     steps:
@@ -106,10 +104,8 @@ jobs:
             image-file: user-service.image.tar
           - image-tag: klwxsrx/go-service-template-user-profile-service
             image-file: user-profile-service.image.tar
-          - image-tag: klwxsrx/go-service-template-user-profile-worker
-            image-file: user-profile-worker.image.tar
-          - image-tag: klwxsrx/go-service-template-message-outbox-worker
-            image-file: message-outbox-worker.image.tar
+          - image-tag: klwxsrx/go-service-template-message-handler-worker
+            image-file: message-handler-worker.image.tar
           - image-tag: klwxsrx/go-service-template-idk-cleaner-task
             image-file: idk-cleaner-task.image.tar
     steps:
@@ -128,4 +124,5 @@ jobs:
       - name: Import Docker image
         run: docker image import /tmp/${{ matrix.image-file }} ${{ matrix.image-tag }}:${{ github.ref_name }}
       - name: Push Docker image
+        if: false # delete to enable docker push
         run: docker push ${{ matrix.image-tag }}:${{ github.ref_name }}

@@ -9,6 +9,6 @@ FROM scratch
 COPY --from=builder /etc/passwd /etc/passwd
 USER appuser
 
-COPY ./bin/message-outbox-worker /app/bin/worker
+COPY ./bin/message-handler-worker /app/bin/worker
 
 ENTRYPOINT ["/app/bin/worker"]

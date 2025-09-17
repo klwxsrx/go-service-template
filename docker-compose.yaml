@@ -14,7 +14,6 @@ services:
       - .env
     environment:
       - SQL_ADDRESS=postgresql:5432
-      - PULSAR_ADDRESS=apache-pulsar:6650
 
   user-profile-service:
     build:
@@ -32,43 +31,23 @@ services:
       - .env
     environment:
       - SQL_ADDRESS=postgresql:5432
-      - PULSAR_ADDRESS=apache-pulsar:6650
       - USER_SERVICE_URL=http://user-service:8080
 
-  user-profile-worker:
+  message-handler-worker:
     build:
-      dockerfile: docker/user-profile-worker/Dockerfile
+      dockerfile: docker/message-handler-worker/Dockerfile
       context: .
-    container_name: go-service-template-user-profile-worker
+    container_name: go-service-template-message-handler-worker
     depends_on:
       user-service:
         condition: service_started
       postgresql:
         condition: service_healthy
-      apache-pulsar:
-        condition: service_healthy
     env_file:
       - .env
     environment:
       - SQL_ADDRESS=postgresql:5432
-      - PULSAR_ADDRESS=apache-pulsar:6650
       - USER_SERVICE_URL=http://user-service:8080
-
-  message-outbox-worker:
-    build:
-      dockerfile: docker/message-outbox-worker/Dockerfile
-      context: .
-    container_name: go-service-template-message-outbox-worker
-    depends_on:
-      postgresql:
-        condition: service_healthy
-      apache-pulsar:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      - SQL_ADDRESS=postgresql:5432
-      - PULSAR_ADDRESS=apache-pulsar:6650
 
   postgresql:
     image: postgres:16
@@ -88,23 +67,6 @@ services:
       retries: 6
     restart: unless-stopped
 
-  apache-pulsar:
-    image: apachepulsar/pulsar:4.0.0
-    container_name: go-service-template-apache-pulsar
-    volumes:
-      - apache-pulsar-data:/pulsar/data:rw
-    ports:
-      - "6650:6650"
-    entrypoint: [ "bin/pulsar", "standalone" ]
-    healthcheck:
-      test: [ "CMD", "/pulsar/bin/pulsar-admin", "brokers", "healthcheck" ]
-      interval: 30s
-      timeout: 3s
-      retries: 10
-    restart: unless-stopped
-
 volumes:
   postgresql-data:
     name: go-service-template-postgresql-data
-  apache-pulsar-data:
-    name: go-service-template-apache-pulsar-data

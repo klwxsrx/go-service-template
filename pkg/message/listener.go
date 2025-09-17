@@ -289,15 +289,18 @@ func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) List
 		return func(ctx context.Context, msg StructuredMessage) error {
 			meta := GetHandlerMetadata(ctx)
 			ctx = logger.WithContext(ctx, log.Fields{
-				"consumerMessage": log.Fields{
-					"correlation": uuid.New(),
-					"topic":       meta.MessageTopic,
-					"messageID":   meta.MessageID,
-					"messageType": msg.Type(),
-				},
+				"handlerCorrelation": uuid.New().String(),
 			})
 
 			err := handler(ctx, msg)
+
+			logger := logger.With(log.Fields{
+				"handledMessage": log.Fields{
+					"id":    meta.MessageID,
+					"type":  msg.Type(),
+					"topic": meta.MessageTopic,
+				},
+			})
 			if meta.Panic != nil {
 				logger.WithField("panic", log.Fields{
 					"message": meta.Panic.Message,
@@ -326,7 +329,7 @@ func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) List
 		})
 
 		l.OnBeforeHandleMessage = append(l.OnBeforeHandleMessage, func(ctx context.Context, _ *Message) context.Context {
-			return logger.WithContext(ctx, log.Fields{"handlerCorrelation": uuid.New().String()})
+			return logger.WithContext(ctx, log.Fields{"consumerCorrelation": uuid.New().String()})
 		})
 
 		l.OnAcknowledgeResult = append(l.OnAcknowledgeResult, func(ctx context.Context, msg *Message, handlerResult, err error) {
