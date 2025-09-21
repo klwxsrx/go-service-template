@@ -9,7 +9,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
-func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPaths ...string) ServerOption {
+func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPaths ...string) HandlerOption {
 	excludedPaths = append(excludedPaths,
 		healthPath,
 	)

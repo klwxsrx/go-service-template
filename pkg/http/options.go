@@ -10,7 +10,26 @@ import (
 
 const healthPath = "/healthz"
 
-func WithHealthCheck(customHandlerFunc HandlerFunc) ServerOption {
+func WithServerAddress(addr string) ServerOption {
+	return func(srv *ServerImpl) {
+		srv.Impl.Addr = addr
+	}
+}
+
+func WithHandlerOptions(opts ...HandlerOption) ServerOption {
+	return func(s *ServerImpl) {
+		if len(opts) == 0 {
+			return
+		}
+
+		router := s.Impl.Handler.(*mux.Router)
+		for _, opt := range opts {
+			opt(router)
+		}
+	}
+}
+
+func WithHealthCheck(customHandlerFunc HandlerFunc) HandlerOption {
 	handler := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("ContentType", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -33,7 +52,7 @@ func WithHealthCheck(customHandlerFunc HandlerFunc) ServerOption {
 	}
 }
 
-func WithErrorMapping(statusCodes map[int][]error) ServerOption {
+func WithErrorMapping(statusCodes map[int][]error) HandlerOption {
 	statusCodePredicates := make(map[int]func(error) bool, len(statusCodes))
 	for statusCode, errs := range statusCodes {
 		statusCodePredicates[statusCode] = func(err error) bool {
@@ -49,7 +68,7 @@ func WithErrorMapping(statusCodes map[int][]error) ServerOption {
 	return WithErrorMappingPredicate(statusCodePredicates)
 }
 
-func WithErrorMappingPredicate(statusCodesPredicates map[int]func(error) bool) ServerOption {
+func WithErrorMappingPredicate(statusCodesPredicates map[int]func(error) bool) HandlerOption {
 	return WithMW(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if len(statusCodesPredicates) == 0 {
@@ -78,13 +97,13 @@ func WithErrorMappingPredicate(statusCodesPredicates map[int]func(error) bool) S
 	})
 }
 
-func WithMW(mw ServerMiddleware) ServerOption {
+func WithMW(mw HandlerMiddleware) HandlerOption {
 	return func(router *mux.Router) {
 		router.Use(mux.MiddlewareFunc(mw))
 	}
 }
 
-func WithCORSHandler() ServerOption {
+func WithCORSHandler() HandlerOption {
 	return func(router *mux.Router) {
 		router.Use(mux.CORSMethodMiddleware(router))
 	}

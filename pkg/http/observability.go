@@ -16,7 +16,7 @@ type (
 func WithObservability(
 	observer observability.Observer,
 	fields ObservabilityFieldExtractors,
-) ServerOption {
+) HandlerOption {
 	return WithMW(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			for field, extractors := range fields {

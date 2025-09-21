@@ -9,7 +9,7 @@ import (
 
 type AuthTokenProvider func(*http.Request) (auth.Token, bool)
 
-func WithAuth[T auth.Principal](provider auth.Provider[T], tokenProviders ...AuthTokenProvider) ServerOption {
+func WithAuth[T auth.Principal](provider auth.Provider[T], tokenProviders ...AuthTokenProvider) HandlerOption {
 	return WithMW(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var ok bool
@@ -38,7 +38,7 @@ func WithAuth[T auth.Principal](provider auth.Provider[T], tokenProviders ...Aut
 	})
 }
 
-func WithAuthenticationRequirement() ServerOption {
+func WithAuthenticationRequirement() HandlerOption {
 	return WithMW(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			isAuthenticated, err := auth.IsAuthenticated(r.Context())

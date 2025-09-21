@@ -212,22 +212,24 @@ func httpServerProvider(
 ) lazy.Loader[pkghttp.Server] {
 	return lazy.New(func() (pkghttp.Server, error) {
 		return pkghttp.NewServer(
-			env.Must(env.Parse[string]("SERVICE_ADDRESS")),
-			pkghttp.WithHealthCheck(nil),
-			pkghttp.WithCORSHandler(),
-			pkghttp.WithObservability(observer.MustLoad(), pkghttp.ObservabilityFieldExtractors{
-				observability.FieldRequestID: []pkghttp.ObservabilityFieldExtractor{
-					pkghttp.ObservabilityFieldHeaderExtractor(http.HeaderRequestID),
-					pkghttp.ObservabilityFieldRandomUUIDExtractor(),
-				},
-			}),
-			pkghttp.WithMetrics(metrics.MustLoad()),
-			pkghttp.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
-			pkghttp.WithAuth(
-				auth.MustLoad(),
-				http.UserIDTokenProvider,
-				http.AdminUserIDTokenProvider,
-				http.ServiceNameTokenProvider,
+			pkghttp.WithServerAddress(env.Must(env.Parse[string]("SERVICE_ADDRESS"))),
+			pkghttp.WithHandlerOptions(
+				pkghttp.WithHealthCheck(nil),
+				pkghttp.WithCORSHandler(),
+				pkghttp.WithObservability(observer.MustLoad(), pkghttp.ObservabilityFieldExtractors{
+					observability.FieldRequestID: []pkghttp.ObservabilityFieldExtractor{
+						pkghttp.ObservabilityFieldHeaderExtractor(http.HeaderRequestID),
+						pkghttp.ObservabilityFieldRandomUUIDExtractor(),
+					},
+				}),
+				pkghttp.WithMetrics(metrics.MustLoad()),
+				pkghttp.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
+				pkghttp.WithAuth(
+					auth.MustLoad(),
+					http.UserIDTokenProvider,
+					http.AdminUserIDTokenProvider,
+					http.ServiceNameTokenProvider,
+				),
 			),
 		), nil
 	})

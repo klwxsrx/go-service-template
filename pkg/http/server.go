@@ -13,20 +13,20 @@ import (
 )
 
 const (
-	DefaultServerAddress = ":8080"
-
-	defaultReadHeaderTimeout = 5 * time.Second
-	defaultReadTimeout       = 10 * time.Second
-	defaultShutdownTimeout   = 20 * time.Second
+	defaultServerAddress     = ":8080"
+	defaultReadHeaderTimeout = 3 * time.Second
+	defaultReadTimeout       = 5 * time.Second
+	defaultShutdownTimeout   = 10 * time.Second
 )
 
 type (
-	ServerOption     func(*mux.Router)
-	ServerMiddleware func(http.Handler) http.Handler
+	ServerOption      func(*ServerImpl)
+	HandlerOption     func(*mux.Router)
+	HandlerMiddleware func(http.Handler) http.Handler
 )
 
 type HandlerRegistry interface {
-	Register(handler Handler, opts ...ServerOption)
+	Register(handler Handler, opts ...HandlerOption)
 }
 
 type Server interface {
@@ -34,39 +34,37 @@ type Server interface {
 	HandlerRegistry
 }
 
-type server struct {
-	srv    *http.Server
-	router *mux.Router
+type ServerImpl struct {
+	Impl            *http.Server
+	ShutdownTimeout time.Duration
 }
 
-func NewServer(
-	address string,
-	opts ...ServerOption, // TODO: use opts for the server timeouts and address
-) Server {
-	router := withHandlerMetadata(mux.NewRouter())
+func NewServer(opts ...ServerOption) Server {
+	srv := &ServerImpl{
+		Impl: &http.Server{
+			Addr:              defaultServerAddress,
+			Handler:           withHandlerMetadata(mux.NewRouter()),
+			ReadTimeout:       defaultReadTimeout,
+			ReadHeaderTimeout: defaultReadHeaderTimeout,
+		},
+		ShutdownTimeout: defaultShutdownTimeout,
+	}
 	for _, opt := range opts {
-		opt(router)
+		opt(srv)
 	}
 
-	srv := &http.Server{
-		Addr:              address,
-		Handler:           router,
-		ReadTimeout:       defaultReadTimeout,
-		ReadHeaderTimeout: defaultReadHeaderTimeout,
-	}
-
-	return server{
-		srv:    srv,
-		router: router,
-	}
+	return srv
 }
 
-func (s server) Listener(ctx context.Context) error {
+func (s ServerImpl) Listener(ctx context.Context) error {
 	shutdown := func() error {
-		ctx, ctxCancel := context.WithTimeout(context.Background(), defaultShutdownTimeout)
-		defer ctxCancel()
+		if s.ShutdownTimeout > 0 {
+			var ctxCancel context.CancelFunc
+			ctx, ctxCancel = context.WithTimeout(context.Background(), s.ShutdownTimeout)
+			defer ctxCancel()
+		}
 
-		err := s.srv.Shutdown(ctx)
+		err := s.Impl.Shutdown(ctx)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("shutdown: %w", err)
 		}
@@ -76,7 +74,7 @@ func (s server) Listener(ctx context.Context) error {
 
 	serverDoneChan := make(chan error, 1)
 	go func() {
-		serverDoneChan <- s.srv.ListenAndServe()
+		serverDoneChan <- s.Impl.ListenAndServe()
 	}()
 
 	var err error
@@ -89,13 +87,13 @@ func (s server) Listener(ctx context.Context) error {
 		return nil
 	}
 
-	return fmt.Errorf("http listener %s: %w", s.srv.Addr, err)
+	return fmt.Errorf("http listener %s: %w", s.Impl.Addr, err)
 }
 
-func (s server) Register(handler Handler, opts ...ServerOption) {
-	router := s.router
+func (s ServerImpl) Register(handler Handler, opts ...HandlerOption) {
+	router := s.Impl.Handler.(*mux.Router)
 	if len(opts) > 0 {
-		router = s.router.NewRoute().Subrouter()
+		router = router.NewRoute().Subrouter()
 		for _, opt := range opts {
 			opt(router)
 		}

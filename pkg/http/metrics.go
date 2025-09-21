@@ -8,7 +8,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 )
 
-func WithMetrics(metrics metric.Metrics) ServerOption {
+func WithMetrics(metrics metric.Metrics) HandlerOption {
 	return WithMW(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()

@@ -73,7 +73,7 @@ func NewDependencyContainer(
 }
 
 func (c *DependencyContainer) MustRegisterHTTPHandlers(registry pkghttp.HandlerRegistry) {
-	options := []pkghttp.ServerOption{
+	options := []pkghttp.HandlerOption{
 		pkghttp.WithAuthenticationRequirement(),
 	}
 
