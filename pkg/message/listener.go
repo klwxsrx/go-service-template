@@ -54,7 +54,7 @@ func NewListener[S AcknowledgeStrategy](
 	processingQueue ListenerQueueBuilder[S],
 	deserializer Deserializer,
 	opts ...ListenerOption,
-) worker.ErrorJob {
+) worker.ContextJob {
 	defaultHandlerRetry := backoff.NewExponentialBackOff(
 		backoff.WithInitialInterval(100*time.Millisecond),
 		backoff.WithMultiplier(2),
@@ -219,9 +219,9 @@ func (l *ListenerImpl) processMessage(ctx context.Context, msg *ConsumerMessage,
 		default:
 		}
 
-		handlersGroup := worker.WithinFailSafeGroup(msgCtx, l.Workers)
+		_, handlersGroup := worker.WithinGroup(msgCtx, l.Workers)
 		for _, handler := range handlers {
-			handlersGroup.Do(func(msgCtx context.Context) error {
+			handlersGroup.Do(func() error {
 				return backoff.Retry(
 					func() error { return handler(msgCtx, msgImpl) },
 					backoff.WithContext(l.HandlerRetry, ctx),

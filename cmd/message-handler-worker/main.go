@@ -27,11 +27,9 @@ func main() {
 
 	messageStorageConsumers := infra.MessageStorageConsumers.MustLoad()
 	messageHandlerWorkers := append(messageStorageConsumers.Workers(), messageBus.Workers()...)
-	worker.MustRunHub(ctx, infra.Logger.MustLoad(),
+	pkgcmd.MustRun(ctx, infra.Logger.MustLoad(), append(
+		messageHandlerWorkers,
 		pkgcmd.TermSignalAwaiter,
-		append(
-			messageHandlerWorkers,
-			worker.PeriodicRunner(func(context.Context) { messageStorageConsumers.Process() }, time.Second),
-		)...,
-	)
+		worker.PeriodicalJob(messageStorageConsumers.Process, time.Second),
+	)...)
 }

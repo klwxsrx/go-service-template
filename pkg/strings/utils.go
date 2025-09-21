@@ -20,9 +20,12 @@ type (
 )
 
 func ParseTypedValue[T SupportedValueParsingTypes | SupportedPointerParsingTypes](value string) (T, error) {
-	var v any
-	var err error
-	var blank T
+	var (
+		v     any
+		err   error
+		blank T
+	)
+
 	switch any(blank).(type) {
 	case bool:
 		v, err = strconv.ParseBool(value)

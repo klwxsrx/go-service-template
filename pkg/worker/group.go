@@ -5,66 +5,46 @@ import (
 	"sync"
 )
 
-// TODO: use func() error without context; context could be placed outside; if group context passed, job will work failfast
-type ErrorJob func(context.Context) error
+type (
+	ErrorJob func() error
 
-type Group interface {
-	Do(ErrorJob)
-	Wait() error
-}
+	Group interface {
+		Do(ErrorJob)
+		Wait() error
+	}
+)
 
 type group struct {
-	ctx                 context.Context
-	ctxCancel           context.CancelFunc
-	cancelCtxAfterError bool
-
-	errChan   chan error
-	errResult error
-	pool      Pool
-	wg        *sync.WaitGroup
-
+	pool       Pool
+	wg         *sync.WaitGroup
+	ctxCancel  context.CancelFunc
 	onceCloser *sync.Once
+	errChan    chan error
+	errResult  error
 }
 
-func WithinFailFastGroup(ctx context.Context, pool Pool) Group {
+// WithinGroup creates a group with context, which is canceled when one of the jobs fails.
+// Group will use a specified Pool to process the jobs.
+// Pass groupCtx to the jobs to process them fail-fast.
+// Or use the parent context to process the jobs fail-safe.
+func WithinGroup(ctx context.Context, pool Pool) (groupCtx context.Context, _ Group) {
 	var ctxCancel context.CancelFunc
 	ctx, ctxCancel = context.WithCancel(ctx)
-	return &group{
-		ctx:                 ctx,
-		ctxCancel:           ctxCancel,
-		cancelCtxAfterError: true,
-		errChan:             make(chan error, 1),
-		errResult:           nil,
-		pool:                pool,
-		wg:                  &sync.WaitGroup{},
-		onceCloser:          &sync.Once{},
+	return ctx, &group{
+		pool:       pool,
+		wg:         &sync.WaitGroup{},
+		ctxCancel:  ctxCancel,
+		onceCloser: &sync.Once{},
+		errChan:    make(chan error, 1),
+		errResult:  nil,
 	}
 }
 
-func WithinFailSafeGroup(ctx context.Context, pool Pool) Group {
-	var ctxCancel context.CancelFunc
-	ctx, ctxCancel = context.WithCancel(ctx)
-	return &group{
-		ctx:                 ctx,
-		ctxCancel:           ctxCancel,
-		cancelCtxAfterError: false,
-		errChan:             make(chan error, 1),
-		errResult:           nil,
-		pool:                pool,
-		wg:                  &sync.WaitGroup{},
-		onceCloser:          &sync.Once{},
-	}
-}
-
-func NewFailFastGroup(ctx context.Context) Group {
-	return WithinFailFastGroup(
-		ctx,
-		NewPool(MaxWorkersCountUnlimited),
-	)
-}
-
-func NewFailSafeGroup(ctx context.Context) Group {
-	return WithinFailSafeGroup(
+// NewGroup creates a group with context, which is canceled when one of the jobs fails.
+// Pass groupCtx to the jobs to process them fail-fast.
+// Or use the parent context to process the jobs fail-safe.
+func NewGroup(ctx context.Context) (groupCtx context.Context, _ Group) {
+	return WithinGroup(
 		ctx,
 		NewPool(MaxWorkersCountUnlimited),
 	)
@@ -78,16 +58,14 @@ func (g *group) Do(job ErrorJob) {
 
 		select {
 		case g.errChan <- err:
-			if g.cancelCtxAfterError {
-				g.ctxCancel()
-			}
+			g.ctxCancel()
 		default:
 		}
 	}
 
 	g.wg.Add(1)
-	g.pool.Do(g.ctx, func(ctx context.Context) {
-		handleErr(job(ctx))
+	g.pool.Do(func() {
+		handleErr(job())
 		g.wg.Done()
 	})
 }

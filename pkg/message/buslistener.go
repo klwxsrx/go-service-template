@@ -14,7 +14,7 @@ type (
 
 	BusListener interface {
 		HandlerRegistry
-		Workers() []worker.ErrorJob
+		Workers() []worker.ContextJob
 	}
 
 	TopicHandlers map[Topic][]RegisterHandlersFunc
@@ -65,8 +65,8 @@ func (b *busListener[S]) RegisterHandlers(subscriber Subscriber, handlers TopicH
 	return nil
 }
 
-func (b *busListener[S]) Workers() []worker.ErrorJob {
-	listeners := make([]worker.ErrorJob, 0, len(b.listeners))
+func (b *busListener[S]) Workers() []worker.ContextJob {
+	listeners := make([]worker.ContextJob, 0, len(b.listeners))
 	for _, data := range b.listeners {
 		listeners = append(listeners, NewListener[S](
 			data.Consumer,

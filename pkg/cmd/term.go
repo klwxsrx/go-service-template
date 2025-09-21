@@ -17,7 +17,7 @@ func TermSignalAwaiter(ctx context.Context) error {
 	return nil
 }
 
-func TermSignals() <-chan os.Signal { // TODO: wrap signals to ctx with signal.NotifyContext? test how worker.processes react to context.Cancelled
+func TermSignals() <-chan os.Signal { // TODO: wrap signals to ctx with signal.NotifyContext? test how worker.processes react to context.Cancelled (and fix the context.Cancelled error in loggers to warning)
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGTERM, syscall.SIGINT)
 

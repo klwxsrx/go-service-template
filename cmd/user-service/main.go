@@ -6,7 +6,6 @@ import (
 	"github.com/klwxsrx/go-service-template/internal/pkg/cmd"
 	"github.com/klwxsrx/go-service-template/internal/user"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
-	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
 func main() {
@@ -23,7 +22,7 @@ func main() {
 	httpServer := infra.HTTPServer.MustLoad()
 	container.MustRegisterHTTPHandlers(httpServer)
 
-	worker.MustRunHub(ctx, infra.Logger.MustLoad(),
+	pkgcmd.MustRun(ctx, infra.Logger.MustLoad(),
 		pkgcmd.TermSignalAwaiter,
 		httpServer.Listener,
 	)

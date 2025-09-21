@@ -23,7 +23,7 @@ type (
 	StorageConsumerProvider interface {
 		ConsumerProvider[AckStrategy]
 		Process()
-		Workers() []worker.ErrorJob
+		Workers() []worker.ContextJob
 	}
 
 	StorageConsumerProviderOption func(*StorageConsumerProviderImpl)
@@ -106,8 +106,8 @@ func (p *StorageConsumerProviderImpl) Process() {
 	}
 }
 
-func (p *StorageConsumerProviderImpl) Workers() []worker.ErrorJob {
-	workers := make([]worker.ErrorJob, 0, len(p.consumers))
+func (p *StorageConsumerProviderImpl) Workers() []worker.ContextJob {
+	workers := make([]worker.ContextJob, 0, len(p.consumers))
 	for _, consumer := range p.consumers {
 		workers = append(workers, consumer.Worker)
 	}
