@@ -25,7 +25,7 @@ type (
 	}
 
 	Storage interface {
-		Insert(ctx context.Context, key uuid.UUID, extraKey string) error
+		Insert(ctx context.Context, base uuid.UUID, extra string) error
 		Delete(ctx context.Context, createdAtBefore time.Time) error
 	}
 
@@ -47,7 +47,7 @@ func (s ServiceImpl) Insert(ctx context.Context, key uuid.UUID, extraKeys ...str
 	return s.storage.Insert(ctx, key, extraKey)
 }
 
-func (s ServiceImpl) InsertString(ctx context.Context, key string, extraKeys ...string) error { // TODO: optimize using uuid_v5 - idk, key, extra_key - columns
+func (s ServiceImpl) InsertString(ctx context.Context, key string, extraKeys ...string) error {
 	if len(extraKeys) > 0 {
 		key = fmt.Sprintf("%s_%s", key, strings.Join(extraKeys, "_"))
 	}

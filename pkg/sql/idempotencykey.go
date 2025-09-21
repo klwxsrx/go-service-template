@@ -20,10 +20,15 @@ func NewIdempotencyKeyStorage(db Client) idk.Storage {
 }
 
 func (s IdempotencyKeyStorage) Insert(ctx context.Context, key uuid.UUID, extraKey string) error {
+	var extraValue *string
+	if extraKey != "" {
+		extraValue = &extraKey
+	}
+
 	query, args, err := sq.
 		Insert("idempotency_key").
-		Columns("key", "extra_key").
-		Values(key, extraKey).
+		Columns("key", "base", "extra").
+		Values(uuid.NewSHA1(key, []byte(extraKey)), key, extraValue).
 		Suffix("on conflict do nothing").
 		ToSql()
 	if err != nil {
@@ -69,10 +74,10 @@ func IdempotencyKeyMigrations() ([]Migration, error) {
 			ID: "0000-00-00-001-create-idempotency-key-table",
 			SQL: `
 				create table if not exists idempotency_key (
-					key        uuid        not null,
-					extra_key  text        not null,
-					created_at timestamptz not null default current_timestamp,
-					primary key (key, extra_key)
+					key   uuid        not null primary key,
+				    base  uuid        not null,
+					extra text,
+					created_at timestamptz not null default current_timestamp
 				);
 			`,
 		},
