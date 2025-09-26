@@ -17,7 +17,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/worker"
 )
 
-const defaultStorageConsumerBatchSize = 500
+const defaultStorageConsumerBatchSize = 100
 
 type (
 	StorageConsumerProvider interface {
@@ -44,9 +44,11 @@ type (
 		consumingBatchSize      int
 		storage                 Storage
 		messagesCh              chan *ConsumerMessage
+		allProcessed            *sync.Cond
+		processedCount          int
 		mutex                   *sync.RWMutex
-		processChan             chan struct{}
 		processingMessages      map[uuid.UUID]struct{}
+		processChan             chan struct{}
 		retry                   backoff.BackOff
 		onMessageProcessing     []func(context.Context, Topic, *Message)
 		onAcknowledge           []func(context.Context, Topic, *Message, error)
@@ -129,9 +131,11 @@ func newStorageConsumer(
 		consumingBatchSize:      consumingBatchSize,
 		storage:                 storage,
 		messagesCh:              make(chan *ConsumerMessage),
+		allProcessed:            sync.NewCond(&sync.Mutex{}),
+		processedCount:          0,
 		mutex:                   &sync.RWMutex{},
-		processChan:             make(chan struct{}, 1),
 		processingMessages:      make(map[uuid.UUID]struct{}),
+		processChan:             make(chan struct{}, 1),
 		retry:                   retry,
 		onMessageProcessing:     onMessageProcessing,
 		onAcknowledge:           onAcknowledge,
@@ -215,7 +219,7 @@ func (c *storageConsumer) consumeStorageMessages(ctx context.Context) {
 }
 
 func (c *storageConsumer) consumeStorageMessagesBatch(ctx context.Context) (allProcessed bool, processedCount int, err error) {
-	_, releaseLock, err := c.storage.Lock(ctx, "topic", string(c.topic))
+	ctx, releaseLock, err := c.storage.Lock(ctx, "topic", string(c.topic))
 	if err != nil {
 		return false, 0, fmt.Errorf("get topic lock: %w", err)
 	}
@@ -252,6 +256,12 @@ func (c *storageConsumer) consumeStorageMessagesBatch(ctx context.Context) (allP
 		}
 	}
 
+	c.allProcessed.L.Lock()
+	for c.processedCount != 0 {
+		c.allProcessed.Wait()
+	}
+	c.allProcessed.L.Unlock()
+
 	return len(msgs) < c.consumingBatchSize, processedCount, nil
 }
 
@@ -260,6 +270,7 @@ func (c *storageConsumer) addToProcessing(id uuid.UUID) {
 	defer c.mutex.Unlock()
 
 	c.processingMessages[id] = struct{}{}
+	c.processedCount = len(c.processingMessages)
 }
 
 func (c *storageConsumer) removeFromProcessing(id uuid.UUID) {
@@ -267,6 +278,10 @@ func (c *storageConsumer) removeFromProcessing(id uuid.UUID) {
 	defer c.mutex.Unlock()
 
 	delete(c.processingMessages, id)
+	c.processedCount = len(c.processingMessages)
+	if c.processedCount == 0 {
+		c.allProcessed.Signal()
+	}
 }
 
 func (c *storageConsumer) getProcessingMessageIDs() []uuid.UUID {
