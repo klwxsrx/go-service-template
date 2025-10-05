@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"time"
 
 	"github.com/klwxsrx/go-service-template/internal/pkg/cmd"
@@ -11,7 +10,9 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	ctx, ctxCancel := pkgcmd.InitializeContext()
+	defer ctxCancel()
+
 	infra := cmd.NewInfrastructureContainer(ctx)
 	defer infra.Close(ctx)
 
@@ -29,7 +30,6 @@ func main() {
 	messageHandlerWorkers := append(messageStorageConsumers.Workers(), messageBus.Workers()...)
 	pkgcmd.MustRun(ctx, infra.Logger.MustLoad(), append(
 		messageHandlerWorkers,
-		pkgcmd.TermSignalAwaiter,
 		worker.PeriodicalJob(messageStorageConsumers.Process, time.Second),
 	)...)
 }

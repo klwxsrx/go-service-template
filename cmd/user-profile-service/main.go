@@ -1,15 +1,15 @@
 package main
 
 import (
-	"context"
-
 	"github.com/klwxsrx/go-service-template/internal/pkg/cmd"
 	"github.com/klwxsrx/go-service-template/internal/userprofile"
 	pkgcmd "github.com/klwxsrx/go-service-template/pkg/cmd"
 )
 
 func main() {
-	ctx := context.Background()
+	ctx, ctxCancel := pkgcmd.InitializeContext()
+	defer ctxCancel()
+
 	infra := cmd.NewInfrastructureContainer(ctx)
 	defer infra.Close(ctx)
 
@@ -24,7 +24,6 @@ func main() {
 	container.MustRegisterHTTPHandlers(httpServer)
 
 	pkgcmd.MustRun(ctx, infra.Logger.MustLoad(),
-		pkgcmd.TermSignalAwaiter,
 		httpServer.Listener,
 	)
 }

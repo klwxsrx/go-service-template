@@ -13,6 +13,13 @@ require (
 	github.com/lib/pq v1.10.9
 )
 
+tool (
+	github.com/evilmartians/lefthook
+	github.com/golangci/golangci-lint/cmd/golangci-lint
+	github.com/jmattheis/goverter/cmd/goverter
+	github.com/roblaszczak/go-cleanarch
+)
+
 require (
 	4d63.com/gocheckcompilerdirectives v1.3.0 // indirect
 	4d63.com/gochecknoglobals v0.2.2 // indirect
@@ -242,11 +249,4 @@ require (
 	honnef.co/go/tools v0.6.1 // indirect
 	mvdan.cc/gofumpt v0.7.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
-)
-
-tool (
-	github.com/evilmartians/lefthook
-	github.com/golangci/golangci-lint/cmd/golangci-lint
-	github.com/jmattheis/goverter/cmd/goverter
-	github.com/roblaszczak/go-cleanarch
 )
