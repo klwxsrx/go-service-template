@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
-	"time"
 
 	internalauth "github.com/klwxsrx/go-service-template/internal/pkg/auth"
 	"github.com/klwxsrx/go-service-template/internal/pkg/http"
@@ -54,7 +53,7 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 	auth := authProvider()
 	clock := clockProvider()
 
-	db := sqlDatabaseProvider(ctx)
+	db := sqlDatabaseProvider()
 	dbMigrations := sqlMigrationsProvider(ctx, db, logger)
 	msgStorage := sqlMessageStorageProvider(db, dbMigrations)
 	idkStorage := sqlIDKStorageProvider(db, dbMigrations)
@@ -148,24 +147,21 @@ func clockProvider() lazy.Loader[pkgtime.Clock] {
 	})
 }
 
-func sqlDatabaseProvider(ctx context.Context) lazy.Loader[sql.Database] {
+func sqlDatabaseProvider() lazy.Loader[sql.Database] {
 	return lazy.New(func() (sql.Database, error) {
-		sqlConfig := &sql.Config{
-			DSN: sql.DSN{
+		db, err := sql.NewDatabase(
+			sql.DSN{
 				User:     env.Must(env.Parse[string]("SQL_USER")),
 				Password: env.Must(env.Parse[string]("SQL_PASSWORD")),
-				Address:  env.Must(env.Parse[string]("SQL_ADDRESS")),
+				Host:     env.Must(env.Parse[string]("SQL_ADDRESS")),
 				Database: env.Must(env.Parse[string]("SQL_DATABASE")),
+				AdditionalParams: map[string]string{
+					"sslmode": "disable",
+				},
 			},
-			MaxOpenConnections: env.Must(env.Parse[int]("SQL_MAX_OPEN_CONNECTIONS")),
-			MaxIdleConnections: env.Must(env.Parse[int]("SQL_MAX_IDLE_CONNECTIONS")),
-		}
-		sqlConnTimeout := env.Must(env.ParseOptional[*time.Duration]("SQL_CONNECTION_TIMEOUT"))
-		if sqlConnTimeout != nil {
-			sqlConfig.ConnectionTimeout = *sqlConnTimeout
-		}
-
-		db, err := sql.NewDatabase(ctx, sqlConfig)
+			sql.WithMaxOpenConnections(env.Must(env.Parse[int]("SQL_MAX_OPEN_CONNECTIONS"))),
+			sql.WithMaxIdleConnections(env.Must(env.Parse[int]("SQL_MAX_IDLE_CONNECTIONS"))),
+		)
 		if err != nil {
 			panic(fmt.Errorf("open sql connection: %w", err))
 		}

@@ -4,33 +4,48 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
-	"github.com/cenkalti/backoff/v4"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // postgresql driver
 )
 
-const defaultConnectionTimeout = 10 * time.Second
+type (
+	DSN struct {
+		User             string
+		Password         string
+		Host             string
+		Port             int
+		Database         string
+		AdditionalParams map[string]string
+	}
 
-type Config struct {
-	DSN                DSN
-	MaxOpenConnections int
-	MaxIdleConnections int
-	ConnectionTimeout  time.Duration
-}
-
-type DSN struct {
-	User     string
-	Password string
-	Address  string
-	Database string
-}
+	Option func(*sqlx.DB)
+)
 
 func (d *DSN) String() string {
-	return fmt.Sprintf("postgresql://%s:%s@%s/%s?sslmode=disable", d.User, d.Password, d.Address, d.Database)
+	credentials := d.User
+	if d.Password != "" {
+		credentials = fmt.Sprintf("%s:%s", d.User, d.Password)
+	}
+
+	address := d.Host
+	if d.Port > 0 {
+		address = fmt.Sprintf("%s:%d", d.Host, d.Port)
+	}
+
+	params := strings.Builder{}
+	if len(d.AdditionalParams) > 0 {
+		params.WriteRune('?')
+		for key, value := range d.AdditionalParams {
+			params.WriteString(fmt.Sprintf("%s=%s&", key, value))
+		}
+	}
+
+	return fmt.Sprintf("postgresql://%s@%s/%s%s", credentials, address, d.Database, params.String())
 }
 
 type Client interface {
@@ -61,17 +76,15 @@ type database struct {
 	db *sqlx.DB
 }
 
-func NewDatabase(ctx context.Context, config *Config) (Database, error) {
-	if config.ConnectionTimeout <= 0 {
-		config.ConnectionTimeout = defaultConnectionTimeout
+func NewDatabase(dsn DSN, opts ...Option) (Database, error) {
+	db, err := sqlx.Open("postgres", dsn.String())
+	if err != nil {
+		return nil, fmt.Errorf("open postgresql connection: %w", err)
 	}
 
-	db, err := openConnection(ctx, config)
-	if err != nil {
-		return nil, err
+	for _, opt := range opts {
+		opt(db)
 	}
-	db.SetMaxOpenConns(config.MaxOpenConnections)
-	db.SetMaxIdleConns(config.MaxIdleConnections)
 
 	enablePostgreSQLSquirrelPlaceholderFormat()
 	return &database{
@@ -84,35 +97,34 @@ func (c *database) Close() error {
 	return c.db.Close()
 }
 
-func openConnection(ctx context.Context, config *Config) (*sqlx.DB, error) {
-	db, err := sqlx.Open("postgres", config.DSN.String())
-	if err != nil {
-		return nil, err
+func WithMaxOpenConnections(n int) Option {
+	return func(db *sqlx.DB) {
+		db.SetMaxOpenConns(n)
 	}
-
-	eb := backoff.NewExponentialBackOff(
-		backoff.WithInitialInterval(time.Second),
-		backoff.WithMultiplier(2),
-		backoff.WithMaxInterval(config.ConnectionTimeout/4),
-		backoff.WithMaxElapsedTime(config.ConnectionTimeout),
-	)
-
-	err = backoff.Retry(
-		func() error { return db.PingContext(ctx) },
-		backoff.WithContext(eb, ctx),
-	)
-	if err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
-	return db, nil
 }
 
-var squirrelPlaceholderOnceDoer = &sync.Once{}
+func WithMaxIdleConnections(n int) Option {
+	return func(db *sqlx.DB) {
+		db.SetMaxIdleConns(n)
+	}
+}
+
+func WithMaxConnectionLifetime(d time.Duration) Option {
+	return func(db *sqlx.DB) {
+		db.SetConnMaxLifetime(d)
+	}
+}
+
+func WithMaxIdleConnectionTime(d time.Duration) Option {
+	return func(db *sqlx.DB) {
+		db.SetConnMaxIdleTime(d)
+	}
+}
+
+var squirrelPlaceholderSetOnce = &sync.Once{}
 
 func enablePostgreSQLSquirrelPlaceholderFormat() {
-	squirrelPlaceholderOnceDoer.Do(func() {
+	squirrelPlaceholderSetOnce.Do(func() {
 		sq.StatementBuilder = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 	})
 }
