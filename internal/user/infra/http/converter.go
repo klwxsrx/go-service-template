@@ -1,4 +1,4 @@
-//go:generate ${TOOLS_BIN}/goverter gen -g wrapErrors -g "output:file ./generated/goverter_${GOFILE}" .
+//go:generate go tool goverter gen -g wrapErrors -g "output:file ./generated/goverter_${GOFILE}" .
 package http
 
 import (

@@ -1,4 +1,5 @@
 .DS_Store
+.lefthook.yaml.checksum
 /.idea/
 /.fleet/
 /bin/

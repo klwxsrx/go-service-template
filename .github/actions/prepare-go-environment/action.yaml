@@ -24,13 +24,3 @@ runs:
       if: steps.cache-gopath.outputs.cache-hit != 'true'
       run: go mod download
       shell: bash
-    - name: Cache tools
-      id: cache-tools
-      uses: actions/cache@v4
-      with:
-        path: tools/bin
-        key: go-environment.tools-go-mod-${{ hashFiles('**/tools/go.mod', '**/tools/go.sum') }}
-    - name: Install tools
-      if: steps.cache-tools.outputs.cache-hit != 'true'
-      run: make tools
-      shell: bash
