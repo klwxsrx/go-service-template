@@ -80,6 +80,10 @@ func (w *responseWriter) Write(ctx context.Context, err error) {
 		w.deferredWriter.WriteHeader(http.StatusUnauthorized)
 	case errors.Is(err, auth.ErrPermissionDenied):
 		w.deferredWriter.WriteHeader(http.StatusForbidden)
+	case errors.Is(err, ctx.Err()) && errors.Is(err, context.Canceled):
+		w.deferredWriter.WriteHeader(499)
+	case errors.Is(err, ctx.Err()) && errors.Is(err, context.DeadlineExceeded):
+		w.deferredWriter.WriteHeader(http.StatusGatewayTimeout)
 	case err != nil:
 		w.deferredWriter.WriteHeader(http.StatusInternalServerError)
 	default:

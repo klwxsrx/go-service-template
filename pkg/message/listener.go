@@ -284,7 +284,7 @@ func WithHandlerErrorMapping(fn func(error) error) ListenerOption {
 	}
 }
 
-func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) ListenerOption {
+func WithHandlerLogging(logger log.Logger, infoLevel, warnLevel, errorLevel log.Level) ListenerOption {
 	mw := func(handler TypedHandler[StructuredMessage]) TypedHandler[StructuredMessage] {
 		return func(ctx context.Context, msg StructuredMessage) error {
 			meta := GetHandlerMetadata(ctx)
@@ -309,7 +309,12 @@ func WithHandlerLogging(logger log.Logger, infoLevel, errorLevel log.Level) List
 				return err
 			}
 			if err != nil {
-				logger.WithError(err).Log(ctx, errorLevel, "message handled with error")
+				level := errorLevel
+				if errors.Is(err, ctx.Err()) {
+					level = warnLevel
+				}
+
+				logger.WithError(err).Log(ctx, level, "message handled with error")
 				return err
 			}
 
@@ -381,6 +386,10 @@ func WithHandlerMetrics(metrics metric.Metrics) ListenerOption {
 			started := time.Now()
 
 			err := handler(ctx, msg)
+			if err != nil && errors.Is(err, ctx.Err()) {
+				return err
+			}
+
 			meta := GetHandlerMetadata(ctx)
 			if meta.Panic != nil {
 				metrics.With(metric.Labels{

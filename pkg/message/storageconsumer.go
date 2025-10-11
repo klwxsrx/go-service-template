@@ -291,7 +291,7 @@ func (c *storageConsumer) getProcessingMessageIDs() []uuid.UUID {
 	return slices.Collect(maps.Keys(c.processingMessages))
 }
 
-func WithStorageConsumerLogging(logger log.Logger, infoLevel, errorLevel log.Level) StorageConsumerProviderOption {
+func WithStorageConsumerLogging(logger log.Logger, infoLevel, warnLevel, errorLevel log.Level) StorageConsumerProviderOption {
 	return func(impl *StorageConsumerProviderImpl) {
 		impl.OnMessageProcessing = append(impl.OnMessageProcessing, func(ctx context.Context, topic Topic, msg *Message) {
 			logger.
@@ -304,11 +304,13 @@ func WithStorageConsumerLogging(logger log.Logger, infoLevel, errorLevel log.Lev
 
 		impl.OnAcknowledge = append(impl.OnAcknowledge, func(ctx context.Context, topic Topic, msg *Message, err error) {
 			logger := logger.With(log.Fields{"topic": topic, "messageID": msg.ID})
-			if err != nil && errors.Is(err, ctx.Err()) {
-				return
-			}
 			if err != nil {
-				logger.WithError(err).Log(ctx, errorLevel, "failed to delete acknowledged message")
+				level := errorLevel
+				if errors.Is(err, ctx.Err()) {
+					level = warnLevel
+				}
+
+				logger.WithError(err).Log(ctx, level, "failed to delete acknowledged message")
 				return
 			}
 
@@ -319,11 +321,13 @@ func WithStorageConsumerLogging(logger log.Logger, infoLevel, errorLevel log.Lev
 			if err == nil {
 				return
 			}
-			if err != nil && errors.Is(err, ctx.Err()) {
-				return
+
+			level := errorLevel
+			if errors.Is(err, ctx.Err()) {
+				level = warnLevel
 			}
 
-			logger.WithError(err).Log(ctx, errorLevel, "failed to process storage messages to consume")
+			logger.WithError(err).Log(ctx, level, "failed to process storage messages to consume")
 		})
 	}
 }
@@ -334,8 +338,12 @@ func WithStorageConsumerMetrics(metrics metric.Metrics) StorageConsumerProviderO
 			metrics.WithLabel("topic", topic).Increment("msg_storage_consumer_processing_total")
 		})
 
-		impl.OnAcknowledge = append(impl.OnAcknowledge, func(_ context.Context, topic Topic, _ *Message, err error) {
+		impl.OnAcknowledge = append(impl.OnAcknowledge, func(ctx context.Context, topic Topic, _ *Message, err error) {
 			metrics := metrics.WithLabel("topic", topic)
+			if err != nil && errors.Is(err, ctx.Err()) {
+				return
+			}
+
 			if err != nil {
 				metrics.Increment("msg_storage_consumer_delete_acked_error_total")
 				return
@@ -344,8 +352,8 @@ func WithStorageConsumerMetrics(metrics metric.Metrics) StorageConsumerProviderO
 			metrics.Increment("msg_storage_consumer_delete_acked_total")
 		})
 
-		impl.OnMessageBatchProcessed = append(impl.OnMessageBatchProcessed, func(_ context.Context, topic Topic, _ int, err error) {
-			if err == nil {
+		impl.OnMessageBatchProcessed = append(impl.OnMessageBatchProcessed, func(ctx context.Context, topic Topic, _ int, err error) {
+			if err == nil || errors.Is(err, ctx.Err()) {
 				return
 			}
 

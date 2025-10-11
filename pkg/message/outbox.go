@@ -2,6 +2,7 @@ package message
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -163,26 +164,37 @@ func WithOutboxRetry(retry backoff.BackOff) OutboxOption {
 	}
 }
 
-func WithOutboxLogging(
-	logger log.Logger,
-	infoLevel log.Level,
-	errorLevel log.Level,
-) OutboxOption {
+func WithOutboxLogging(logger log.Logger, infoLevel, warnLevel, errorLevel log.Level) OutboxOption {
 	return func(o *OutboxImpl) {
 		o.OnInternalError = append(o.OnInternalError, func(ctx context.Context, err error) {
-			logger.WithError(err).Log(ctx, errorLevel, "message outbox internal error")
+			level := errorLevel
+			if errors.Is(err, ctx.Err()) {
+				level = warnLevel
+			}
+
+			logger.WithError(err).Log(ctx, level, "message outbox internal error")
 		})
 
 		o.OnFoundMessages = append(o.OnFoundMessages, func(ctx context.Context, _ []Message, err error) {
 			if err != nil {
-				logger.WithError(err).Log(ctx, errorLevel, "message outbox internal error")
+				level := errorLevel
+				if errors.Is(err, ctx.Err()) {
+					level = warnLevel
+				}
+
+				logger.WithError(err).Log(ctx, level, "message outbox internal error")
 			}
 		})
 
 		o.OnSentMessage = append(o.OnSentMessage, func(ctx context.Context, msg *Message, err error) {
 			logger := logger.WithField("messageID", msg.ID)
 			if err != nil {
-				logger.WithError(err).Log(ctx, errorLevel, "outbox message sending failed")
+				level := errorLevel
+				if errors.Is(err, ctx.Err()) {
+					level = warnLevel
+				}
+
+				logger.WithError(err).Log(ctx, level, "outbox message sending failed")
 			} else {
 				logger.Log(ctx, infoLevel, "outbox message sent successfully")
 			}
@@ -191,8 +203,13 @@ func WithOutboxLogging(
 		o.OnDeletedMessage = append(o.OnDeletedMessage, func(ctx context.Context, msg *Message, err error) {
 			logger := logger.WithField("messageID", msg.ID)
 			if err != nil {
+				level := errorLevel
+				if errors.Is(err, ctx.Err()) {
+					level = warnLevel
+				}
+
 				err = fmt.Errorf("delete message from storage: %w", err)
-				logger.WithError(err).Log(ctx, errorLevel, "message outbox internal error")
+				logger.WithError(err).Log(ctx, level, "message outbox internal error")
 			} else {
 				logger.Log(ctx, infoLevel, "outbox message deleted from storage successfully")
 			}
@@ -202,24 +219,34 @@ func WithOutboxLogging(
 
 func WithOutboxMetrics(metrics metric.Metrics) OutboxOption {
 	return func(o *OutboxImpl) {
-		o.OnInternalError = append(o.OnInternalError, func(context.Context, error) {
-			metrics.Increment("msg_outbox_internal_error_total")
-		})
-
-		o.OnFoundMessages = append(o.OnFoundMessages, func(_ context.Context, _ []Message, err error) {
-			if err != nil {
+		o.OnInternalError = append(o.OnInternalError, func(ctx context.Context, err error) {
+			if !errors.Is(err, ctx.Err()) {
 				metrics.Increment("msg_outbox_internal_error_total")
 			}
 		})
 
-		o.OnSentMessage = append(o.OnSentMessage, func(_ context.Context, msg *Message, err error) {
+		o.OnFoundMessages = append(o.OnFoundMessages, func(ctx context.Context, _ []Message, err error) {
+			if err != nil && !errors.Is(err, ctx.Err()) {
+				metrics.Increment("msg_outbox_internal_error_total")
+			}
+		})
+
+		o.OnSentMessage = append(o.OnSentMessage, func(ctx context.Context, msg *Message, err error) {
+			if err != nil && errors.Is(err, ctx.Err()) {
+				return
+			}
+
 			metrics.With(metric.Labels{
 				"success": err == nil,
 				"topic":   msg.Topic,
 			}).Increment("msg_outbox_producer_sending_attempts_total")
 		})
 
-		o.OnDeletedMessage = append(o.OnDeletedMessage, func(_ context.Context, msg *Message, err error) {
+		o.OnDeletedMessage = append(o.OnDeletedMessage, func(ctx context.Context, msg *Message, err error) {
+			if err != nil && errors.Is(err, ctx.Err()) {
+				return
+			}
+
 			metrics.With(metric.Labels{
 				"success": err == nil,
 				"topic":   msg.Topic,

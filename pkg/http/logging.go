@@ -9,7 +9,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/log"
 )
 
-func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPaths ...string) HandlerOption {
+func WithLogging(logger log.Logger, infoLevel, warnLevel, errorLevel log.Level, excludedPaths ...string) HandlerOption {
 	excludedPaths = append(excludedPaths,
 		healthPath,
 	)
@@ -42,10 +42,15 @@ func WithLogging(logger log.Logger, infoLevel, errorLevel log.Level, excludedPat
 					"message": result.Panic.Message,
 					"stack":   string(result.Panic.Stacktrace),
 				}).Error(r.Context(), "request handled with panic")
-			case result.Code >= http.StatusInternalServerError:
+			case result.Code >= http.StatusInternalServerError || result.Code == 499:
+				level := errorLevel
+				if result.Code == 499 {
+					level = warnLevel
+				}
+
 				logger.
 					WithError(result.Error).
-					Log(r.Context(), errorLevel, "request handled with internal error")
+					Log(r.Context(), level, "request handled with error")
 			default:
 				logger.
 					WithError(result.Error).

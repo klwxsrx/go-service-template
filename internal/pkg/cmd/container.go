@@ -219,7 +219,7 @@ func httpServerProvider(
 					},
 				}),
 				pkghttp.WithMetrics(metrics.MustLoad()),
-				pkghttp.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
+				pkghttp.WithLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn, log.LevelError),
 				pkghttp.WithAuth(
 					auth.MustLoad(),
 					http.UserIDTokenProvider,
@@ -242,7 +242,7 @@ func httpClientFactoryProvider(
 				observability.FieldRequestID: http.HeaderRequestID,
 			}),
 			pkghttp.WithRequestMetrics(metrics.MustLoad()),
-			pkghttp.WithRequestLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn),
+			pkghttp.WithRequestLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn, log.LevelWarn),
 		), nil
 	})
 }
@@ -260,7 +260,7 @@ func messageBusListenerProvider(
 			func() message.Deserializer { return message.NewJSONSerializer() },
 			message.WithHandlerObservability(observer.MustLoad(), observability.FieldRequestID),
 			message.WithHandlerMetrics(metrics.MustLoad()),
-			message.WithHandlerLogging(logger.MustLoad(), log.LevelInfo, log.LevelError),
+			message.WithHandlerLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn, log.LevelError),
 			message.WithHandlerIdempotencyKeyErrorIgnoring(),
 		), nil
 	})
@@ -275,7 +275,7 @@ func messageStorageConsumerProvider(
 		return message.NewStorageConsumerProvider(
 			msgStorage.MustLoad(),
 			message.WithStorageConsumerMetrics(metrics.MustLoad()),
-			message.WithStorageConsumerLogging(logger.MustLoad(), log.LevelDebug, log.LevelWarn),
+			message.WithStorageConsumerLogging(logger.MustLoad(), log.LevelDebug, log.LevelWarn, log.LevelWarn),
 		), nil
 	})
 }
@@ -292,7 +292,7 @@ func messageBusProducerProvider(
 			message.NewJSONSerializer(),
 			message.WithBusProducerObservability(observer.MustLoad(), observability.FieldRequestID),
 			message.WithBusProducerMetrics(metrics.MustLoad()),
-			message.WithBusProducerLogging(logger.MustLoad(), log.LevelDebug, log.LevelWarn),
+			message.WithBusProducerLogging(logger.MustLoad(), log.LevelDebug, log.LevelWarn, log.LevelWarn),
 		), nil
 	})
 }

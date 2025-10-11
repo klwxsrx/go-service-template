@@ -2,6 +2,7 @@ package message
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -309,6 +310,9 @@ func WithBusProducerMetrics(metrics metric.Metrics) BusProducerOption {
 	mw := func(impl BusProduce) BusProduce {
 		return func(ctx context.Context, topic Topic, msg StructuredMessage, scheduleAt *time.Time) error {
 			err := impl(ctx, topic, msg, scheduleAt)
+			if err != nil && errors.Is(err, ctx.Err()) {
+				return err
+			}
 
 			metrics.With(metric.Labels{
 				"topic":   topic,
@@ -324,7 +328,7 @@ func WithBusProducerMetrics(metrics metric.Metrics) BusProducerOption {
 	}
 }
 
-func WithBusProducerLogging(logger log.Logger, infoLevel, errorLevel log.Level) BusProducerOption {
+func WithBusProducerLogging(logger log.Logger, infoLevel, warnLevel, errorLevel log.Level) BusProducerOption {
 	mw := func(impl BusProduce) BusProduce {
 		return func(ctx context.Context, topic Topic, msg StructuredMessage, scheduleAt *time.Time) error {
 			loggerWithFields := logger.With(log.Fields{
@@ -336,9 +340,14 @@ func WithBusProducerLogging(logger log.Logger, infoLevel, errorLevel log.Level) 
 
 			err := impl(ctx, topic, msg, scheduleAt)
 			if err != nil {
+				level := errorLevel
+				if errors.Is(err, ctx.Err()) {
+					level = warnLevel
+				}
+
 				loggerWithFields.
 					WithError(err).
-					Log(ctx, errorLevel, "message producing failed")
+					Log(ctx, level, "message producing failed")
 			} else {
 				loggerWithFields.Log(ctx, infoLevel, "message successfully produced")
 			}

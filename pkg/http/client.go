@@ -137,7 +137,7 @@ func WithRequestObservability(
 	}
 }
 
-func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) ClientOption {
+func WithRequestLogging(logger log.Logger, infoLevel, warnLevel, errorLevel log.Level) ClientOption {
 	const httpCallLogMsg = "http call"
 	return func(c *ClientImpl) {
 		c.RESTClient.OnInvalid(func(req *resty.Request, err error) {
@@ -187,9 +187,14 @@ func WithRequestLogging(logger log.Logger, infoLevel, errorLevel log.Level) Clie
 				logger = getRouteNameFieldsLogger(routeName, logger)
 			}
 
+			level := errorLevel
+			if errors.Is(err, req.Context().Err()) {
+				level = warnLevel
+			}
+
 			logger.
 				WithError(err).
-				Log(req.Context(), errorLevel, httpCallLogMsg)
+				Log(req.Context(), level, httpCallLogMsg)
 		})
 	}
 }
