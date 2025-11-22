@@ -10,7 +10,7 @@ import (
 
 type (
 	SQLMigrations interface {
-		MustRegister(sources ...sql.MigrationSource)
+		MustRegister(...sql.MigrationSource)
 	}
 
 	sqlMigrations struct {

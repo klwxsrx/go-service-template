@@ -10,10 +10,10 @@ func main() {
 	ctx, ctxCancel := pkgcmd.InitializeContext()
 	defer ctxCancel()
 
-	infra := cmd.NewInfrastructureContainer(ctx)
+	infra := cmd.NewInfrastructure(ctx)
 	defer infra.Close(ctx)
 
-	container := userprofile.NewDependencyContainer(
+	container := userprofile.NewContainer(
 		infra.DB,
 		infra.DBMigrations,
 		infra.HTTPClientFactory,

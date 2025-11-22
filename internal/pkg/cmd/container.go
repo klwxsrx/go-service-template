@@ -29,7 +29,7 @@ var logLevelMap = map[string]log.Level{
 	"error":    log.LevelError,
 }
 
-type InfrastructureContainer struct {
+type Infrastructure struct {
 	HTTPServer              lazy.Loader[pkghttp.Server]
 	HTTPClientFactory       lazy.Loader[HTTPClientFactory]
 	EventDispatcher         lazy.Loader[message.EventDispatcher]
@@ -46,7 +46,7 @@ type InfrastructureContainer struct {
 	Logger                  lazy.Loader[log.Logger]
 }
 
-func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
+func NewInfrastructure(ctx context.Context) *Infrastructure {
 	metrics := metricsProvider()
 	logger := loggerProvider()
 	observer := observerProvider(logger)
@@ -68,7 +68,7 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 	idkService := lazy.New(func() (idk.Service, error) { return idkServiceImpl.Load() })
 	idkCleaner := lazy.New(func() (idk.Cleaner, error) { return idkServiceImpl.Load() })
 
-	return &InfrastructureContainer{
+	return &Infrastructure{
 		HTTPServer:              httpServerProvider(observer, metrics, logger, auth),
 		HTTPClientFactory:       httpClientFactoryProvider(observer, metrics, logger),
 		EventDispatcher:         eventDispatcherProvider(msgBusProducer),
@@ -86,7 +86,7 @@ func NewInfrastructureContainer(ctx context.Context) *InfrastructureContainer {
 	}
 }
 
-func (i *InfrastructureContainer) Close(ctx context.Context) {
+func (i *Infrastructure) Close(ctx context.Context) {
 	panicMsg := recover()
 	if panicMsg != nil {
 		i.Logger.MustLoad().WithField("panic", log.Fields{

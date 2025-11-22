@@ -27,19 +27,19 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/sql"
 )
 
-type DependencyContainer struct {
+type Container struct {
 	UserProfileService lazy.Loader[api.UserProfileService]
 
 	getUserProfileHandler    lazy.Loader[http.GetUserProfileHandler]
 	updateUserProfileHandler lazy.Loader[http.UpdateUserProfileHandler]
 }
 
-func NewDependencyContainer(
+func NewContainer(
 	db lazy.Loader[sql.Database],
 	dbMigrations lazy.Loader[cmd.SQLMigrations],
 	httpClientFactory lazy.Loader[cmd.HTTPClientFactory],
 	idkService lazy.Loader[idk.Service],
-) DependencyContainer {
+) *Container {
 	transaction := transactionProvider(db)
 	sqlContainer := infra.NewSQLContainer(db, dbMigrations)
 
@@ -59,7 +59,7 @@ func NewDependencyContainer(
 	)
 
 	httpDTOConverter := httpDTOConverterProvider()
-	return DependencyContainer{
+	return &Container{
 		UserProfileService: lazy.New(func() (api.UserProfileService, error) {
 			return userProfileService.Load()
 		}),
@@ -72,7 +72,7 @@ func NewDependencyContainer(
 	}
 }
 
-func (c *DependencyContainer) MustRegisterHTTPHandlers(registry pkghttp.HandlerRegistry) {
+func (c *Container) MustRegisterHTTPHandlers(registry pkghttp.HandlerRegistry) {
 	options := []pkghttp.HandlerOption{
 		pkghttp.WithAuthenticationRequirement(),
 	}
@@ -81,7 +81,7 @@ func (c *DependencyContainer) MustRegisterHTTPHandlers(registry pkghttp.HandlerR
 	registry.Register(c.updateUserProfileHandler.MustLoad(), options...)
 }
 
-func (c *DependencyContainer) MustRegisterMessageHandlers(registry pkgmessage.HandlerRegistry) {
+func (c *Container) MustRegisterMessageHandlers(registry pkgmessage.HandlerRegistry) {
 	err := registry.RegisterHandlers(message.SubscriberName, pkgmessage.TopicHandlers{
 		userapi.TopicDomainEventUser: {
 			pkgmessage.RegisterEventHandlers[user.EventUserDeleted](c.UserProfileService.MustLoad().HandleUserDeleted),

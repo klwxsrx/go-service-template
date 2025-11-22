@@ -5,24 +5,39 @@ import (
 	"sync"
 )
 
-type Loader[T any] interface {
-	MustLoad() T
-	Load() (T, error)
-	IfLoaded(func(T))
-}
+type (
+	Loader[T any] interface {
+		MustLoad() T
+		Load() (T, error)
+		IfLoaded(func(T))
+	}
 
-type loader[T any] struct {
-	provider func() (T, error)
-	onceLoad *sync.Once
-	isLoaded bool
-	value    T
-	err      error
-}
+	DeferredLoader[T any] interface {
+		Loader[T]
+		Set(func() (T, error))
+	}
+
+	loader[T any] struct {
+		provider func() (T, error)
+		onceLoad *sync.Once
+		isLoaded bool
+		value    T
+		err      error
+	}
+)
 
 func New[T any](provider func() (T, error)) Loader[T] {
+	impl := NewDeferred[T]()
+	impl.Set(provider)
+	return impl
+}
+
+func NewDeferred[T any]() DeferredLoader[T] {
 	var empty T
 	return &loader[T]{
-		provider: provider,
+		provider: func() (T, error) {
+			return empty, fmt.Errorf("provider for %T is not set", empty)
+		},
 		onceLoad: &sync.Once{},
 		isLoaded: false,
 		value:    empty,
@@ -52,6 +67,10 @@ func (l *loader[T]) Load() (T, error) {
 	})
 
 	return l.value, l.err
+}
+
+func (l *loader[T]) Set(f func() (T, error)) {
+	l.provider = f
 }
 
 func (l *loader[T]) IfLoaded(f func(T)) {

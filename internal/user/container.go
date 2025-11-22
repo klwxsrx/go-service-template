@@ -26,7 +26,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/sql"
 )
 
-type DependencyContainer struct {
+type Container struct {
 	AuthService lazy.Loader[api.AuthenticationService]
 	UserService lazy.Loader[api.UserService]
 
@@ -38,11 +38,11 @@ type DependencyContainer struct {
 	deleteUserByIDHandler       lazy.Loader[http.DeleteUserByIDHandler]
 }
 
-func NewDependencyContainer(
+func NewContainer(
 	db lazy.Loader[sql.Database],
 	dbMigrations lazy.Loader[cmd.SQLMigrations],
 	messagingEventDispatcher lazy.Loader[pkgmessage.EventDispatcher],
-) DependencyContainer {
+) *Container {
 	eventDispatcher := eventDispatcherProvider(messagingEventDispatcher)
 
 	transaction := transactionProvider(db)
@@ -57,7 +57,7 @@ func NewDependencyContainer(
 	userService := userServiceProvider(passwordEncoder, permissionService, transaction, sqlContainer, dtoConverter)
 
 	httpDTOConverter := httpDTOConverterProvider()
-	return DependencyContainer{
+	return &Container{
 		AuthService: lazy.New(func() (api.AuthenticationService, error) {
 			return authService.Load()
 		}),
@@ -85,7 +85,7 @@ func NewDependencyContainer(
 	}
 }
 
-func (c *DependencyContainer) MustRegisterHTTPHandlers(registry pkghttp.HandlerRegistry) {
+func (c *Container) MustRegisterHTTPHandlers(registry pkghttp.HandlerRegistry) {
 	registry.Register(c.authenticateHandler.MustLoad())
 	registry.Register(c.verifyAuthenticationHandler.MustLoad())
 	registry.Register(c.registerUserHandler.MustLoad())
