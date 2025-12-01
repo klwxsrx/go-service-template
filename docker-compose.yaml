@@ -50,10 +50,10 @@ services:
       - USER_SERVICE_URL=http://user-service:8080
 
   postgresql:
-    image: postgres:16
+    image: postgres:18
     container_name: go-service-template-postgresql
     volumes:
-      - postgresql-data:/var/lib/postgresql/data:rw
+      - postgresql-data:/var/lib/postgresql:rw
     ports:
       - "5432:5432"
     environment:

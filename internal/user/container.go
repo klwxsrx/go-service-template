@@ -94,6 +94,9 @@ func (c *Container) MustRegisterHTTPHandlers(registry pkghttp.HandlerRegistry) {
 	registry.Register(c.deleteUserByIDHandler.MustLoad(), pkghttp.WithAuthenticationRequirement())
 }
 
+// TODO: return funcs instead of lazy.Loader
+// TODO: services, handlers, etc - wrap to dedicated containers
+
 func eventDispatcherProvider(messagingEventDispatcher lazy.Loader[pkgmessage.EventDispatcher]) lazy.Loader[event.Dispatcher] {
 	return lazy.New(func() (event.Dispatcher, error) {
 		eventDispatcher := messagingEventDispatcher.MustLoad()

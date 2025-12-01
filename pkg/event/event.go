@@ -23,41 +23,51 @@ type (
 
 	RegisterHandlerFunc func() (eventType string, handler Handler, err error)
 
-	dispatcher struct {
-		handlers map[string]Handler
+	DispatcherImpl struct {
+		handlers map[string][]Handler
 	}
 )
 
-func NewDispatcher(handler RegisterHandlerFunc, handlers ...RegisterHandlerFunc) (Dispatcher, error) {
-	handlers = append([]RegisterHandlerFunc{handler}, handlers...)
-	handlersMap := make(map[string]Handler, len(handlers))
-	for _, registerFunc := range handlers {
-		eventType, handler, err := registerFunc()
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := handlersMap[eventType]; ok {
-			return nil, fmt.Errorf("event handler for %s already exists", eventType)
-		}
-
-		handlersMap[eventType] = handler
+func NewDispatcher(handlers ...RegisterHandlerFunc) (*DispatcherImpl, error) {
+	d := DispatcherImpl{handlers: make(map[string][]Handler)}
+	if err := d.Register(handlers...); err != nil {
+		return nil, err
 	}
 
-	return dispatcher{handlers: handlersMap}, nil
+	return &d, nil
 }
 
-func (d dispatcher) Dispatch(ctx context.Context, events ...Event) error {
+func (d *DispatcherImpl) Dispatch(ctx context.Context, events ...Event) error {
 	for _, evt := range events {
-		handler, ok := d.handlers[evt.Type()]
+		handlers, ok := d.handlers[evt.Type()]
 		if !ok {
 			return fmt.Errorf("handler not registered for %s", evt.Type())
 		}
 
-		err := handler(ctx, evt)
-		if err != nil {
-			return fmt.Errorf("handle event: %w", err)
+		for _, handler := range handlers {
+			if err := handler(ctx, evt); err != nil {
+				return fmt.Errorf("handle event by %T: %w", handler, err)
+			}
 		}
 	}
+
+	return nil
+}
+
+func (d *DispatcherImpl) Register(handlers ...RegisterHandlerFunc) error {
+	if len(handlers) == 0 {
+		return nil
+	}
+
+	for _, registerFunc := range handlers {
+		eventType, handler, err := registerFunc()
+		if err != nil {
+			return err
+		}
+
+		d.handlers[eventType] = append(d.handlers[eventType], handler)
+	}
+
 	return nil
 }
 
@@ -74,6 +84,7 @@ func RegisterHandler[T Event](handler TypedHandler[T]) RegisterHandlerFunc {
 			if !ok {
 				return fmt.Errorf("invalid event struct type %T, expected %T", event, concreteEvent)
 			}
+
 			return handler(ctx, concreteEvent)
 		}, nil
 	}

@@ -18,7 +18,7 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/metric"
 	"github.com/klwxsrx/go-service-template/pkg/observability"
 	"github.com/klwxsrx/go-service-template/pkg/sql"
-	pkgtime "github.com/klwxsrx/go-service-template/pkg/time"
+	"github.com/klwxsrx/go-service-template/pkg/time"
 )
 
 var logLevelMap = map[string]log.Level{
@@ -40,7 +40,7 @@ type Infrastructure struct {
 	IdempotencyKeysCleaner  lazy.Loader[idk.Cleaner]
 	DBMigrations            lazy.Loader[SQLMigrations]
 	DB                      lazy.Loader[sql.Database]
-	Clock                   lazy.Loader[pkgtime.Clock]
+	Clock                   lazy.Loader[time.Clock]
 	Observer                lazy.Loader[observability.Observer]
 	Metrics                 lazy.Loader[metric.Metrics]
 	Logger                  lazy.Loader[log.Logger]
@@ -141,9 +141,9 @@ func authProvider() lazy.Loader[pkgauth.Provider[internalauth.Principal]] {
 	})
 }
 
-func clockProvider() lazy.Loader[pkgtime.Clock] {
-	return lazy.New(func() (pkgtime.Clock, error) {
-		return pkgtime.NewAdjustableClock(), nil
+func clockProvider() lazy.Loader[time.Clock] {
+	return lazy.New(func() (time.Clock, error) {
+		return time.NewAdjustableClock(), nil
 	})
 }
 
