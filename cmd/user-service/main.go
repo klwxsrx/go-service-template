@@ -20,7 +20,7 @@ func main() {
 	)
 
 	httpServer := infra.HTTPServer.MustLoad()
-	container.MustRegisterHTTPHandlers(httpServer)
+	container.Handlers.MustRegister(httpServer)
 
 	pkgcmd.MustRun(ctx, infra.Logger.MustLoad(),
 		httpServer.Listener,

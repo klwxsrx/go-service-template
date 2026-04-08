@@ -19,29 +19,27 @@ func NewSQLContainer(
 	db lazy.Loader[pkgsql.Database],
 	dbMigrations lazy.Loader[cmd.SQLMigrations],
 	eventDispatcher lazy.Loader[event.Dispatcher],
-) lazy.Loader[SQLContainer] {
-	return lazy.New(func() (SQLContainer, error) {
+) func() (SQLContainer, error) {
+	return func() (SQLContainer, error) {
 		dbMigrations.MustLoad().MustRegister(user.Migrations)
 
-		sqlxConverter := sqlxConverterProvider()
+		sqlxConverter := lazy.New(sqlxConverterProvider)
 		return SQLContainer{
-			UserRepo: userRepoProvider(db, eventDispatcher, sqlxConverter),
+			UserRepo: lazy.New(userRepoProvider(db, eventDispatcher, sqlxConverter)),
 		}, nil
-	})
+	}
 }
 
-func sqlxConverterProvider() lazy.Loader[sql.SqlxConverter] {
-	return lazy.New(func() (sql.SqlxConverter, error) {
-		return &userinfrasqlgenerated.SqlxConverterImpl{}, nil
-	})
+func sqlxConverterProvider() (sql.SqlxConverter, error) {
+	return &userinfrasqlgenerated.SqlxConverterImpl{}, nil
 }
 
 func userRepoProvider(
 	db lazy.Loader[pkgsql.Database],
 	eventDispatcher lazy.Loader[event.Dispatcher],
 	sqlxConverter lazy.Loader[sql.SqlxConverter],
-) lazy.Loader[domain.UserRepository] {
-	return lazy.New(func() (domain.UserRepository, error) {
+) func() (domain.UserRepository, error) {
+	return func() (domain.UserRepository, error) {
 		return sql.NewUserRepository(db.MustLoad(), eventDispatcher.MustLoad(), sqlxConverter.MustLoad()), nil
-	})
+	}
 }

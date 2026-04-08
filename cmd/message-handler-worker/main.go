@@ -24,7 +24,7 @@ func main() {
 	)
 
 	messageBus := infra.MessageBusListener.MustLoad()
-	userProfile.MustRegisterMessageHandlers(messageBus)
+	userProfile.Services.MustRegister(messageBus)
 
 	messageStorageConsumers := infra.MessageStorageConsumers.MustLoad()
 	messageHandlerWorkers := append(messageStorageConsumers.Workers(), messageBus.Workers()...)

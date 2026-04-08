@@ -26,79 +26,89 @@ import (
 	"github.com/klwxsrx/go-service-template/pkg/sql"
 )
 
-type Container struct {
-	AuthService lazy.Loader[api.AuthenticationService]
-	UserService lazy.Loader[api.UserService]
+type (
+	Container struct {
+		API      APIContainer
+		Handlers HandlerContainer
+	}
 
-	authenticateHandler         lazy.Loader[http.AuthenticateHandler]
-	verifyAuthenticationHandler lazy.Loader[http.VerifyAuthenticationHandler]
-	registerUserHandler         lazy.Loader[http.RegisterUserHandler]
-	getCurrentUserHandler       lazy.Loader[http.GetCurrentUserHandler]
-	getUserByIDHandler          lazy.Loader[http.GetUserByIDHandler]
-	deleteUserByIDHandler       lazy.Loader[http.DeleteUserByIDHandler]
-}
+	APIContainer struct {
+		Auth lazy.Loader[api.AuthenticationService]
+		User lazy.Loader[api.UserService]
+	}
+
+	HandlerContainer struct {
+		authenticate         lazy.Loader[http.AuthenticateHandler]
+		verifyAuthentication lazy.Loader[http.VerifyAuthenticationHandler]
+		registerUser         lazy.Loader[http.RegisterUserHandler]
+		getCurrentUser       lazy.Loader[http.GetCurrentUserHandler]
+		getUserByID          lazy.Loader[http.GetUserByIDHandler]
+		deleteUserByID       lazy.Loader[http.DeleteUserByIDHandler]
+	}
+)
 
 func NewContainer(
 	db lazy.Loader[sql.Database],
 	dbMigrations lazy.Loader[cmd.SQLMigrations],
 	messagingEventDispatcher lazy.Loader[pkgmessage.EventDispatcher],
 ) *Container {
-	eventDispatcher := eventDispatcherProvider(messagingEventDispatcher)
+	eventDispatcher := lazy.New(eventDispatcherProvider(messagingEventDispatcher))
 
-	transaction := transactionProvider(db)
-	sqlContainer := infra.NewSQLContainer(db, dbMigrations, eventDispatcher)
+	transaction := lazy.New(transactionProvider(db))
+	sqlContainer := lazy.New(infra.NewSQLContainer(db, dbMigrations, eventDispatcher))
 
-	dtoConverter := dtoConverterProvider()
-	passwordEncoder := passwordEncoderProvider()
-	sessionTokenGenerator := sessionTokenGeneratorProvider()
-	permissionService := permissionServiceProvider()
+	dtoConverter := lazy.New(dtoConverterProvider)
+	passwordEncoder := lazy.New(passwordEncoderProvider)
+	sessionTokenGenerator := lazy.New(sessionTokenGeneratorProvider)
+	permissionService := lazy.New(permissionServiceProvider)
 
-	authService := authServiceProvider(sessionTokenGenerator, passwordEncoder, sqlContainer)
-	userService := userServiceProvider(passwordEncoder, permissionService, transaction, sqlContainer, dtoConverter)
+	authService := lazy.New(authServiceProvider(sessionTokenGenerator, passwordEncoder, sqlContainer))
+	userService := lazy.New(userServiceProvider(passwordEncoder, permissionService, transaction, sqlContainer, dtoConverter))
 
-	httpDTOConverter := httpDTOConverterProvider()
+	httpDTOConverter := lazy.New(httpDTOConverterProvider)
 	return &Container{
-		AuthService: lazy.New(func() (api.AuthenticationService, error) {
-			return authService.Load()
-		}),
-		UserService: lazy.New(func() (api.UserService, error) {
-			return userService.Load()
-		}),
-		authenticateHandler: lazy.New(func() (http.AuthenticateHandler, error) {
-			return http.NewAuthenticateHandler(authService.MustLoad()), nil
-		}),
-		verifyAuthenticationHandler: lazy.New(func() (http.VerifyAuthenticationHandler, error) {
-			return http.NewVerifyAuthenticationHandler(authService.MustLoad()), nil
-		}),
-		registerUserHandler: lazy.New(func() (http.RegisterUserHandler, error) {
-			return http.NewRegisterUserHandler(userService.MustLoad(), httpDTOConverter.MustLoad()), nil
-		}),
-		getCurrentUserHandler: lazy.New(func() (http.GetCurrentUserHandler, error) {
-			return http.NewGetCurrentUserHandler(userService.MustLoad(), httpDTOConverter.MustLoad()), nil
-		}),
-		getUserByIDHandler: lazy.New(func() (http.GetUserByIDHandler, error) {
-			return http.NewGetUserByIDHandler(userService.MustLoad(), httpDTOConverter.MustLoad()), nil
-		}),
-		deleteUserByIDHandler: lazy.New(func() (http.DeleteUserByIDHandler, error) {
-			return http.NewDeleteUserByIDHandler(userService.MustLoad()), nil
-		}),
+		API: APIContainer{
+			Auth: lazy.New(func() (api.AuthenticationService, error) {
+				return authService.Load()
+			}),
+			User: lazy.New(func() (api.UserService, error) {
+				return userService.Load()
+			}),
+		},
+		Handlers: HandlerContainer{
+			authenticate: lazy.New(func() (http.AuthenticateHandler, error) {
+				return http.NewAuthenticateHandler(authService.MustLoad()), nil
+			}),
+			verifyAuthentication: lazy.New(func() (http.VerifyAuthenticationHandler, error) {
+				return http.NewVerifyAuthenticationHandler(authService.MustLoad()), nil
+			}),
+			registerUser: lazy.New(func() (http.RegisterUserHandler, error) {
+				return http.NewRegisterUserHandler(userService.MustLoad(), httpDTOConverter.MustLoad()), nil
+			}),
+			getCurrentUser: lazy.New(func() (http.GetCurrentUserHandler, error) {
+				return http.NewGetCurrentUserHandler(userService.MustLoad(), httpDTOConverter.MustLoad()), nil
+			}),
+			getUserByID: lazy.New(func() (http.GetUserByIDHandler, error) {
+				return http.NewGetUserByIDHandler(userService.MustLoad(), httpDTOConverter.MustLoad()), nil
+			}),
+			deleteUserByID: lazy.New(func() (http.DeleteUserByIDHandler, error) {
+				return http.NewDeleteUserByIDHandler(userService.MustLoad()), nil
+			}),
+		},
 	}
 }
 
-func (c *Container) MustRegisterHTTPHandlers(registry pkghttp.HandlerRegistry) {
-	registry.Register(c.authenticateHandler.MustLoad())
-	registry.Register(c.verifyAuthenticationHandler.MustLoad())
-	registry.Register(c.registerUserHandler.MustLoad())
-	registry.Register(c.getCurrentUserHandler.MustLoad(), pkghttp.WithAuthenticationRequirement())
-	registry.Register(c.getUserByIDHandler.MustLoad(), pkghttp.WithAuthenticationRequirement())
-	registry.Register(c.deleteUserByIDHandler.MustLoad(), pkghttp.WithAuthenticationRequirement())
+func (c *HandlerContainer) MustRegister(registry pkghttp.HandlerRegistry) {
+	registry.Register(c.authenticate.MustLoad())
+	registry.Register(c.verifyAuthentication.MustLoad())
+	registry.Register(c.registerUser.MustLoad())
+	registry.Register(c.getCurrentUser.MustLoad(), pkghttp.WithAuthenticationRequirement())
+	registry.Register(c.getUserByID.MustLoad(), pkghttp.WithAuthenticationRequirement())
+	registry.Register(c.deleteUserByID.MustLoad(), pkghttp.WithAuthenticationRequirement())
 }
 
-// TODO: return funcs instead of lazy.Loader
-// TODO: services, handlers, etc - wrap to dedicated containers
-
-func eventDispatcherProvider(messagingEventDispatcher lazy.Loader[pkgmessage.EventDispatcher]) lazy.Loader[event.Dispatcher] {
-	return lazy.New(func() (event.Dispatcher, error) {
+func eventDispatcherProvider(messagingEventDispatcher lazy.Loader[pkgmessage.EventDispatcher]) func() (event.Dispatcher, error) {
+	return func() (event.Dispatcher, error) {
 		eventDispatcher := messagingEventDispatcher.MustLoad()
 		err := eventDispatcher.Register(pkgmessage.TopicMessages{
 			message.TopicDomainEventUser: {
@@ -110,55 +120,47 @@ func eventDispatcherProvider(messagingEventDispatcher lazy.Loader[pkgmessage.Eve
 		}
 
 		return eventDispatcher, nil
-	})
+	}
 }
 
-func transactionProvider(db lazy.Loader[sql.Database]) lazy.Loader[persistence.Transaction] {
-	return lazy.New(func() (persistence.Transaction, error) {
+func transactionProvider(db lazy.Loader[sql.Database]) func() (persistence.Transaction, error) {
+	return func() (persistence.Transaction, error) {
 		return sql.NewTransaction(
 			db.MustLoad(),
 			domain.Name,
 			nil,
 		), nil
-	})
+	}
 }
 
-func dtoConverterProvider() lazy.Loader[service.DTOConverter] {
-	return lazy.New(func() (service.DTOConverter, error) {
-		return &userappservicegenerated.DTOConverterImpl{}, nil
-	})
+func dtoConverterProvider() (service.DTOConverter, error) {
+	return &userappservicegenerated.DTOConverterImpl{}, nil
 }
 
-func passwordEncoderProvider() lazy.Loader[encoding.PasswordEncoder] {
-	return lazy.New(func() (encoding.PasswordEncoder, error) {
-		return password.NewEncoder(), nil
-	})
+func passwordEncoderProvider() (encoding.PasswordEncoder, error) {
+	return password.NewEncoder(), nil
 }
 
-func sessionTokenGeneratorProvider() lazy.Loader[session.TokenGenerator] {
-	return lazy.New(func() (session.TokenGenerator, error) {
-		return userinfrasession.NewTokenGenerator(), nil
-	})
+func sessionTokenGeneratorProvider() (session.TokenGenerator, error) {
+	return userinfrasession.NewTokenGenerator(), nil
 }
 
-func permissionServiceProvider() lazy.Loader[auth.PermissionService] {
-	return lazy.New(func() (auth.PermissionService, error) {
-		return pkgauth.NewPermissionService[auth.Principal](), nil
-	})
+func permissionServiceProvider() (auth.PermissionService, error) {
+	return pkgauth.NewPermissionService[auth.Principal](), nil
 }
 
 func authServiceProvider(
 	sessionTokens lazy.Loader[session.TokenGenerator],
 	passwordEncoder lazy.Loader[encoding.PasswordEncoder],
 	sqlContainer lazy.Loader[infra.SQLContainer],
-) lazy.Loader[service.Authentication] {
-	return lazy.New(func() (service.Authentication, error) {
+) func() (service.Authentication, error) {
+	return func() (service.Authentication, error) {
 		return service.NewAuthentication(
 			sqlContainer.MustLoad().UserRepo.MustLoad(),
 			sessionTokens.MustLoad(),
 			passwordEncoder.MustLoad(),
 		), nil
-	})
+	}
 }
 
 func userServiceProvider(
@@ -167,8 +169,8 @@ func userServiceProvider(
 	transaction lazy.Loader[persistence.Transaction],
 	sqlContainer lazy.Loader[infra.SQLContainer],
 	dtoConverter lazy.Loader[service.DTOConverter],
-) lazy.Loader[service.User] {
-	return lazy.New(func() (service.User, error) {
+) func() (service.User, error) {
+	return func() (service.User, error) {
 		return service.NewUser(
 			sqlContainer.MustLoad().UserRepo.MustLoad(),
 			passwordEncoder.MustLoad(),
@@ -176,11 +178,9 @@ func userServiceProvider(
 			transaction.MustLoad(),
 			dtoConverter.MustLoad(),
 		), nil
-	})
+	}
 }
 
-func httpDTOConverterProvider() lazy.Loader[http.DTOConverter] {
-	return lazy.New(func() (http.DTOConverter, error) {
-		return &userinfrahttpgenerated.DTOConverterImpl{}, nil
-	})
+func httpDTOConverterProvider() (http.DTOConverter, error) {
+	return &userinfrahttpgenerated.DTOConverterImpl{}, nil
 }

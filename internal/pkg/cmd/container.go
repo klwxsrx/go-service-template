@@ -47,33 +47,33 @@ type Infrastructure struct {
 }
 
 func NewInfrastructure(ctx context.Context) *Infrastructure {
-	metrics := metricsProvider()
-	logger := loggerProvider()
-	observer := observerProvider(logger)
-	auth := authProvider()
-	clock := clockProvider()
+	metrics := lazy.New(metricsProvider)
+	logger := lazy.New(loggerProvider)
+	observer := lazy.New(observerProvider(logger))
+	auth := lazy.New(authProvider)
+	clock := lazy.New(clockProvider)
 
-	db := sqlDatabaseProvider()
-	dbMigrations := sqlMigrationsProvider(ctx, db, logger)
-	msgStorage := sqlMessageStorageProvider(db, dbMigrations)
-	idkStorage := sqlIDKStorageProvider(db, dbMigrations)
+	db := lazy.New(sqlDatabaseProvider)
+	dbMigrations := lazy.New(sqlMigrationsProvider(ctx, db, logger))
+	msgStorage := lazy.New(sqlMessageStorageProvider(db, dbMigrations))
+	idkStorage := lazy.New(sqlIDKStorageProvider(db, dbMigrations))
 
-	msgStorageConsumerProvider := messageStorageConsumerProvider(msgStorage, metrics, logger)
+	msgStorageConsumerProvider := lazy.New(messageStorageConsumerProvider(msgStorage, metrics, logger))
 	consumerProvider := lazy.New(func() (message.ConsumerProvider[message.AckStrategy], error) {
 		return msgStorageConsumerProvider.MustLoad(), nil
 	})
 
-	msgBusProducer := messageBusProducerProvider(msgStorage, observer, metrics, logger)
-	idkServiceImpl := idkServiceProvider(idkStorage)
+	msgBusProducer := lazy.New(messageBusProducerProvider(msgStorage, observer, metrics, logger))
+	idkServiceImpl := lazy.New(idkServiceProvider(idkStorage))
 	idkService := lazy.New(func() (idk.Service, error) { return idkServiceImpl.Load() })
 	idkCleaner := lazy.New(func() (idk.Cleaner, error) { return idkServiceImpl.Load() })
 
 	return &Infrastructure{
-		HTTPServer:              httpServerProvider(observer, metrics, logger, auth),
-		HTTPClientFactory:       httpClientFactoryProvider(observer, metrics, logger),
-		EventDispatcher:         eventDispatcherProvider(msgBusProducer),
-		TaskScheduler:           taskSchedulerProvider(msgBusProducer),
-		MessageBusListener:      messageBusListenerProvider(consumerProvider, observer, metrics, logger),
+		HTTPServer:              lazy.New(httpServerProvider(observer, metrics, logger, auth)),
+		HTTPClientFactory:       lazy.New(httpClientFactoryProvider(observer, metrics, logger)),
+		EventDispatcher:         lazy.New(eventDispatcherProvider(msgBusProducer)),
+		TaskScheduler:           lazy.New(taskSchedulerProvider(msgBusProducer)),
+		MessageBusListener:      lazy.New(messageBusListenerProvider(consumerProvider, observer, metrics, logger)),
 		MessageStorageConsumers: msgStorageConsumerProvider,
 		IdempotencyKeys:         idkService,
 		IdempotencyKeysCleaner:  idkCleaner,
@@ -103,101 +103,91 @@ func (i *Infrastructure) Close(ctx context.Context) {
 	})
 }
 
-func metricsProvider() lazy.Loader[metric.Metrics] {
-	return lazy.New(func() (metric.Metrics, error) {
-		return metric.NewMetricsStub(), nil
-	})
+func metricsProvider() (metric.Metrics, error) {
+	return metric.NewMetricsStub(), nil
 }
 
-func loggerProvider() lazy.Loader[log.Logger] {
-	return lazy.New(func() (log.Logger, error) {
-		logLevelStr, err := env.Parse[string]("LOG_LEVEL")
-		if err != nil {
-			return log.New(log.LevelInfo), nil
-		}
+func loggerProvider() (log.Logger, error) {
+	logLevelStr, err := env.Parse[string]("LOG_LEVEL")
+	if err != nil {
+		return log.New(log.LevelInfo), nil
+	}
 
-		logLevel, ok := logLevelMap[logLevelStr]
-		if !ok {
-			logLevel = log.LevelInfo
-		}
+	logLevel, ok := logLevelMap[logLevelStr]
+	if !ok {
+		logLevel = log.LevelInfo
+	}
 
-		return log.New(logLevel), nil
-	})
+	return log.New(logLevel), nil
 }
 
 func observerProvider(
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[observability.Observer] {
-	return lazy.New(func() (observability.Observer, error) {
+) func() (observability.Observer, error) {
+	return func() (observability.Observer, error) {
 		return observability.New(
 			observability.WithFieldsLogging(logger.MustLoad(), observability.FieldRequestID),
 		), nil
-	})
+	}
 }
 
-func authProvider() lazy.Loader[pkgauth.Provider[internalauth.Principal]] {
-	return lazy.New(func() (pkgauth.Provider[internalauth.Principal], error) {
-		return internalauth.NewProvider(), nil
-	})
+func authProvider() (pkgauth.Provider[internalauth.Principal], error) {
+	return internalauth.NewProvider(), nil
 }
 
-func clockProvider() lazy.Loader[time.Clock] {
-	return lazy.New(func() (time.Clock, error) {
-		return time.NewAdjustableClock(), nil
-	})
+func clockProvider() (time.Clock, error) {
+	return time.NewAdjustableClock(), nil
 }
 
-func sqlDatabaseProvider() lazy.Loader[sql.Database] {
-	return lazy.New(func() (sql.Database, error) {
-		db, err := sql.NewDatabase(
-			sql.DSN{
-				User:     env.Must(env.Parse[string]("SQL_USER")),
-				Password: env.Must(env.Parse[string]("SQL_PASSWORD")),
-				Host:     env.Must(env.Parse[string]("SQL_ADDRESS")),
-				Database: env.Must(env.Parse[string]("SQL_DATABASE")),
-				AdditionalParams: map[string]string{
-					"sslmode": "disable",
-				},
+func sqlDatabaseProvider() (sql.Database, error) {
+	db, err := sql.NewDatabase(
+		sql.DSN{
+			User:     env.Must(env.Parse[string]("SQL_USER")),
+			Password: env.Must(env.Parse[string]("SQL_PASSWORD")),
+			Host:     env.Must(env.Parse[string]("SQL_ADDRESS")),
+			Database: env.Must(env.Parse[string]("SQL_DATABASE")),
+			AdditionalParams: map[string]string{
+				"sslmode": "disable",
 			},
-			sql.WithMaxOpenConnections(env.Must(env.Parse[int]("SQL_MAX_OPEN_CONNECTIONS"))),
-			sql.WithMaxIdleConnections(env.Must(env.Parse[int]("SQL_MAX_IDLE_CONNECTIONS"))),
-		)
-		if err != nil {
-			panic(fmt.Errorf("open sql connection: %w", err))
-		}
+		},
+		sql.WithMaxOpenConnections(env.Must(env.Parse[int]("SQL_MAX_OPEN_CONNECTIONS"))),
+		sql.WithMaxIdleConnections(env.Must(env.Parse[int]("SQL_MAX_IDLE_CONNECTIONS"))),
+	)
+	if err != nil {
+		panic(fmt.Errorf("open sql connection: %w", err))
+	}
 
-		return db, nil
-	})
+	return db, nil
 }
 
 func sqlMigrationsProvider(
 	ctx context.Context,
 	db lazy.Loader[sql.Database],
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[SQLMigrations] {
-	return lazy.New(func() (SQLMigrations, error) {
+) func() (SQLMigrations, error) {
+	return func() (SQLMigrations, error) {
 		return NewSQLMigrations(ctx, db.MustLoad(), logger.MustLoad()), nil
-	})
+	}
 }
 
 func sqlMessageStorageProvider(
 	db lazy.Loader[sql.Database],
 	dbMigrations lazy.Loader[SQLMigrations],
-) lazy.Loader[message.Storage] {
-	return lazy.New(func() (message.Storage, error) {
+) func() (message.Storage, error) {
+	return func() (message.Storage, error) {
 		dbMigrations.MustLoad().MustRegister(sql.MessageStorageMigrations)
 		return sql.NewMessageStorage(db.MustLoad()), nil
-	})
+	}
 }
 
 func sqlIDKStorageProvider(
 	db lazy.Loader[sql.Database],
 	dbMigrations lazy.Loader[SQLMigrations],
-) lazy.Loader[idk.Storage] {
-	return lazy.New(func() (idk.Storage, error) {
+) func() (idk.Storage, error) {
+	return func() (idk.Storage, error) {
 		dbMigrations.MustLoad().MustRegister(sql.IdempotencyKeyMigrations)
 		return sql.NewIdempotencyKeyStorage(db.MustLoad()), nil
-	})
+	}
 }
 
 func httpServerProvider(
@@ -205,8 +195,8 @@ func httpServerProvider(
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
 	auth lazy.Loader[pkgauth.Provider[internalauth.Principal]],
-) lazy.Loader[pkghttp.Server] {
-	return lazy.New(func() (pkghttp.Server, error) {
+) func() (pkghttp.Server, error) {
+	return func() (pkghttp.Server, error) {
 		return pkghttp.NewServer(
 			pkghttp.WithServerAddress(env.Must(env.Parse[string]("SERVICE_ADDRESS"))),
 			pkghttp.WithHandlerOptions(
@@ -228,15 +218,15 @@ func httpServerProvider(
 				),
 			),
 		), nil
-	})
+	}
 }
 
 func httpClientFactoryProvider(
 	observer lazy.Loader[observability.Observer],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[HTTPClientFactory] {
-	return lazy.New(func() (HTTPClientFactory, error) {
+) func() (HTTPClientFactory, error) {
+	return func() (HTTPClientFactory, error) {
 		return NewHTTPClientFactory(
 			pkghttp.WithRequestObservability(observer.MustLoad(), pkghttp.ObservabilityFieldHeaders{
 				observability.FieldRequestID: http.HeaderRequestID,
@@ -244,7 +234,7 @@ func httpClientFactoryProvider(
 			pkghttp.WithRequestMetrics(metrics.MustLoad()),
 			pkghttp.WithRequestLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn, log.LevelWarn),
 		), nil
-	})
+	}
 }
 
 func messageBusListenerProvider(
@@ -252,8 +242,8 @@ func messageBusListenerProvider(
 	observer lazy.Loader[observability.Observer],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[message.BusListener] {
-	return lazy.New(func() (message.BusListener, error) {
+) func() (message.BusListener, error) {
+	return func() (message.BusListener, error) {
 		return message.NewBusListener(
 			msgConsumers.MustLoad(),
 			message.NewAckQueue,
@@ -263,21 +253,21 @@ func messageBusListenerProvider(
 			message.WithHandlerLogging(logger.MustLoad(), log.LevelInfo, log.LevelWarn, log.LevelError),
 			message.WithHandlerIdempotencyKeyErrorIgnoring(),
 		), nil
-	})
+	}
 }
 
 func messageStorageConsumerProvider(
 	msgStorage lazy.Loader[message.Storage],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[message.StorageConsumerProvider] {
-	return lazy.New(func() (message.StorageConsumerProvider, error) {
+) func() (message.StorageConsumerProvider, error) {
+	return func() (message.StorageConsumerProvider, error) {
 		return message.NewStorageConsumerProvider(
 			msgStorage.MustLoad(),
 			message.WithStorageConsumerMetrics(metrics.MustLoad()),
 			message.WithStorageConsumerLogging(logger.MustLoad(), log.LevelDebug, log.LevelWarn, log.LevelWarn),
 		), nil
-	})
+	}
 }
 
 func messageBusProducerProvider(
@@ -285,8 +275,8 @@ func messageBusProducerProvider(
 	observer lazy.Loader[observability.Observer],
 	metrics lazy.Loader[metric.Metrics],
 	logger lazy.Loader[log.Logger],
-) lazy.Loader[message.BusScheduledProducer] {
-	return lazy.New(func() (message.BusScheduledProducer, error) {
+) func() (message.BusScheduledProducer, error) {
+	return func() (message.BusScheduledProducer, error) {
 		return message.NewBusScheduledProducer(
 			msgStorage.MustLoad(),
 			message.NewJSONSerializer(),
@@ -294,23 +284,23 @@ func messageBusProducerProvider(
 			message.WithBusProducerMetrics(metrics.MustLoad()),
 			message.WithBusProducerLogging(logger.MustLoad(), log.LevelDebug, log.LevelWarn, log.LevelWarn),
 		), nil
-	})
+	}
 }
 
-func idkServiceProvider(idkStorage lazy.Loader[idk.Storage]) lazy.Loader[idk.ServiceImpl] {
-	return lazy.New(func() (idk.ServiceImpl, error) {
+func idkServiceProvider(idkStorage lazy.Loader[idk.Storage]) func() (idk.ServiceImpl, error) {
+	return func() (idk.ServiceImpl, error) {
 		return idk.NewService(idkStorage.MustLoad()), nil
-	})
+	}
 }
 
-func eventDispatcherProvider(busProducer lazy.Loader[message.BusScheduledProducer]) lazy.Loader[message.EventDispatcher] {
-	return lazy.New(func() (message.EventDispatcher, error) {
+func eventDispatcherProvider(busProducer lazy.Loader[message.BusScheduledProducer]) func() (message.EventDispatcher, error) {
+	return func() (message.EventDispatcher, error) {
 		return message.NewEventDispatcher(busProducer.MustLoad()), nil
-	})
+	}
 }
 
-func taskSchedulerProvider(busProducer lazy.Loader[message.BusScheduledProducer]) lazy.Loader[message.TaskScheduler] {
-	return lazy.New(func() (message.TaskScheduler, error) {
+func taskSchedulerProvider(busProducer lazy.Loader[message.BusScheduledProducer]) func() (message.TaskScheduler, error) {
+	return func() (message.TaskScheduler, error) {
 		return message.NewTaskScheduler(busProducer.MustLoad()), nil
-	})
+	}
 }
