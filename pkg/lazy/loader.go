@@ -3,6 +3,7 @@ package lazy
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 type (
@@ -20,7 +21,7 @@ type (
 	loader[T any] struct {
 		provider func() (T, error)
 		onceLoad *sync.Once
-		isLoaded bool
+		isLoaded atomic.Bool
 		value    T
 		err      error
 	}
@@ -39,7 +40,7 @@ func NewDeferred[T any]() DeferredLoader[T] {
 			return empty, fmt.Errorf("provider for %T is not set", empty)
 		},
 		onceLoad: &sync.Once{},
-		isLoaded: false,
+		isLoaded: atomic.Bool{},
 		value:    empty,
 		err:      nil,
 	}
@@ -62,8 +63,8 @@ func (l *loader[T]) Load() (T, error) {
 			return
 		}
 
-		l.isLoaded = true
 		l.value = value
+		l.isLoaded.Store(true)
 	})
 
 	return l.value, l.err
@@ -74,7 +75,7 @@ func (l *loader[T]) Set(f func() (T, error)) {
 }
 
 func (l *loader[T]) IfLoaded(f func(T)) {
-	if l.isLoaded {
+	if l.isLoaded.Load() {
 		f(l.value)
 	}
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"sync"
 	"time"
 
@@ -44,10 +42,9 @@ type (
 		consumingBatchSize      int
 		storage                 Storage
 		messagesCh              chan *ConsumerMessage
-		allProcessed            *sync.Cond
-		processedCount          int
-		mutex                   *sync.RWMutex
+		mutex                   *sync.Mutex
 		processingMessages      map[uuid.UUID]struct{}
+		allProcessedCh          chan struct{}
 		processChan             chan struct{}
 		retry                   backoff.BackOff
 		onMessageProcessing     []func(context.Context, Topic, *Message)
@@ -131,10 +128,9 @@ func newStorageConsumer(
 		consumingBatchSize:      consumingBatchSize,
 		storage:                 storage,
 		messagesCh:              make(chan *ConsumerMessage),
-		allProcessed:            sync.NewCond(&sync.Mutex{}),
-		processedCount:          0,
-		mutex:                   &sync.RWMutex{},
+		mutex:                   &sync.Mutex{},
 		processingMessages:      make(map[uuid.UUID]struct{}),
+		allProcessedCh:          nil,
 		processChan:             make(chan struct{}, 1),
 		retry:                   retry,
 		onMessageProcessing:     onMessageProcessing,
@@ -226,12 +222,11 @@ func (c *storageConsumer) consumeStorageMessagesBatch(ctx context.Context) (allP
 	defer func() {
 		releaseErr := releaseLock()
 		if releaseErr != nil && err == nil {
-			err = fmt.Errorf("release topic lock: %w", err)
+			err = fmt.Errorf("release topic lock: %w", releaseErr)
 		}
 	}()
 
 	msgs, err := c.storage.Find(ctx, &StorageSpecification{
-		IDsExcluded:       c.getProcessingMessageIDs(),
 		Topics:            []Topic{c.topic},
 		ScheduledAtBefore: time.Now(),
 		Limit:             c.consumingBatchSize,
@@ -244,23 +239,24 @@ func (c *storageConsumer) consumeStorageMessagesBatch(ctx context.Context) (allP
 	}
 
 	for _, msg := range msgs {
+		c.addToProcessing(msg.ID)
 		select {
 		case c.messagesCh <- &ConsumerMessage{Context: ctx, Message: msg}:
-			c.addToProcessing(msg.ID)
 			for _, fn := range c.onMessageProcessing {
 				fn(ctx, c.topic, &msg)
 			}
 			processedCount++
 		case <-ctx.Done():
+			c.removeFromProcessing(msg.ID)
 			return true, processedCount, ctx.Err()
 		}
 	}
 
-	c.allProcessed.L.Lock()
-	for c.processedCount != 0 {
-		c.allProcessed.Wait()
+	select {
+	case <-c.allProcessed():
+	case <-ctx.Done():
+		return true, processedCount, ctx.Err()
 	}
-	c.allProcessed.L.Unlock()
 
 	return len(msgs) < c.consumingBatchSize, processedCount, nil
 }
@@ -270,7 +266,6 @@ func (c *storageConsumer) addToProcessing(id uuid.UUID) {
 	defer c.mutex.Unlock()
 
 	c.processingMessages[id] = struct{}{}
-	c.processedCount = len(c.processingMessages)
 }
 
 func (c *storageConsumer) removeFromProcessing(id uuid.UUID) {
@@ -278,17 +273,24 @@ func (c *storageConsumer) removeFromProcessing(id uuid.UUID) {
 	defer c.mutex.Unlock()
 
 	delete(c.processingMessages, id)
-	c.processedCount = len(c.processingMessages)
-	if c.processedCount == 0 {
-		c.allProcessed.Signal()
+	if len(c.processingMessages) == 0 && c.allProcessedCh != nil {
+		close(c.allProcessedCh)
+		c.allProcessedCh = nil
 	}
 }
 
-func (c *storageConsumer) getProcessingMessageIDs() []uuid.UUID {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
+func (c *storageConsumer) allProcessed() <-chan struct{} {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	return slices.Collect(maps.Keys(c.processingMessages))
+	ch := make(chan struct{})
+	if len(c.processingMessages) == 0 {
+		close(ch)
+		return ch
+	}
+
+	c.allProcessedCh = ch
+	return ch
 }
 
 func WithStorageConsumerLogging(logger log.Logger, infoLevel, warnLevel, errorLevel log.Level) StorageConsumerProviderOption {

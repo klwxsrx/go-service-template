@@ -21,7 +21,7 @@ func NewSQLContainer(
 	eventDispatcher lazy.Loader[event.Dispatcher],
 ) func() (SQLContainer, error) {
 	return func() (SQLContainer, error) {
-		dbMigrations.MustLoad().MustRegister(user.Migrations)
+		dbMigrations.MustLoad().MustRegister(user.Migrations) // TODO: use separate app for ddl
 
 		sqlxConverter := lazy.New(sqlxConverterProvider)
 		return SQLContainer{
